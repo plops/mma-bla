@@ -746,7 +746,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 #+nil
 (save-stack-ub8 "/home/martin/tmp/psf" (normalize-vol *psf*))
 
- 
+
 ;;                                                   /-
 ;;  	     ---			      /---
 ;;  	        \-----			  /---
@@ -771,7 +771,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				 (* (- (floor y 2) (vec-i-y coord)) dx))
 			   (list (* (- (floor x 2) (+ (vec-i-x coord) 7)) dx)
 				 (* (- (floor y 2) (vec-i-y coord)) dx))) do
-	 (loop for angle in (list 0d0 
+	 (loop for angle in (list 0d0
 				  -.4d0
 				  (- (- *bfp-circ-center-x* *bfp-circ-radius*))
 				  (- (+ *bfp-circ-center-x* *bfp-circ-radius*))) do
@@ -1273,3 +1273,146 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		   (scan-convert-line3 (make-vec-i :x 0 :y 0 :z 0)
 				       (make-vec-i :x 120 :y 127 :z 127)
 				       vol))))
+
+;; 		 |
+;;        -------+-------
+;;     -/  h (3) |       \---   (2) q_R=NA/ri*q_max
+;;    -----------+------------/------------
+;;               | alpha  /---  \-
+;;               |     /--     	  \
+;;        	 | /---            \
+;;      ---------+-----------------+-------
+;;               | (0)             / (1) q_max=1/(2*pixel)
+;; 
+;; The resolution of the image has to be big enough to fit the top
+;; section of the k-sphere with radius |k|=2pi*q_max into the k space.
+;; q_max (see (1)) is due to the nyquist theorem and corresponds to 1
+;; over two sample widths. The radius of the backfocal plane
+;; corresponds to q_R (see (2) ri is the refractive index,
+;; e.g. 1.515). It is bigger for an objective with a high NA.
+
+;; A transform with uneven number of samples doesn't have a bin for
+;; the nyquist sampling (draw the unit circle and divide it into n
+;; equal bins starting from e^(i*0). For uneven n there will be no bin
+;; on e^-i (i.e. -1, 1, -1 ...), e.g. n=3).  For even n there will be
+;; n/2+1 bins ontop of the real axis (e.g. 0=1, 1=e^(-i pi/2), 2=e^-i
+;; for n=4, the arguments to the exponential are (i 2 pi j/n) for the
+;; j-th bin) and n/2-1 bins below (e.g 3=e^(i pi/2)).  In order to
+;; simplify fftshift3 I only consider transforms with even n.
+;; fftshift moves the n/2+1 bins from the front of the array to the
+;; back (for n=4: [0 1 2 3] -> [3 0 1 2]).  In the shifted array the
+;; highest reverse frequency (bin 3) is mapped to index 0.  The origin
+;; of k-space (see (0) in the sketch) is therefor mapped to bin n/2-1
+;; (bin 1 for n=4). The nyquist frequency is in the last bin n-1 (bin
+;; 3 for n=4).
+
+;; We now search for the right z-sampling dz to fit the top of the
+;; sphere below the nyquist bin (which corresponds to q_max=1/(2*dz)).
+;; |k|=2 pi/lambda = 2 pi q_max, with wavelength lambda
+;; lambda=2 dz -> dz = lambda/2.
+
+;; We could use the same sampling x and y to represent the electric
+;; field. For small numerical apertures the sampling distance can be
+;; increased. This time the radius q_R has to be smaller than the nyquist
+;; frequency:
+;; 1/(2*dx)=q_R=NA/ri * 1/lambda
+;; -> dx= lambda/2 * ri/NA= dz *ri/NA=dz*1.515/1.38
+
+;; The sampling distances dz and dx that I derived above are only good
+;; to represent the amplitude psf. When the intensity is to be
+;; calculated the sampling distance has to be changed to accomodate
+;; for the convolution in k space.
+
+;; The height of the sphere cap (h see (3) in sketch) is
+;; h=q_max-q_max*cos(alpha)=q_max ( 1-cos(alpha))
+;; =q_max*(1-sqrt(1-sin(alpha)^2))=q_max*(1-sqrt(1-(NA/ri)^2)) The z
+;; sample distance dz2 for the intensity psf should correspond to 1/(2
+;; dz2)=2 h, i.e. dz2=1/h=dz*2/(1-sqrt(1-(NA/ri)^2))>dz so the necessary z
+;; sampling distance for the intensity is in general bigger than for
+;; the amplitude.
+
+;; The radius of the convolved donut shape is 2 q_R. Therefor the
+;; transversal sampling distance for the intensity has to be smaller:
+;; dx2=dx/2.
+
+;; As we are only interested in the intensity psf we can sample the
+;; amplitude psf with a sampling distance dz2. The sphere cap is
+;; possibly wrapped along the k_z direction. The transversal direction
+;; of the amplitude psf has to be oversampled with dx2.
+
+;; To get an angular illumination psf we multiply the values on the
+;; sphere with a k_z plane containing a disk that is centered at any
+;; k_x and k_y inside the back focal plane.  Later I might want to
+;; replace this with a gaussian or a more elaborate window function.
+
+;; With a sampling dx2 the radius of the backfocal plane fills half of
+;; the k space. The coordinate calculations below are corrected for
+;; this. So setting cx to 1. and cy to 0. below would center the
+;; circle on the border of the bfp.
+
+#+nil
+(time
+ ;; changing z,y,x without touching dx or dz leaves the area that is
+ ;; shown in k space constant
+ (let* ((z 64)
+	(y 64)
+	(x y)
+	(na 1.38d0)
+	(ri 1.515d0)
+	(lambd .480d0)
+	(dz (* .5d0 lambd))
+	(dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
+					  (let ((sinphi (/ na ri)))
+					    (* sinphi sinphi))))))))
+	(dx (* dz (/ ri na)))
+	(dx2 (* .5 dx)))
+   (format t "~a~%" (list 'aspect dx2 dz2 (/ dx2 dz2) (/ dz2 dx2)))
+   (multiple-value-bind (e0 e1 e2)
+       (psf:electric-field-psf z y x (* z dz2) (* x dx2)
+			       :integrand-evaluations 140)
+     (write-pgm (normalize-img (cross-section-xz e0))
+		"/home/martin/tmp/cut-psf.pgm")
+     (let ((k0 (fftshift3 (ft3 e0)))
+	   (k1 (fftshift3 (ft3 e1)))
+	   (k2 (fftshift3 (ft3 e2))))
+       (write-pgm (normalize-img (cross-section-xz k0))
+		  "/home/martin/tmp/cut-psf-k.pgm")
+       (let* ((cr .3d0)
+	      (cx (- .5d0 cr))
+	      (cy .0d0)
+	      (cr2 (* cr cr))
+	      (mul0 (make-array (array-dimensions k0)
+				 :element-type '(complex double-float)))
+	      (mul1 (make-array (array-dimensions k0)
+				 :element-type '(complex double-float)))
+	      (mul2 (make-array (array-dimensions k0)
+				:element-type '(complex double-float)))
+	      (mul (make-array (list y x)
+			      :element-type 'double-float)))
+	 (do-rectangle (j i 0 y 0 x)
+	   (let* ((xx (- (* 4d0 (- (* i (/ 1d0 x)) .5d0)) cx))
+		  (yy (- (* 4d0 (- (* j (/ 1d0 y)) .5d0)) cy))
+		  (r2 (+ (* xx xx) (* yy yy))))
+	     (when (< r2 cr2)
+	       (setf (aref mul j i) 1d0))))
+	 (do-box (k j i 0 z 0 y 0 x)
+	   (setf (aref mul0 k j i) (* (aref k0 k j i) (aref mul j i))
+		 (aref mul1 k j i) (* (aref k1 k j i) (aref mul j i))
+		 (aref mul2 k j i) (* (aref k2 k j i) (aref mul j i))))
+	 (write-pgm (normalize-img (cross-section-xz mul0))
+		    "/home/martin/tmp/cut-psf-k-mul.pgm")
+	 (let* ((em0 (ift3 (fftshift3 mul0)))
+		(em1 (ift3 (fftshift3 mul1)))
+		(em2 (ift3 (fftshift3 mul2)))
+		(intens (make-array (array-dimensions e0)
+				   :element-type '(complex double-float))))
+	   (do-box (k j i 0 z 0 y 0 x)
+	     (setf (aref intens k j i)
+		   (+ (* (aref em0 k j i) (conjugate (aref em0 k j i)))
+		      (* (aref em1 k j i) (conjugate (aref em1 k j i)))
+		      (* (aref em2 k j i) (conjugate (aref em2 k j i))))))
+	   (write-pgm (normalize-img (cross-section-xz intens))
+		      "/home/martin/tmp/cut-psf-intens.pgm")
+	   (let ((k (fftshift3 (ft3 intens))))
+	     (write-pgm (normalize-img (cross-section-xz k))
+			"/home/martin/tmp/cut-psf-intk.pgm"))))))))

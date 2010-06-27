@@ -317,7 +317,7 @@ transversal extend RADIUS micrometers."
 (defun intensity-psf (z y x size-z size-radius &key (numerical-aperture 1.38d0)
 		      (immersion-index 1.515d0) (integrand-evaluations 31)
 		      (wavelength .480d0))
-   "Calculate an intensity point spread function for an aplanatic microobjective with the given NUMERICAL-APERTURE, IMMERSION-INDEX and WAVELENGTH."
+   "Calculate an intensity point spread function for an aplanatic microobjective with the given NUMERICAL-APERTURE, IMMERSION-INDEX and WAVELENGTH. Distances in micrometer."
    (let* ((psf (make-array (list z y x)
 			   :element-type '(complex double-float)))
 	  (nz (1+ (ceiling z 2)))
