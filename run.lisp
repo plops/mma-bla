@@ -1278,7 +1278,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ;;        -------+-------
 ;;     -/  h (3) |       \---   (2) q_R=NA/ri*q_max
 ;;    -----------+------------/------------
-;;               | alpha  /---  \-
+;;               | alpha      /---  \-
 ;;               |     /--     	  \
 ;;        	 | /---            \
 ;;      ---------+-----------------+-------
@@ -1350,11 +1350,24 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ;; this. So setting cx to 1. and cy to 0. below would center the
 ;; circle on the border of the bfp.
 
+;; For n=1.515 and NA=1.38 the ratio dz2/dx2 is ca. 6.  Angular
+;; blocking allows to increase dz2 and dx2 a bit. Depending on which
+;; and how big an area of the BFP is transmitted. Calculating these
+;; smaller bounds seems to be quite complicated and I don't think it
+;; will speed things up considerably. Also it will be possible to
+;; calculate many different angular illuminations from an amplitude
+;; otf that has been sampled with dx2 and dz2 without reevalutation of
+;; Wolfs integrals.
+
+;; I want to be able to set dz3 and dx3 to the same values that
+;; Jean-Yves used for the confocal stack. I have to introduce
+;; sx=dx2/dx3 to scale cx and cy into the back focal plane.
+
 #+nil
 (time
  ;; changing z,y,x without touching dx or dz leaves the area that is
  ;; shown in k space constant
- (let* ((z 64)
+ (let* ((z 40)
 	(y 64)
 	(x y)
 	(na 1.38d0)
@@ -1365,11 +1378,12 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 					  (let ((sinphi (/ na ri)))
 					    (* sinphi sinphi))))))))
 	(dx (* dz (/ ri na)))
-	(dx2 (* .5 dx)))
-   (format t "~a~%" (list 'aspect dx2 dz2 (/ dx2 dz2) (/ dz2 dx2)))
+	(dx2 (* .5 dx))
+	(dx3 .2d0)
+	(dz3 1d0))
    (multiple-value-bind (e0 e1 e2)
-       (psf:electric-field-psf z y x (* z dz2) (* x dx2)
-			       :integrand-evaluations 140)
+       (psf:electric-field-psf z y x (* z dz3) (* x dx3)
+			       :integrand-evaluations 240)
      (write-pgm (normalize-img (cross-section-xz e0))
 		"/home/martin/tmp/cut-psf.pgm")
      (let ((k0 (fftshift3 (ft3 e0)))
@@ -1377,9 +1391,10 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	   (k2 (fftshift3 (ft3 e2))))
        (write-pgm (normalize-img (cross-section-xz k0))
 		  "/home/martin/tmp/cut-psf-k.pgm")
-       (let* ((cr .3d0)
-	      (cx (- .5d0 cr))
+       (let* ((cr .2d0)
+	      (cx (- 1d0 cr))
 	      (cy .0d0)
+	      (sx (/ dx2 dx3))
 	      (cr2 (* cr cr))
 	      (mul0 (make-array (array-dimensions k0)
 				 :element-type '(complex double-float)))
@@ -1390,8 +1405,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	      (mul (make-array (list y x)
 			      :element-type 'double-float)))
 	 (do-rectangle (j i 0 y 0 x)
-	   (let* ((xx (- (* 4d0 (- (* i (/ 1d0 x)) .5d0)) cx))
-		  (yy (- (* 4d0 (- (* j (/ 1d0 y)) .5d0)) cy))
+	   (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
+		  (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
 		  (r2 (+ (* xx xx) (* yy yy))))
 	     (when (< r2 cr2)
 	       (setf (aref mul j i) 1d0))))
