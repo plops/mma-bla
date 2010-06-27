@@ -572,90 +572,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				#'(lambda (z) (* 1e-1 (abs z))))
 		   "/home/martin/tmp/intens0xz.pgm"))))))
 
-;; create psf by blocking light in the back-focal plane. only a disk
-;; centered on point p=(CENTER-X, CENTER-Y) with r=RADIUS is left
-;; transparent. p=(0,0) and r=1 will unblock the full
-;; bfp. p=(.9,0). r=.1 will illuminate with a high angle from positive
-;; x.
 
-;; SIZE-X and SIZE-Z give the extend in um. the extend in the y
-;; direction is set to SIZE-X.
-(declaim (ftype (function (double-float double-float double-float
-					&key (:x fixnum) (:y fixnum) (:z fixnum)
-					(:size-x double-float)
-					(:size-z double-float)
-					(:wavelength double-float)
-					(:numerical-aperture double-float)
-					(:immersion-index double-float)
-					(:integrand-evaluations fixnum))
-			  (values (simple-array (complex double-float) 3)))
-		angular-psf))
-(defun angular-psf (center-x center-y radius &key
-		    (x 64) (y 64) (z 64) (size-x 12d0)
-		    (size-z 12d0)
-		    (wavelength .480d0)
-		    (numerical-aperture 1.38d0)
-		    (immersion-index 1.515d0)
-		    (integrand-evaluations 31))
-  (let* ((dx (/ x size-x)) ;; pixels/um
-	 )
-    ;; calculate the electric field in focus
-    (multiple-value-bind (e0 e1 e2)
-	(psf:electric-field-psf z y x size-z size-x
-				:numerical-aperture numerical-aperture
-				:immersion-index immersion-index
-				:wavelength wavelength
-				:integrand-evaluations integrand-evaluations)
-      (write-pgm (normalize-img (cross-section-xz e0))
-		 "/home/martin/tmp/cut-asf-e0-no.pgm")
-      ;; k0, k1 and k2 contain sections of the k-sphere
-      (let* ((k0 (fftshift3 (ft3 e0)))
-	     (k1 (fftshift3 (ft3 e1)))
-	     (k2 (fftshift3 (ft3 e2)))
-	     ;; radius of the circular border of the cut k-sphere
-	     ;; sin(phi)=r/k, k=2pi/lambda, sin(phi)=NA/n -> r=k*sin(phi)
-	     (sinphi (/ numerical-aperture immersion-index))
-	     (klen (/ (* 2d0 pi) wavelength))
-	     (bfp-radius (* klen sinphi))
-	     (bfp-radius-pixels (* bfp-radius (/ dx (* 2d0 (sqrt 2d0)))))
-	     ;; wiil contain distance to center-x,center-y
-	     (rad-a (make-array (list y x)
-				:element-type 'double-float)))
-	(defparameter *efield-k* (list k0 k1 k2))
-	(write-pgm (normalize-img (cross-section-xz k0))
-		   "/home/martin/tmp/cut-e0-no.pgm")
-	;; calculate distances to center point for all points in one slice
-	(do-rectangle (j i 0 y 0 x)
-	  (let* ((ii (- i (floor x 2) (* center-x bfp-radius-pixels)))
-		 (jj (- j (floor y 2) (* center-y bfp-radius-pixels)))
-		 (radius (sqrt (+ (* 1d0 ii ii) (* jj jj)))))
-	    (setf (aref rad-a j i) radius)))
-
-	;; set fourier field to zero if outside of transparent circle
-	(do-box (k j i 0 z 0 y 0 x)
-	  (when (< (* radius bfp-radius-pixels) (aref rad-a j i))
-	    (setf (aref k0 k j i) (complex 0d0)
-		  (aref k1 k j i) (complex 0d0)
-		  (aref k2 k j i) (complex 0d0))))
-	(write-pgm (normalize-img (cross-section-xz k0))
-		   "/home/martin/tmp/cut-e0.pgm")
-
-	;; deteriorated electric fields
-	(setf e0 (ift3 (fftshift3 k0))
-	      e1 (ift3 (fftshift3 k1))
-	      e2 (ift3 (fftshift3 k2)))
-
-	;; calculate energy density of electric field
-	(let ((density (make-array (array-dimensions e0)
-				   :element-type '(complex double-float))))
-	  (do-box (k j i 0 z 0 y 0 x)
-	    (setf (aref density k j i)
-		  (complex (+ (psf:abs2 (aref e0 k j i))
-			      (psf:abs2 (aref e1 k j i))
-			      (psf:abs2 (aref e2 k j i))))))
-	  (write-pgm (normalize-img (cross-section-xz density))
-		    "/home/martin/tmp/cut-intens.pgm")
-	  density)))))
 
 #+nil ;; find centers of nuclei
 (time
@@ -1363,71 +1280,108 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ;; Jean-Yves used for the confocal stack. I have to introduce
 ;; sx=dx2/dx3 to scale cx and cy into the back focal plane.
 
-#+nil
-(time
+(declaim (ftype (function (&key (:x fixnum) (:y fixnum) (:z fixnum)
+				(:window-radius double-float)
+				(:window-x double-float)
+				(:window-y double-float)
+				(:pixel-size-x double-float)
+				(:pixel-size-z double-float)
+				(:wavelength double-float)
+				(:numerical-aperture double-float)
+				(:immersion-index double-float)
+				(:integrand-evaluations fixnum)
+				(:debug boolean))
+			  (values (simple-array (complex double-float) 3)))
+		angular-psf))
+
+(defun angular-psf (&key (x 64) (y x) (z 40)
+		    (window-radius .2d0)
+		    (window-x (- 1d0 window-radius))
+		    (window-y 0d0)
+		    (pixel-size-x nil)
+		    (pixel-size-z nil)
+		    (wavelength .480d0)
+		    (numerical-aperture 1.38d0)
+		    (immersion-index 1.515d0)
+		    (integrand-evaluations 30)
+		    (debug nil))
  ;; changing z,y,x without touching dx or dz leaves the area that is
  ;; shown in k space constant
- (let* ((z 40)
-	(y 64)
-	(x y)
-	(na 1.38d0)
-	(ri 1.515d0)
-	(lambd .480d0)
-	(dz (* .5d0 lambd))
-	(dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
-					  (let ((sinphi (/ na ri)))
-					    (* sinphi sinphi))))))))
-	(dx (* dz (/ ri na)))
-	(dx2 (* .5 dx))
-	(dx3 .2d0)
-	(dz3 1d0))
-   (multiple-value-bind (e0 e1 e2)
-       (psf:electric-field-psf z y x (* z dz3) (* x dx3)
-			       :integrand-evaluations 240)
-     (write-pgm (normalize-img (cross-section-xz e0))
-		"/home/martin/tmp/cut-psf.pgm")
+  (let* ((na numerical-aperture)
+	 (ri immersion-index)
+	 (lambd wavelength)
+	 (dz (* .5d0 lambd))
+	 (dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
+					   (let ((sinphi (/ na ri)))
+					     (* sinphi sinphi))))))))
+	 (dx (* dz (/ ri na)))
+	 (dx2 (* .5 dx))
+	 (dx3 (if pixel-size-x
+		  (progn 
+		    (unless (< pixel-size-x dx2)
+		      (error "pixel-size-x is ~a but should be smaller than ~a"
+			     pixel-size-x dx2))
+		    pixel-size-x) 
+		  dx2))
+	 (dz3 (if pixel-size-z
+		  (progn 
+		    (unless (< pixel-size-z dz2)
+		      (error "pixel-size-x is ~a but should be smaller than ~a"
+			     pixel-size-z dz2))
+		    pixel-size-z) 
+		  dz2)))
+    (multiple-value-bind (e0 e1 e2)
+	(psf:electric-field-psf z y x (* z dz3) (* x dx3)
+				:numerical-aperture na
+				:immersion-index ri
+				:wavelength lambd
+				:integrand-evaluations integrand-evaluations)
+      (when debug 
+	(write-pgm (normalize-img (cross-section-xz e0))
+		   "/home/martin/tmp/cut-0psf.pgm"))
      (let ((k0 (fftshift3 (ft3 e0)))
 	   (k1 (fftshift3 (ft3 e1)))
 	   (k2 (fftshift3 (ft3 e2))))
-       (write-pgm (normalize-img (cross-section-xz k0))
-		  "/home/martin/tmp/cut-psf-k.pgm")
-       (let* ((cr .2d0)
-	      (cx (- 1d0 cr))
-	      (cy .0d0)
+       (when debug (write-pgm (normalize-img (cross-section-xz k0))
+			      "/home/martin/tmp/cut-1psf-k.pgm"))
+       (let* ((cr window-radius)
+	      (cx window-x)
+	      (cy window-y)
 	      (sx (/ dx2 dx3))
 	      (cr2 (* cr cr))
-	      (mul0 (make-array (array-dimensions k0)
-				 :element-type '(complex double-float)))
-	      (mul1 (make-array (array-dimensions k0)
-				 :element-type '(complex double-float)))
-	      (mul2 (make-array (array-dimensions k0)
-				:element-type '(complex double-float)))
-	      (mul (make-array (list y x)
-			      :element-type 'double-float)))
+	      (window (make-array (list y x)
+				  :element-type 'double-float)))
+	 ;; 2d window 
 	 (do-rectangle (j i 0 y 0 x)
 	   (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
 		  (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
 		  (r2 (+ (* xx xx) (* yy yy))))
 	     (when (< r2 cr2)
-	       (setf (aref mul j i) 1d0))))
+	       (setf (aref window j i) 1d0))))
 	 (do-box (k j i 0 z 0 y 0 x)
-	   (setf (aref mul0 k j i) (* (aref k0 k j i) (aref mul j i))
-		 (aref mul1 k j i) (* (aref k1 k j i) (aref mul j i))
-		 (aref mul2 k j i) (* (aref k2 k j i) (aref mul j i))))
-	 (write-pgm (normalize-img (cross-section-xz mul0))
-		    "/home/martin/tmp/cut-psf-k-mul.pgm")
-	 (let* ((em0 (ift3 (fftshift3 mul0)))
-		(em1 (ift3 (fftshift3 mul1)))
-		(em2 (ift3 (fftshift3 mul2)))
-		(intens (make-array (array-dimensions e0)
-				   :element-type '(complex double-float))))
+	   (setf (aref k0 k j i) (* (aref k0 k j i) (aref window j i))
+		 (aref k1 k j i) (* (aref k1 k j i) (aref window j i))
+		 (aref k2 k j i) (* (aref k2 k j i) (aref window j i))))
+	 (when debug (write-pgm (normalize-img (cross-section-xz k0))
+		     "/home/martin/tmp/cut-2psf-k-mul.pgm"))
+	 (let* ((e0 (ift3 (fftshift3 k0)))
+		(e1 (ift3 (fftshift3 k1)))
+		(e2 (ift3 (fftshift3 k2)))
+		(intens k0)) ;; instead of allocating a new array we store into k0
 	   (do-box (k j i 0 z 0 y 0 x)
 	     (setf (aref intens k j i)
-		   (+ (* (aref em0 k j i) (conjugate (aref em0 k j i)))
-		      (* (aref em1 k j i) (conjugate (aref em1 k j i)))
-		      (* (aref em2 k j i) (conjugate (aref em2 k j i))))))
-	   (write-pgm (normalize-img (cross-section-xz intens))
-		      "/home/martin/tmp/cut-psf-intens.pgm")
-	   (let ((k (fftshift3 (ft3 intens))))
-	     (write-pgm (normalize-img (cross-section-xz k))
-			"/home/martin/tmp/cut-psf-intk.pgm"))))))))
+		   (+ (* (aref e0 k j i) (conjugate (aref e0 k j i)))
+		      (* (aref e1 k j i) (conjugate (aref e1 k j i)))
+		      (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
+	   (when debug
+	     (write-pgm (normalize-img (cross-section-xz intens))
+			"/home/martin/tmp/cut-3psf-intens.pgm")
+	     (let ((k (fftshift3 (ft3 intens))))
+	       (write-pgm (normalize-img (cross-section-xz k))
+			  "/home/martin/tmp/cut-4psf-intk.pgm")))
+	   intens))))))
+
+#+nil
+(time (progn
+	(angular-psf :x 128 :z 64 :integrand-evaluations 120 :debug t)
+	nil))
