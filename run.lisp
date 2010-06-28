@@ -182,12 +182,27 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
   (convolve3 a b)
   nil)
 
-(declaim (ftype (function (double-float fixnum fixnum fixnum &key (:scale-z double-float))
-			  (values (simple-array (complex double-float) 3) &optional))
-		draw-sphere))
-(defun draw-sphere (radius z y x &key (scale-z 1d0))
+(declaim (ftype (function (double-float fixnum fixnum fixnum)
+			  (values (simple-array (complex double-float) 3)
+				  &optional))
+		draw-sphere draw-oval))
+(defun draw-sphere (radius z y x)
   (let ((sphere (make-array (list z y x)
 			    :element-type '(complex double-float))))
+    (do-box (k j i 0 z 0 y 0 x)
+      (let ((r (sqrt (+ (square (- i (* .5d0 x)))
+			(square (- j (* .5d0 y)))
+			(square (- k (* .5d0 z)))))))
+	(setf (aref sphere k j i)
+	      (if (< r radius)
+		  (complex 1d0)
+		  (complex 0d0)))))
+    sphere))
+
+(defun draw-oval (radius z y x)
+  (let ((sphere (make-array (list z y x)
+			    :element-type '(complex double-float)))
+	(scale-z 5d0))
     (do-box (k j i 0 z 0 y 0 x)
       (let ((r (sqrt (+ (square (- i (* .5d0 x)))
 			(square (- j (* .5d0 y)))
@@ -221,8 +236,9 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	       (aref stack-byte k j i) (clamp (floor v))
 	       (aref stack k j i) (complex v))))))
       #+nil(setf *stack* stack)
-      ;; find centers of cells by convolving with sphere
-      (let* ((sphere (draw-sphere 11d0 z y x :scale-z 5d0))
+      ;; find centers of cells by convolving with sphere, actually an
+      ;; oval because the z resolution is smaller than the transversal
+      (let* ((sphere (draw-oval 11d0 z y x))
 	     (conv (convolve3-circ stack (fftshift3 sphere)))
 	     (conv-byte (make-array (list y x)
 				   :element-type '(unsigned-byte 8)))
@@ -340,7 +356,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 					fixnum)
 			  (values (simple-array (complex double-float) 3)
 				  &optional))
-		draw-spheres))
+		draw-spheres draw-ovals))
 ;; put points into the centers of nuclei and convolve a sphere around each
 (defun draw-spheres (radius centers z y x)
   (let* ((dims (list z y x))
@@ -349,12 +365,26 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	 (n (length centers)))
     (dotimes (i n)
       (let ((c (aref centers i)))
-       (setf (aref points
-		   (* 5 (vec-i-z c))
-		   (vec-i-y c)
-		   (vec-i-x c))
-	     (complex 1d0 0d0))))
+	(setf (aref points
+		    (* 5 (vec-i-z c))
+		    (vec-i-y c)
+		    (vec-i-x c))
+	      (complex 1d0 0d0))))
     (convolve3-circ points (fftshift3 (draw-sphere radius z y x)))))
+
+(defun draw-ovals (radius centers z y x)
+  (let* ((dims (list z y x))
+	 (points (make-array dims
+			     :element-type '(complex double-float)))
+	 (n (length centers)))
+    (dotimes (i n)
+      (let ((c (aref centers i)))
+	(setf (aref points
+		    (vec-i-z c)
+		    (vec-i-y c)
+		    (vec-i-x c))
+	      (complex 1d0 0d0))))
+    (convolve3-circ points (fftshift3 (draw-oval radius z y x)))))
 
 
 
@@ -574,7 +604,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 
 
 
-#+nil ;; find centers of nuclei
+#+nil ;; find centers of nuclei 12.5s
 (time
  (multiple-value-bind (c ch dims)
        (find-centers)
@@ -583,17 +613,22 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
    (defparameter *dims* dims)
    (sb-ext:gc :full t)))
 
-#+nil ;; draw the spheres
-(let ((spheres
-       (destructuring-bind (z y x)
-	   *dims*
-	 (draw-spheres 7d0 *centers* (* 5 z) y x))))
-  (setf *spheres* spheres)
-  (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-vol *spheres*)))
+#+nil ;; draw the spheres (squeezed in z) 9.7s
+(time
+ (let ((spheres
+	(destructuring-bind (z y x)
+	    *dims*
+	  (draw-ovals 7d0 *centers* z y x))))
+   (setf *spheres* spheres)
+   #+nil (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-vol *spheres*))
+   (write-pgm (normalize-img (cross-section-xz *spheres* 
+					       (vec-i-y (elt *centers* 31))))
+	      "/home/martin/tmp/spheres-cut.pgm")
+   (sb-ext:gc :full t)))
 
 
 #+nil ;; construct LCOS image
-(let ((coord (aref *centers* 0))
+(let ((coord (aref *centers* 31))
       (radius 7d0)
       (slice (make-array (array-dimensions *spheres*)
 			 :element-type '(complex double-float))))
@@ -602,7 +637,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
     ;; draw only the center sphere
     (let* ((xc (vec-i-x coord))
 	   (yc (vec-i-y coord))
-	   (zc (* 5 (vec-i-z coord)))
+	   (zc (vec-i-z coord))
 	   (k  zc))
       (do-rectangle (j i 0 y 0 x)
        (let ((r (sqrt (+ (square (* 1d0 (- i xc)))
@@ -613,52 +648,78 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		   (complex 255d0)
 		   (complex 0d0)))))))
   (defparameter *slice* slice)
-  (save-stack-ub8 "/home/martin/tmp/slice" (convert-vol slice))
-  #+nil (write-pgm (normalize-img (cross-section-xz slice (* 5 (vec-i-z coord))))
-	     "/home/martin/tmp/cut-intens2.pgm"))
+  #+nil (save-stack-ub8 "/home/martin/tmp/slice" (convert-vol slice))
+  (write-pgm (normalize-img (cross-section-xz slice (vec-i-y coord)))
+	     "/home/martin/tmp/slice-cut.pgm")
+  (sb-ext:gc :full t))
 
-(defparameter *bfp-circ-radius* .5d0)
+(defparameter *bfp-circ-radius* .4d0)
 (defparameter *bfp-circ-center-x* (- .999d0 *bfp-circ-radius*))
 
-#+nil
+(declaim (ftype (function ((simple-array (complex double-float) 3))
+			  (values (simple-array (complex double-float) 3) 
+				  &optional))
+		resample-half))
+(defun resample-half (vol)
+  (destructuring-bind (z y x)
+      (array-dimensions vol)
+    (let* ((xx (floor x 2))
+	   (yy (floor y 2))
+	   (zz (floor z 2))
+	   (small (make-array (list zz yy xx)
+			      :element-type '(complex double-float))))
+      (do-box (k j i 0 zz 0 xx 0 xx)
+       (setf (aref small k j i)
+	     (aref vol (* k 2) (* j 2) (* i 2))))
+      small)))
+
+#+nil ;; 11.3s
 (time
  (progn
-  (angular-psf *bfp-circ-center-x* 0d0 *bfp-circ-radius* :x 200 :y 200 :z 200
-	       :size-x (* 200 .2d0) :size-z (* 200 .2d0)
-	       :integrand-evaluations 160)
+  (angular-psf :x 80 :z 90 
+	       :window-x *bfp-circ-center-x* 
+	       :window-y 0d0 :window-radius *bfp-circ-radius*
+	       :numerical-aperture 1.38d0
+	       :immersion-index 1.515d0
+	       :pixel-size-x .1d0 :pixel-size-z .5d0
+	       :integrand-evaluations 160
+	       :debug t)
   nil))
 
 #+nil ;; light distribution in the specimen
 ;; default resolution is isotropic 12 um /64 = 187.5 nm/pixel
-(time
- (let* ((radius *bfp-circ-radius*)
-	(x *bfp-circ-center-x*)
-	(xx 300)
-	(yy xx)
-	(zz 300)
-	(dx .2d0)
-	(psf (angular-psf x 0d0 radius :x xx :y yy :z zz
-			  :size-x (* xx dx) :size-z (* zz dx)
-			  :integrand-evaluations 190))
+(time ;; 32.5s
+ (let* ((radius .2d0)
+	(x .3d0)
+	(xx 40)
+	(zz 30)
+	(dx .1d0)
+	(dz .5d0)
+	(psf (resample-half 
+	      (angular-psf :window-x *bfp-circ-center-x*
+			   :window-y 0d0
+			   :window-radius *bfp-circ-radius*
+			   :x (* 2 xx) :z (* 2 zz)
+			   :pixel-size-x dx :pixel-size-z dz
+			   :integrand-evaluations 100)))
 	(dims (destructuring-bind (z y x)
 		  *dims*
-		(list (* z 5) y x)))
-	#+nil (psf-big (make-array dims
-			     :element-type '(complex double-float))))
-   #+nil   (destructuring-bind (z y x)
-	       dims
-	     (let ((ox (- (floor x 2) (floor xx 2)))
-		   (oy (- (floor y 2) (floor yy 2)))
-		   (oz (- (floor z 2) (floor zz 2))))
-	       (do-box (k j i 0 zz 0 yy 0 xx)
-		 (setf (aref psf-big (+ oz k) (+ oy j) (+ ox i))
-		       (aref psf k j i)))))
-   #+nil (defparameter *psf-big* psf-big)
-   #+nil (save-stack-ub8 "/home/martin/tmp/psf-big" (normalize-vol psf-big))
-   (defparameter *psf* psf)
+		(list z y x))))
+   (write-pgm (normalize-img (cross-section-xz psf))
+	      "/home/martin/tmp/small-psf-cut.pgm")
    (sb-ext:gc :full t)
    (defparameter *slice-x-psf* (convolve3 *slice* psf))
    (sb-ext:gc :full t)))
+
+#+nil
+(defparameter *slice-x-psf* nil)
+#+nil
+(sb-ext:gc :full t)
+#+nil
+(write-pgm (normalize-img
+	    (cross-section-xz *slice-x-psf* 
+			      (vec-i-y (elt *centers* 31))))
+	   "/home/martin/tmp/slice-x-psf-cut.pgm")
 
 #+nil
 (save-stack-ub8 "/home/martin/tmp/psf" (normalize-vol *psf*))
@@ -681,22 +742,33 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 #+nil ;; draw lines into the light distribution in the specimen
 (destructuring-bind (z y x)
     (array-dimensions *slice-x-psf*)
-  (let ((coord (elt *centers* 0))
+  (let ((coord (elt *centers* 31))
 	(vol (normalize-vol *slice-x-psf*))
-	(dx 2.d-4))
+	(dx 2.d-4)
+	(dz 1d-3))
+    #+nil(draw-ray-into-vol (* dx (- (floor x 2) (vec-i-x coord)))
+		       (* dx (- (floor y 2) (vec-i-y coord)))
+		       -.6d0 0d0 vol)
     (loop for pos in (list (list (* (- (floor x 2) (- (vec-i-x coord) 7)) dx)
 				 (* (- (floor y 2) (vec-i-y coord)) dx))
 			   (list (* (- (floor x 2) (+ (vec-i-x coord) 7)) dx)
 				 (* (- (floor y 2) (vec-i-y coord)) dx))) do
-	 (loop for angle in (list 0d0
-				  -.4d0
+	 (loop for angle in (list -.010d0
+				  -.6d0
 				  (- (- *bfp-circ-center-x* *bfp-circ-radius*))
-				  (- (+ *bfp-circ-center-x* *bfp-circ-radius*))) do
+				  -.8d0
+				  ;;(- (+ *bfp-circ-center-x* *bfp-circ-radius*))
+				  ) do
 	      (draw-ray-into-vol (first pos) (second pos)
 				 angle 0d0
 				 vol
-				 :shift-z (- (* 5d0 (vec-i-z coord))
-					     (floor z 2)))))
+				 :shift-z (- (vec-i-z coord)
+		 			     (floor z 2)))))
+    nil
+    #+nil (write-pgm (normalize-img
+		(cross-section-xz vol
+				  (vec-i-y (elt *centers* 31))))
+	       "/home/martin/tmp/slice-x-psf-lines-cut.pgm")
     (save-stack-ub8 "/home/martin/tmp/slice-x-psf" vol)))
 
 
@@ -907,7 +979,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		:ftol 1d-5)))
 
 (defun draw-ray-into-vol (x-mm y-mm bfp-ratio-x bfp-ratio-y vol
-			  &key (dx-mm .2d-3)
+			  &key (dx-mm .2d-3) (dz-mm 1d-3)
 			  (shift-z 0d0))
   (destructuring-bind (z y x)
       (array-dimensions vol)
@@ -927,6 +999,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 			 (* bfp-ratio-y bfp-radius)
 			 f))
 	  (dx dx-mm)
+	  (dz dz-mm)
 	  (cz (* .5d0 z)) ;; position that is in the center of front focal plane
 	  (cy (* .5d0 y))
 	  (cx (* .5d0 x))
@@ -945,9 +1018,9 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		       (declare (type double-float pos))
 		       (lens::make-disk :normal outer-normal :center center)))))
        ;; define the borders of the viewing volume, distances in mm
-       (let ((p+z (plane :z (- (* dx (- z cz))
+       (let ((p+z (plane :z (- (* dz (- z cz))
 			       nf)))
-	     (p-z (plane :z (- (* dx (- (- z cz)))
+	     (p-z (plane :z (- (* dz (- (- z cz)))
 			       nf)))
 	     (p+y (plane :y (* dx (- y cy))))
 	     (p-y (plane :y (* dx (- (- y cy)))))
@@ -960,7 +1033,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 							(* (sin phi) (sin theta))
 							(cos theta))
 						-1d0))
-	   (setf s (lens::v+ s (lens:v 0d0 0d0 (* dx shift-z))))
+	   (setf s (lens::v+ s (lens:v 0d0 0d0 (* dz shift-z))))
 	   (let* ((nro (lens::normalize ro)))
 	     (macrolet ((hit (plane)
 			  ;; (declare (type lens::disk plane))
@@ -978,7 +1051,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 			     (declare (type (or null lens::vec) h))
 			     (when h
 			       (make-vec-i
-				:z (floor (+ cz (/ (+ (aref h 2) nf) dx)))
+				:z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
 				:y (floor (+ cy (/ (aref h 1) dx)))
 				:x (floor (+ cx (/ (aref h 0) dx))))))))
 	       (let* ((h+z (pixel (hit p+z)))
@@ -1284,8 +1357,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				(:window-radius double-float)
 				(:window-x double-float)
 				(:window-y double-float)
-				(:pixel-size-x double-float)
-				(:pixel-size-z double-float)
+				(:pixel-size-x (or null double-float))
+				(:pixel-size-z (or null double-float))
 				(:wavelength double-float)
 				(:numerical-aperture double-float)
 				(:immersion-index double-float)
@@ -1318,15 +1391,15 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	 (dx2 (* .5 dx))
 	 (dx3 (if pixel-size-x
 		  (progn 
-		    (unless (< pixel-size-x dx2)
+		    #+nil (unless (< pixel-size-x dx2)
 		      (error "pixel-size-x is ~a but should be smaller than ~a"
 			     pixel-size-x dx2))
 		    pixel-size-x) 
 		  dx2))
 	 (dz3 (if pixel-size-z
 		  (progn 
-		    (unless (< pixel-size-z dz2)
-		      (error "pixel-size-x is ~a but should be smaller than ~a"
+		    #+nil(unless (< pixel-size-z dz2)
+		      (error "pixel-size-z is ~a but should be smaller than ~a"
 			     pixel-size-z dz2))
 		    pixel-size-z) 
 		  dz2)))
