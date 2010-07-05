@@ -1,7 +1,7 @@
+#.(require :vector)
 (defpackage :lens
-  (:use :cl)
-  (:export #:norm
-	   #:plane-ray
+  (:use :cl :vector)
+  (:export #:plane-ray
 	   #:lens-ray
 	   #:thin-objective-ray
 	   #:back-focal-plane-radius
@@ -10,11 +10,6 @@
 	   #:oil-objective-etendue
 	   #:magnification-from-angles
 	   #:mirror-ray
-	   #:m
-	   #:v
-	   #:rotation-matrix
-	   #:m*
-	   #:cross
 	   #:make-thin-objective
 	   #:rotate-vector
 	   #:find-inverse-ray-angle))
@@ -23,80 +18,6 @@
 (in-package :lens)
 
 (declaim (optimize (speed 2) (safety 3) (debug 3)))
-
-(deftype vec ()
-  `(simple-array double-float (3)))
-
-(deftype mat ()
-  `(simple-array double-float (3 3)))
-
-(declaim (ftype (function (&optional double-float double-float
-				     double-float)
-			  (values vec &optional))
-		v))
-(defun v (&optional (x 0d0) (y 0d0) (z 0d0))
-  "Create a vector."
-  (make-array 3 :element-type 'double-float
-	      :initial-contents (list x y z)))
-
-(declaim (ftype (function (vec vec)
-			  (values double-float &optional))
-		v.))
-(defun v. (a b)
-  "Dot product between two vectors."
-  (let ((sum 0d0))
-    (declare (double-float sum))
-    (dotimes (i 3)
-      (incf sum (* (aref a i)
-		   (aref b i))))
-    sum))
-
-(declaim (ftype (function (vec vec)
-			  (values vec &optional))
-		v- v+))
-(defmacro v-op (op a b)
-  "Subtracting and adding vectors."
-  `(let ((result (v)))
-     (dotimes (i 3)
-       (setf (aref result i) (,op (aref ,a i)
-				  (aref ,b i))))
-     result))
-
-(defun v+ (a b)
-  "Add two vectors."
-  (v-op + a b))
-
-(defun v- (a b)
-  "Subtract two vectors."
-  (v-op - a b))
-
-(declaim (ftype (function (vec double-float)
-			  (values vec &optional))
-		v*))
-(defmethod v* (a scalar)
-  "Multiply vector with scalar."
-  (declare (double-float scalar)
-	   (vec a))
-  (let* ((result (v)))
-    (dotimes (i 3)
-      (setf (aref result i) (* scalar (aref a i))))
-    result))
-
-(declaim (ftype (function (vec)
-			  (values double-float &optional))
-		norm))
-(defun norm (a)
-  "Length of a vector."
-  (let ((l2 (v. a a)))
-    (declare (type (double-float 0d0) l2)) ;; Otherwise warning with complex-double
-    (sqrt l2)))
-
-(declaim (ftype (function (vec)
-			  (values vec &optional))
-		normalize))
-(defmethod normalize (a)
-  "Rescale vector to unit length."
-  (v* a (/ (norm a))))
 
 (declaim (ftype (function (disk vec vec)
 			  (values vec (or null vec) &optional))
@@ -359,74 +280,6 @@ of the radius return nil and the intersection."
      (let ((dir (v+ ray-direction (v* normal
 				      (* -2d0 (v. ray-direction normal))))))
        (values dir intersection)))))
-
-(declaim (ftype (function (double-float double-float double-float
-					double-float double-float double-float
-					double-float double-float double-float)
-			  (values mat &optional))
-		m))
-(defun m (a b c d e f g h i)
-  (make-array '(3 3)
-              :element-type 'double-float
-              :initial-contents (list (list a b c) (list d e f) (list g h i))))
-
-(declaim (ftype (function (double-float vec)
-			  (values mat &optional))
-		rotation-matrix))
-(defun rotation-matrix (angle vect)
-  "Create matrix that rotates by ANGLE radians around the direction
- VECT. VECT must be normalized."
-  (let* ((u (aref vect 0))
-         (v (aref vect 1))
-         (w (aref vect 2))
-	 (c (cos angle))
-         (s (sin angle))
-         (1-c (- 1 c))
-         (su (* s u))
-         (sv (* s v))
-         (sw (* s w)))
-    (m (+ c (* 1-c u u))
-       (+ (* 1-c u v) sw)
-       (- (* 1-c u w) sv)
-
-       (- (* 1-c u v) sw)
-       (+ c (* 1-c v v))
-       (+ (* 1-c v w) su)
-
-       (+ (* 1-c u w) sv)
-       (- (* 1-c v w) su)
-       (+ c (* 1-c w w)))))
-#+nil
-(rotation-matrix (/ pi 2) (v 0d0 0d0 1d0))
-
-(declaim (ftype (function (mat vec)
-			  (values vec &optional))
-		m*))
-(defun m* (matrix vect)
-  "Multiply MATRIX with VECT. Copies 4th component w from VECT into
-result."
-  (let ((res (v)))
-    (dotimes (i 3)
-      (dotimes (j 3)
-	(incf (aref res i)
-	      (* (aref matrix i j) (aref vect j)))))
-    res))
-#+nil
-(m* (rotation-matrix (/ pi 2) (v 0d0 0d0 1d0)) (v 1d0))
-
-(declaim (ftype (function (vec vec)
-			  (values vec &optional))
-		cross))
-(defun cross (a b)
-  (v (- (* (aref a 1) (aref b 2))
-        (* (aref a 2) (aref b 1)))
-     (- (* (aref a 2) (aref b 0))
-        (* (aref a 0) (aref b 2)))
-     (- (* (aref a 0) (aref b 1))
-        (* (aref a 1) (aref b 0)))))
-#+nil
-(cross (v 1d0)
-       (v 0d0 1d0))
 
 (deftype optical-component ()
   `(or disk mirror lens thin-objective))

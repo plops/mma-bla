@@ -1,5 +1,6 @@
 #.(progn
     (require :asdf)
+    (require :vector)
 #+nil    (require :simple-gl)
     (require :simplex-anneal))
 
@@ -9,96 +10,16 @@
 
 (defpackage :raytrace
 #+nil  (:shadowing-import-from :cl close get special)
-(:export #:v
-	 #:v.
-	 #:v-
-	 #:v+
-	 #:quadratic-roots
+(:export #:quadratic-roots
 	 #:ray-sphere-intersection-length
 	 #:direction
 	 #:ray-spheres-intersection
-	 #:vec
-	 #:mat
 	 #:make-sphere)
-(:use :cl #+nil :gl #+nil :glut :simplex-anneal))
+(:use :cl #+nil :gl #+nil :glut :vector :simplex-anneal))
 
 (in-package :raytrace)
 
 (declaim (optimize (speed 2) (safety 3) (debug 3)))
-
-(deftype vec ()
-  `(simple-array double-float (3)))
-(deftype mat ()
-  `(simple-array double-float (3 3)))
-
-(declaim (ftype (function (&optional double-float double-float double-float)
-			  (values vec &optional))
-		v))
-(defun v (&optional (x 0d0) (y 0d0) (z 0d0))
-  (make-array 3 :element-type 'double-float
-	      :initial-contents (list x y z)))
-
-(declaim (ftype (function (vec vec)
-			  (values double-float &optional))
-		v.))
-(defun v. (a b)
-  "Dot product between two vectors."
-  (let ((sum 0d0))
-    (declare (double-float sum))
-    (dotimes (i 3)
-      (incf sum (* (aref a i)
-		   (aref b i))))
-    sum))
-
-(declaim (ftype (function (vec vec)
-			  (values vec &optional))
-		v- v+))
-(defun v- (a b)
-  "Subtract two vectors."
-  (let ((result (v)))
-    (dotimes (i 3)
-      (setf (aref result i) (- (aref a i)
-			       (aref b i))))
-    result))
-
-(defun v+ (a b)
-  "Add two vectors."
-  (let ((result (v)))
-    (dotimes (i 3)
-      (setf (aref result i) (+ (aref a i)
-			       (aref b i))))
-    result))
-
-(declaim (ftype (function (vec double-float)
-			  (values vec &optional))
-		v*))
-(defmethod v* (a scalar)
-  "Multiply vector with scalar."
-  (declare (double-float scalar)
-	   (vec a))
-  (let* ((result (v)))
-    (dotimes (i 3)
-      (setf (aref result i) (* scalar (aref a i))))
-    result))
-
-(declaim (ftype (function (vec)
-			  (values double-float &optional))
-		norm))
-(defmethod norm (a)
-  "Length of a vector."
-  (let ((l2 (v. a a)))
-    (declare (type (double-float 0d0) l2)) ;; Otherwise warning with complex-double
-    (sqrt l2)))
-
-(declaim (ftype (function (vec)
-			  (values vec &optional))
-		normalize))
-(defmethod normalize (a)
-  "Rescale vector to unit length."
-  (let ((len (norm a)))
-    (if (eq len 0d0)
-	(v 0d0 0d0 1d0)
-	(v* a (/ len)))))
 
 (declaim (ftype (function (double-float double-float double-float)
 			  (values (or null double-float) 

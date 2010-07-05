@@ -1,4 +1,5 @@
 #.(progn (require :asdf)
+	 (require :vector)
 	 (require :vol)
 	 (require :psf)
 	 (require :simplex-anneal)
@@ -6,7 +7,7 @@
 	 (require :lens))
 
 (defpackage :run
-  (:use :cl :vol :raytrace))
+  (:use :cl :vector :vol :raytrace))
 (in-package :run)
 #||
 mkdir ~/tmp
@@ -16,37 +17,6 @@ tiffsplit med.tif
 for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ||#
 
-(deftype vec-i ()
-  `(simple-array fixnum (3)))
-
-(defstruct (vec-i (:type (vector fixnum)))
-  (z 0) (y 0) (x 0))
-
-(declaim (ftype (function (vec-i vec-i)
-			  (values fixnum &optional))
-		v.-i))
-(defun v.-i (a b)
-  (+ (* (vec-i-x a) (vec-i-x b))
-     (* (vec-i-y a) (vec-i-y b))
-     (* (vec-i-z a) (vec-i-z b))))
-
-(declaim (ftype (function (vec-i vec-i)
-			  (values vec-i &optional))
-		v--i v+-i))
-(defun v--i (a b)
-  (make-vec-i :x (- (vec-i-x a) (vec-i-x b))
-	      :y (- (vec-i-y a) (vec-i-y b))
-	      :z (- (vec-i-z a) (vec-i-z b))))
-(defun v+-i (a b)
-  (make-vec-i :x (+ (vec-i-x a) (vec-i-x b))
-	      :y (+ (vec-i-y a) (vec-i-y b))
-	      :z (+ (vec-i-z a) (vec-i-z b))))
-
-(declaim (ftype (function (vec-i)
-			  (values double-float &optional))
-		norm-i))
-(defun norm-i (a)
-  (sqrt (* 1d0 (v.-i a a))))
 
 (declaim (ftype (function (string (simple-array (complex double-float) 3)
 				  &key (:function function))
@@ -106,7 +76,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 (declaim (ftype (function ((simple-array (complex double-float) 3)
 			   (simple-array (complex double-float) 3))
 			  (values (simple-array (complex double-float) 3) &optional))
-		.*))
+		.* .+))
 (defun .* (vola volb)
   (let ((result (make-array (array-dimensions vola)
 			    :element-type (array-element-type vola))))
@@ -115,6 +85,16 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
      (do-box (k j i 0 z 0 y 0 x)
        (setf (aref result k j i)
 	     (* (aref vola k j i)
+		(aref volb k j i)))))
+   result))
+(defun .+ (vola volb)
+  (let ((result (make-array (array-dimensions vola)
+			    :element-type (array-element-type vola))))
+   (destructuring-bind (z y x)
+       (array-dimensions vola)
+     (do-box (k j i 0 z 0 y 0 x)
+       (setf (aref result k j i)
+	     (+ (aref vola k j i)
 		(aref volb k j i)))))
    result))
 
@@ -626,6 +606,29 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	      "/home/martin/tmp/spheres-cut.pgm")
    (sb-ext:gc :full t)))
 
+#+nil ;; draw the spheres (squeezed in z) and emphasize one of them
+(time
+ (let ((spheres
+	(destructuring-bind (z y x)
+	    *dims*
+	  (let* ((dims (list z y x))
+		 (points (make-array dims
+			     :element-type '(complex double-float)))
+		 (centers *centers*)
+		 (radius 7d0)
+		 (n (length centers)))
+	    (dotimes (i n)
+	      (let ((c (aref centers i)))
+		(setf (aref points
+			    (vec-i-z c)
+			    (vec-i-y c)
+			    (vec-i-x c))
+		      (complex (if (eq i 31)
+				   2d0
+				   1d0) 0d0))))
+	    (convolve3-circ points (fftshift3 (draw-oval radius z y x)))))))
+   (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-vol spheres))
+   (sb-ext:gc :full t)))
 
 #+nil ;; construct LCOS image
 (let ((coord (aref *centers* 31))
@@ -653,8 +656,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	     "/home/martin/tmp/slice-cut.pgm")
   (sb-ext:gc :full t))
 
-(defparameter *bfp-circ-radius* .4d0)
-(defparameter *bfp-circ-center-x* (- .999d0 *bfp-circ-radius*))
+(defparameter *bfp-circ-radius* .3d0)
+(defparameter *bfp-circ-center-x* .4d0 #+nil (- .999d0 *bfp-circ-radius*))
 
 (declaim (ftype (function ((simple-array (complex double-float) 3))
 			  (values (simple-array (complex double-float) 3) 
@@ -691,8 +694,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 (time ;; 32.5s 5.4s
  (let* ((radius .2d0)
 	(x .3d0)
-	(xx 40)
-	(zz 30)
+	(xx 120)
+	(zz 120)
 	(dx .1d0)
 	(dz .5d0)
 	(psf (resample-half 
@@ -701,7 +704,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 			   :window-radius *bfp-circ-radius*
 			   :x (* 2 xx) :z (* 2 zz)
 			   :pixel-size-x dx :pixel-size-z dz
-			   :integrand-evaluations 100)))
+			   :integrand-evaluations 200)))
 	(dims (destructuring-bind (z y x)
 		  *dims*
 		(list z y x))))
@@ -753,10 +756,12 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				 (* (- (floor y 2) (vec-i-y coord)) dx))
 			   (list (* (- (floor x 2) (+ (vec-i-x coord) 7)) dx)
 				 (* (- (floor y 2) (vec-i-y coord)) dx))) do
-	 (loop for angle in (list -.010d0
-				  -.6d0
-				  (- (- *bfp-circ-center-x* *bfp-circ-radius*))
-				  -.8d0
+	 (loop for angle in (list ;;-.010d0
+				  ;;-.6d0
+				  ;;(- (- *bfp-circ-center-x* *bfp-circ-radius*))
+				  ;;-.8d0
+				  ;;-.99d0
+			     (- *bfp-circ-center-x*)
 				  ;;(- (+ *bfp-circ-center-x* *bfp-circ-radius*))
 				  ) do
 	      (draw-ray-into-vol (first pos) (second pos)
@@ -770,27 +775,6 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				  (vec-i-y (elt *centers* 31))))
 	       "/home/martin/tmp/slice-x-psf-lines-cut.pgm")
     (save-stack-ub8 "/home/martin/tmp/slice-x-psf" vol)))
-
-
-#+nil ;; draw lines into the volume of the psf
-(destructuring-bind (z y x)
-    (array-dimensions *psf-big*)
-  (let ((vol (normalize-vol *psf-big*))
-	(dx 2.d-4))
-    (draw-ray-into-vol 0d0 0d0
-		       (- (- 1d0 1d-4)) 0d0
-		       vol
-		       :center-z (floor z 2))
-    (draw-ray-into-vol 0d0 0d0
-		       -.7d0 0d0 vol
-		       :center-z (floor z 2))
-    (draw-ray-into-vol 0d0 0d0
-		       -.4d0 0d0 vol
-		       :center-z (floor z 2))
-    (draw-ray-into-vol 0d0 0d0
-		       0d0 0d0 vol
-		       :center-z (floor z 2))
-    (save-stack-ub8 "/home/martin/tmp/psf-big" vol)))
 
 
 #+nil ;; excited fluorophores
@@ -995,9 +979,9 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 					 :immersion-index ri))
 	  (theta (lens:find-inverse-ray-angle x-mm y-mm obj))
 	  (phi (atan y-mm x-mm))
-	  (start (lens:v (* bfp-ratio-x bfp-radius)
-			 (* bfp-ratio-y bfp-radius)
-			 f))
+	  (start (v (* bfp-ratio-x bfp-radius)
+		    (* bfp-ratio-y bfp-radius)
+		    f))
 	  (dx dx-mm)
 	  (dz dz-mm)
 	  (cz (* .5d0 z)) ;; position that is in the center of front focal plane
@@ -1009,12 +993,12 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		  ;; axis and crosses it at POSITION
 		  (declare (type (member :x :y :z) direction))
 		  (let* ((normal (ecase direction
-				   (:x (lens:v 1d0))
-				   (:y (lens:v 0d0 1d0))
-				   (:z (lens:v 0d0 0d0 1d0)))))
+				   (:x (v 1d0))
+				   (:y (v 0d0 1d0))
+				   (:z (v 0d0 0d0 1d0)))))
 		    `(let* ((pos ,position)
-			    (center (lens::v* ,normal pos))
-			    (outer-normal (lens::normalize center)))
+			    (center (v* ,normal pos))
+			    (outer-normal (normalize center)))
 		       (declare (type double-float pos))
 		       (lens::make-disk :normal outer-normal :center center)))))
        ;; define the borders of the viewing volume, distances in mm
@@ -1029,12 +1013,12 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	 (multiple-value-bind (ro s)
 	     (lens:thin-objective-ray obj
 				      start
-				      (lens::v* (lens:v (* (cos phi) (sin theta))
+				      (v* (v (* (cos phi) (sin theta))
 							(* (sin phi) (sin theta))
 							(cos theta))
 						-1d0))
-	   (setf s (lens::v+ s (lens:v 0d0 0d0 (* dz shift-z))))
-	   (let* ((nro (lens::normalize ro)))
+	   (setf s (v+ s (v 0d0 0d0 (* dz shift-z))))
+	   (let* ((nro (normalize ro)))
 	     (macrolet ((hit (plane)
 			  ;; (declare (type lens::disk plane))
 			  ;; find intersection between plane and the ray
@@ -1048,7 +1032,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 			(pixel (hit-expr)
 			  ;; convert coordinates from mm into integer pixel positions
 			  `(let ((h ,hit-expr))
-			     (declare (type (or null lens::vec) h))
+			     (declare (type (or null vec) h))
 			     (when h
 			       (make-vec-i
 				:z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
@@ -1458,3 +1442,45 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 (time (progn
 	(angular-psf :x 128 :z 64 :integrand-evaluations 120 :debug t)
 	nil))
+
+#+nil ;; convert coordinates of spheres from integers into doubles,
+      ;; corresponding to mm.
+(let* ((dx .2d-3)
+       (dz 1d-3)
+       (n (length *centers*))
+       (sph (make-array n :element-type 'raytrace::sphere)))
+  (dotimes (i n)
+    (setf (aref sph i)
+	  (make-sphere :center (let ((a (elt *centers* i)))
+							    (v (* dx (vec-i-x a))
+							       (* dx (vec-i-y a))
+							       (* dz (vec-i-z a))))
+		       :radius (* dx 7d0))))
+  (defparameter *sphere-c-r* sph))
+
+#+nil
+(dotimes (i (length *centers*))
+  (format t "~a~%"
+   (raytrace::ray-spheres-intersection (v) (v 0d0 0d0 -1d0) *sphere-c-r* i)))
+
+#+nil
+(declaim (ftype (function (vec)
+			  (values double-float &optional))
+		merit-function))
+#+nil
+(defun merit-function (vec)
+  (raytrace:ray-spheres-intersection 
+   (v 0d0 0d0 0d0) 
+   (normalize (direction (aref vec 0) (aref vec 1)))
+   *sphere-c-r*))
+
+
+#+nil
+(let ((start (make-array 2 :element-type 'double-float
+                          :initial-contents (list 100d0 100d0))))
+   (with-open-file (*standard-output* "/dev/shm/anneal.log"
+                                      :direction :output
+                                      :if-exists :supersede)
+     (anneal (make-simplex start 1d0)
+             #'merit-function
+             :start-temperature 3d0)))
