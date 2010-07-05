@@ -286,7 +286,9 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
      (array-dimensions *blobs*)
    (save-stack "/home/martin/tmp/otf"
 	       (fftshift3 (ft3 (sim-psf z y x
-					(* .198d0 z) (* .198d0 (ceiling (* (sqrt 2d0) (max y x)))))))
+					(* .198d0 z) 
+					(* .198d0
+					   (ceiling (* (sqrt 2d0) (max y x)))))))
 	      :function #'(lambda (x) (* 1d-1 (abs x))))))
 
 (declaim (ftype (function ((simple-array (complex double-float) (* * *)))
