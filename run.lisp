@@ -604,7 +604,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 
 
 
-#+nil ;; find centers of nuclei 12.5s
+#+nil ;; find centers of nuclei 12.5s 3.1s
 (time
  (multiple-value-bind (c ch dims)
        (find-centers)
@@ -613,7 +613,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
    (defparameter *dims* dims)
    (sb-ext:gc :full t)))
 
-#+nil ;; draw the spheres (squeezed in z) 9.7s
+#+nil ;; draw the spheres (squeezed in z) 9.7s 1.8s
 (time
  (let ((spheres
 	(destructuring-bind (z y x)
@@ -673,7 +673,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	     (aref vol (* k 2) (* j 2) (* i 2))))
       small)))
 
-#+nil ;; 11.3s
+#+nil ;; 11.3s 2.6s
 (time
  (progn
   (angular-psf :x 80 :z 90 
@@ -688,7 +688,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 
 #+nil ;; light distribution in the specimen
 ;; default resolution is isotropic 12 um /64 = 187.5 nm/pixel
-(time ;; 32.5s
+(time ;; 32.5s 5.4s
  (let* ((radius .2d0)
 	(x .3d0)
 	(xx 40)
