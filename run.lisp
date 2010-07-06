@@ -1223,17 +1223,17 @@ which point on the periphery of the corresponding circle is meant."
 
 #+nil ;; scan the bfp
 (time
- (with-open-file (s "/home/martin/tmp/scan.dat"
+ (with-open-file (s "/home/martin/tmp/scan2.dat"
 		    :direction :output
 		    :if-exists :supersede
 		    :if-does-not-exist :create)
-   (let ((bfp-window-radius .09d0)
-	 (nr 10))
+   (let ((bfp-window-radius .08d0)
+	 (nr 32))
      (dotimes (ir nr)
-       (let ((np (1+ (* ir ir))))
+       (let ((np (ceiling (1+ (* ir ir)) 4)))
 	 (terpri s)
 	 (dotimes (ip np)
-	   (let* ((r (* ir (/ 1d0 nr)))
+	   (let* ((r (* ir (/ (- .99d0 bfp-window-radius) (1- nr))))
 		  (phi (* (/ (* 2d0 pi) np) ip))
 		 (z (* r (exp (complex 0d0 phi)))))
 	     (format s "~4,4f ~4,4f ~4,4f~%" (realpart z) (imagpart z)
@@ -1241,7 +1241,7 @@ which point on the periphery of the corresponding circle is meant."
 		       (loop for dir in '(:right :top :left :bottom) do
 			    (loop for bfp-dir in '(:right :top :left :bottom) do
 				 (incf sum
-				       (illuminate-ray *spheres-c-r* 30 dir
+				       (illuminate-ray *spheres-c-r* 40 dir
 						       (realpart z) (imagpart z)
 						       bfp-window-radius
 						       bfp-dir))))

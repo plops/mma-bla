@@ -84,7 +84,7 @@ and its normal PLANE-NORMAL."
 		  ray-start ray-direction)
      (declare (ignore dir))
      (let* ((rho (v- intersection center)))
-       (format t "~a~%" (list 'intersection intersection 'center center
+       #+nil (format t "~a~%" (list 'intersection intersection 'center center
 			      'rho rho 'norm (norm rho)))
        (unless (< (norm rho) radius)
 	 (return-from lens-ray (values nil intersection)))
