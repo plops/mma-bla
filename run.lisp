@@ -1058,11 +1058,10 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
              :start-temperature 3d0)))
 
 
-
-(declaim (ftype (function (cons (simple-array vec-i 1))
-			  (values (simple-array sphere 1) &optional))
-		create-sphere-array))
 (defun create-sphere-array (dims centers)
+  (declare (cons dims)
+	   ((simple-array vec-i 1) centers)
+	   (values (simple-array sphere 1) &optional))
  (destructuring-bind (z y x)
      dims
    (declare (fixnum z y x))
@@ -1205,26 +1204,58 @@ which point on the periphery of the corresponding circle is meant."
 				    (imagpart sample-pos)
 				    (realpart bfp-pos)
 				    (imagpart bfp-pos))
-	(let* ((exposure (ray-spheres-intersection s (normalize ro)
-						   spheres-c-r
-						   illuminated-sphere-index)))
+	(let* ((exposure 
+		(ray-spheres-intersection
+		 ;; shift by nf so that sample is in origin
+		 (v+ s 
+		     (v 0d0
+			0d0 
+			(* 1.515 (lens:focal-length-from-magnification 63d0))))
+		 (normalize ro)
+		 spheres-c-r
+		 illuminated-sphere-index)))
 	  exposure)))))
 
 #+nil
-(illuminate-ray *spheres-c-r* 22 :bottom
-		.8d0 0d0 .01d0 :right)
+(illuminate-ray *spheres-c-r* 30 :bottom
+		.1d0 .0d0
+		.01d0 :right)
+
+#+nil ;; scan the bfp
+(time
+ (with-open-file (s "/home/martin/tmp/scan.dat"
+		    :direction :output
+		    :if-exists :supersede
+		    :if-does-not-exist :create)
+   (let ((bfp-window-radius .09d0)
+	 (nr 10))
+     (dotimes (ir nr)
+       (let ((np (1+ (* ir ir))))
+	 (terpri s)
+	 (dotimes (ip np)
+	   (let* ((r (* ir (/ 1d0 nr)))
+		  (phi (* (/ (* 2d0 pi) np) ip))
+		 (z (* r (exp (complex 0d0 phi)))))
+	     (format s "~4,4f ~4,4f ~4,4f~%" (realpart z) (imagpart z)
+		     (let ((sum 0d0))
+		       (loop for dir in '(:right :top :left :bottom) do
+			    (loop for bfp-dir in '(:right :top :left :bottom) do
+				 (incf sum
+				       (illuminate-ray *spheres-c-r* 30 dir
+						       (realpart z) (imagpart z)
+						       bfp-window-radius
+						       bfp-dir))))
+		       sum)))))))))
 
 #+nil
-(progn
-   (declaim (ftype (function ((array double-float (2)))
-			     (values double-float &optional))
-		   merit-function))
-   (defun merit-function (vec)
-     (ray-spheres-intersection 
-      (v .1d0 .2d0 0d0) 
-      (normalize (direction (aref vec 0) (aref vec 1)))
-      *spheres*
-      *central-sphere*)))
+(defun merit-function (vec)
+  (declare ((simple-array double-float (2)) vec)
+	   (values double-float &optional))
+  (ray-spheres-intersection 
+   (v .1d0 .2d0 0d0) 
+   (normalize (direction (aref vec 0) (aref vec 1)))
+   *spheres*
+   *central-sphere*))
 
 #+nil
 (let ((start (make-array 2 :element-type 'double-float
