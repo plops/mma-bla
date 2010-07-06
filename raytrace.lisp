@@ -14,6 +14,9 @@
 	 #:ray-sphere-intersection-length
 	 #:direction
 	 #:ray-spheres-intersection
+	 #:sphere
+	 #:center
+	 #:radius
 	 #:make-sphere
 	 #:sphere-center
 	 #:sphere-radius)
@@ -142,7 +145,7 @@
 					  (* s (second c))
 					  (* 5d0 s (first c)))
 				       cen)
-				   :radius (* s 11d0)))))
+				   :radius (* s 22d0)))))
    "center diameter"))
 
 
@@ -166,7 +169,7 @@
 				     :if-exists :supersede)
     (anneal (make-simplex start 1d0)
 	    #'merit-function
-	    :start-temperature 3d0)))
+	    :start-temperature 12d0)))
 
 ;; scan over the full parameters space
 #+nil
@@ -189,7 +192,3 @@ unset key
 splot \"/dev/shm/o.dat\" u 1:2:3 w l
 #pause -1
 " *central-sphere* *central-sphere*)))
- 
-#+nil
-(ray-spheres-intersection (v .1d0 .2d0 0d0) 
-			  (direction -1631995.127159034d0 -881148.5633918238d0))

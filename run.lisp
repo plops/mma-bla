@@ -1056,3 +1056,204 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
      (anneal (make-simplex start 1d0)
              #'merit-function
              :start-temperature 3d0)))
+
+
+
+(declaim (ftype (function (cons (simple-array vec-i 1))
+			  (values (simple-array sphere 1) &optional))
+		create-sphere-array))
+(defun create-sphere-array (dims centers)
+ (destructuring-bind (z y x)
+     dims
+   (declare (fixnum z y x))
+   (let* ((dx .2d-3)
+	  (dz 1d-3)
+	  (xh (* .5d0 x))
+	  (yh (* .5d0 y))
+	  (zh (* .5d0 z))
+	  (n (length centers))
+	  (result (make-array n :element-type 'sphere
+			      :initial-element (make-sphere))))
+     (labels ((convert-point (point)
+		(declare (vec-i point)
+			 (values vec &optional))
+		(v (* dx (- (vec-i-x point) xh))
+		   (* dx (- (vec-i-y point) yh))
+		   (* dz (- (vec-i-z point) zh)))))
+       (dotimes (i n)
+	 (setf (aref result i) 
+	       (make-sphere :center (convert-point (aref centers i))
+			    :radius (* dx 17d0))))
+       result))))
+
+#+nil 
+(progn
+ (defparameter *central-sphere* 22)
+ (defparameter *spheres-c-r* 
+   (create-sphere-array *dims* *centers*)))
+
+
+
+;; The merit function should get two parameters r and phi.  if r isn't
+;; inside the back focal plane radius (minus the diameter of the
+;; aperture window) some high value is returned. Several rays should
+;; be sent through the spheres starting from different positions on
+;; the aperture window and targetting different positions in the
+;; circle that should be illuminated in the sample.
+
+;; Maybe later I can add the aperture size in the back focal plane as
+;; another parameter. The bigger the aperture, the better for the
+;; optimization.
+
+;; Possibly I shouldn't call it merit function as I try to minimize
+;; its result.
+
+;; get-ray-behind-objective takes a point on the back focal plane and
+;; a point in the sample and calculates the ray direction ro that
+;; leaves the objective. So its the same calculation that is used for
+;; draw-ray-into-vol.
+(declaim (ftype (function (double-float double-float double-float double-float)
+			  (values vec vec &optional))
+		get-ray-behind-objective))
+(defun get-ray-behind-objective (x-mm y-mm bfp-ratio-x bfp-ratio-y)
+  (let* ((f (lens:focal-length-from-magnification 63d0))
+	 (na 1.38d0)
+	 (ri 1.515d0)
+	 (bfp-radius (lens:back-focal-plane-radius f na))
+	 (obj (lens:make-thin-objective :normal (v 0d0 0d0 -1d0)
+					:center (v)
+					:focal-length f
+					:radius bfp-radius
+					:numerical-aperture na
+					:immersion-index ri))
+	 (theta (lens:find-inverse-ray-angle x-mm y-mm obj))
+	 (phi (atan y-mm x-mm))
+	 (start (v (* bfp-ratio-x bfp-radius)
+		   (* bfp-ratio-y bfp-radius)
+		   f)))
+    (multiple-value-bind (ro s)
+	(lens:thin-objective-ray obj
+				 start
+				 (v* (v (* (cos phi) (sin theta))
+					(* (sin phi) (sin theta))
+					(cos theta))
+				     -1d0))
+      (values ro s))))
+
+#+nil
+(get-ray-behind-objective .1d0 .1d0 0d0 0d0)
+
+;; In *spheres-c-r* I stored the coordinates of all the nuclei
+;; relative to the center of the initial stack of images. It also
+;; contains the radius of each nuclieus. Now I consider how to
+;; illuminate selected circles inside of the sample. The nucleus which
+;; is beeing illuminated will be centered on the focal plane.  The
+;; length of the vector ro coming out of the objective is
+;; nf=1.515*2.6mm~3000um and therefore a lot bigger than the z extent
+;; of the stack (~40 um). It is not necessary to z-shift the nuclei
+;; before intersecting them with the rays. So I will just use the
+;; nucleus' x and y coordinates as arguments to
+;; get-ray-behind-objective. I also supply the position in the back
+;; focal plane from where the ray originates.
+
+(deftype direction ()
+  `(member :left :right :top :bottom))
+
+(defun sample-circle (center radius direction)
+  "Given a circle CENTER and RADIUS return the point in the left,
+right, top or bottom of its periphery. CENTER and result are complex
+numbers x+i y."
+  (declare ((complex double-float) center)
+	   (double-float radius)
+	   (direction direction)
+	   (values (complex double-float) &optional))
+  (let ((phi (ecase direction
+	       (:right 0d0)
+	       (:top (* .5d0 pi))
+	       (:left pi)
+	       (:bottom (* 1.5 pi)))))
+   (+ center (* radius (exp (complex 0d0 phi))))))
+
+#+nil
+(sample-circle (complex 1d0 1d0) 1d0 :right)
+
+(defun illuminate-ray 
+    (spheres-c-r illuminated-sphere-index
+     sample-position
+     bfp-center-x bfp-center-y 
+     bfp-radius bfp-position)
+  "Trace a ray from a point in the back focal plane through the disk
+that encompasses the nucleus with index
+ILLUMINATED-SPHERE-INDEX. SAMPLE-POSITION and BFP-POSITION can assume
+one of the four values :LEFT, :RIGHT, :TOP and :BOTTOM indicating
+which point on the periphery of the corresponding circle is meant."
+  (declare (fixnum illuminated-sphere-index)
+	   (direction sample-position bfp-position)
+	   (double-float bfp-center-x bfp-center-y bfp-radius)
+	   ((simple-array sphere 1) spheres-c-r)
+	   (values double-float &optional))
+  (with-slots (center radius)
+      (aref spheres-c-r illuminated-sphere-index)
+    (let* ((sample-pos (sample-circle (complex (vec-x center) (vec-y center))
+				      radius
+				      sample-position))
+	   (bfp-pos (sample-circle (complex bfp-center-x bfp-center-y)
+				   bfp-radius
+				   bfp-position)))
+      (multiple-value-bind (ro s)
+	  (get-ray-behind-objective (realpart sample-pos)
+				    (imagpart sample-pos)
+				    (realpart bfp-pos)
+				    (imagpart bfp-pos))
+	(let* ((exposure (ray-spheres-intersection s (normalize ro)
+						   spheres-c-r
+						   illuminated-sphere-index)))
+	  exposure)))))
+
+#+nil
+(illuminate-ray *spheres-c-r* 22 :bottom
+		.8d0 0d0 .01d0 :right)
+
+#+nil
+(progn
+   (declaim (ftype (function ((array double-float (2)))
+			     (values double-float &optional))
+		   merit-function))
+   (defun merit-function (vec)
+     (ray-spheres-intersection 
+      (v .1d0 .2d0 0d0) 
+      (normalize (direction (aref vec 0) (aref vec 1)))
+      *spheres*
+      *central-sphere*)))
+
+#+nil
+(let ((start (make-array 2 :element-type 'double-float
+			 :initial-contents (list 100d0 100d0))))
+  (with-open-file (*standard-output* "/dev/shm/anneal.log"
+				     :direction :output
+				     :if-exists :supersede)
+    (simplex-anneal:anneal (simplex-anneal:make-simplex start 1d0)
+			   #'merit-function
+			   :start-temperature 12d0)))
+
+;; scan over the full parameters space
+#+nil
+(progn
+ (with-open-file (s "/dev/shm/o.dat" :direction :output :if-exists :supersede)
+   (let ((ntheta 60)
+	 (nphi 90))
+     (dotimes (theta ntheta)
+       (dotimes (phi  nphi)
+	 (let ((a (* 90 (/ theta ntheta)))
+	       (b (* 180 (/ phi nphi))))
+	  (format s "~f ~f ~f~%" a b
+		  (ray-spheres-intersection (v) (direction a b)))))
+      (terpri s))))
+ (with-open-file (s "/dev/shm/p1.gp" :direction :output
+		    :if-exists :supersede)
+   (format s "set term posts; set outp \"/dev/shm/p~2,'0d.ps\";set hidden
+set title \"nucleus nr. ~d\"
+unset key
+splot \"/dev/shm/o.dat\" u 1:2:3 w l
+#pause -1
+" *central-sphere* *central-sphere*)))
