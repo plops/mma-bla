@@ -1240,8 +1240,21 @@ which point on the periphery of the corresponding circle is meant."
 		     (merit-function
 		      (make-vec2 :x (realpart z)
 				 :y (imagpart z)))))))))))
+#+nil
+(time
+ (with-open-file (s "/home/martin/tmp/scan.dat"
+		    :direction :output
+		    :if-exists :supersede
+		    :if-does-not-exist :create)
+   (let ((dx .025d0))
+    (loop for x from -1d0 upto 1d0 by dx do
+	 (loop for y from -1d0 upto 1d0 by dx do
+	      (format s "~4,4f ~4,4f ~4,4f~%"
+		      x y (merit-function
+			   (make-vec2 :x x :y y))))
+	 (terpri s)))))
 
-(defvar *nucleus-index* 40)
+(defvar *nucleus-index* 26)
 (defvar *bfp-window-radius* .1d0)
 (defvar *spheres-c-r* nil)
 
@@ -1250,7 +1263,7 @@ which point on the periphery of the corresponding circle is meant."
 (defun merit-function (vec2)
   (declare (vec2 vec2)
 	   (values double-float &optional))
-  (let* ((border-value 1d0) ;; value to return when outside of bfp
+  (let* ((border-value .08d0) ;; value to return when outside of bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
 					    ;; border of the bfp
 					    ;; enforce bad merit
