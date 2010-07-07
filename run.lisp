@@ -1237,14 +1237,17 @@ which point on the periphery of the corresponding circle is meant."
 		  (phi (* (/ (* 2d0 pi) np) ip))
 		 (z (* r (exp (complex 0d0 phi)))))
 	     (format s "~4,4f ~4,4f ~4,4f~%" (realpart z) (imagpart z)
-		     (let ((sum 0d0))
-		       (loop for dir in '(:right :top :left :bottom) do
-			    (loop for bfp-dir in '(:right :top :left :bottom) do
-				 (incf sum
-				       (illuminate-ray *spheres-c-r* 40 dir
-						       (realpart z) (imagpart z)
-						       bfp-window-radius
-						       bfp-dir))))
+		     (let ((sum 0d0)
+			   (nucleus 40))
+		       (loop for dirs in '((:right :left)
+					   (:top :bottom)) do
+			(loop for dir in dirs do
+			     (loop for bfp-dir in dirs do
+				  (incf sum
+					(illuminate-ray *spheres-c-r* nucleus dir
+							(realpart z) (imagpart z)
+							bfp-window-radius
+							bfp-dir)))))
 		       sum)))))))))
 
 #+nil
