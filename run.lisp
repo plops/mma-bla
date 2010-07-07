@@ -1223,7 +1223,7 @@ which point on the periphery of the corresponding circle is meant."
 
 #+nil ;; scan the bfp
 (time
- (with-open-file (s "/home/martin/tmp/scan2.dat"
+ (with-open-file (s "/home/martin/tmp/scan.dat"
 		    :direction :output
 		    :if-exists :supersede
 		    :if-does-not-exist :create)
@@ -1237,28 +1237,40 @@ which point on the periphery of the corresponding circle is meant."
 		  (phi (* (/ (* 2d0 pi) np) ip))
 		 (z (* r (exp (complex 0d0 phi)))))
 	     (format s "~4,4f ~4,4f ~4,4f~%" (realpart z) (imagpart z)
-		     (let ((sum 0d0)
-			   (nucleus 40))
-		       (loop for dirs in '((:right :left)
-					   (:top :bottom)) do
-			(loop for dir in dirs do
-			     (loop for bfp-dir in dirs do
-				  (incf sum
-					(illuminate-ray *spheres-c-r* nucleus dir
-							(realpart z) (imagpart z)
-							bfp-window-radius
-							bfp-dir)))))
-		       sum)))))))))
+		     (merit-function
+		      (make-vec2 :x (realpart z)
+				 :y (imagpart z)))))))))))
 
-#+nil
-(defun merit-function (vec)
-  (declare ((simple-array double-float (2)) vec)
+(defvar *nucleus-index* 40)
+(defvar *bfp-window-radius* .1d0)
+(defvar *spheres-c-r* nil)
+
+;; the following global variable contain state for merit-function:
+;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
+(defun merit-function (vec2)
+  (declare (vec2 vec2)
 	   (values double-float &optional))
-  (ray-spheres-intersection 
-   (v .1d0 .2d0 0d0) 
-   (normalize (direction (aref vec 0) (aref vec 1)))
-   *spheres*
-   *central-sphere*))
+  (let* ((border-value 1d0) ;; value to return when outside of bfp
+	 (border-width *bfp-window-radius*) ;; in this range to the
+					    ;; border of the bfp
+					    ;; enforce bad merit
+					    ;; function
+	 (sum 0d0)
+	 (radius (norm2 vec2)))
+    (if (< radius (- .99d0 border-width))
+	;; inside
+	(loop for dirs in '((:right :left)
+			    (:top :bottom)) do
+	     (loop for dir in dirs do
+		  (loop for bfp-dir in dirs do
+		       (incf sum
+			     (illuminate-ray *spheres-c-r* *nucleus-index* dir
+					     (vec2-x vec2) (vec2-y vec2)
+					     *bfp-window-radius*
+					     bfp-dir)))))
+	;; in the border-width or outside of bfp
+	(incf sum border-value))
+    sum))
 
 #+nil
 (let ((start (make-array 2 :element-type 'double-float

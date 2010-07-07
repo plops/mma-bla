@@ -1,13 +1,30 @@
 (defpackage :vector
   (:use :cl)
-  (:export #:vec #:make-vec #:v #:vec-x #:vec-y #:vec-z
-	   #:v. #:v+ #:v- #:v* #:norm #:normalize
-	   #:cross
-	   #:m #:rotation-matrix #:m*
-	   #:vec-i #:make-vec-i #:vec-i-x #:vec-i-y #:vec-i-z
-	   #:v.-i #:v+-i #:v--i #:norm-i))
+  (:export 
+   #:vec2 #:make-vec2 #:vec2-x #:vec2-y
+   #:norm2 #:x #:y #:z
+   #:vec #:make-vec #:v #:vec-x #:vec-y #:vec-z
+   #:v. #:v+ #:v- #:v* #:norm #:normalize
+   #:cross
+   #:m #:rotation-matrix #:m*
+   #:vec-i #:make-vec-i #:vec-i-x #:vec-i-y #:vec-i-z
+   #:v.-i #:v+-i #:v--i #:norm-i))
 
 (in-package :vector)
+
+;;;; double-float 2 vector
+(deftype vec2 ()
+  `(simple-array double-float (2)))
+
+(defstruct (vec2 (:type (vector double-float)))
+  (x 0d0) (y 0d0))
+
+(defun norm2 (vec2)
+  (declare (vec2 vec2)
+	   (values double-float &optional))
+  (let ((x (vec2-x vec2))
+	(y (vec2-y vec2)))
+    (sqrt (+ (* x x) (* y y)))))
 
 ;;;; double-float 3 vector
 

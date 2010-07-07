@@ -714,7 +714,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 	     (result (make-array (list y x)
 				 :element-type '(unsigned-byte 8))))
 	(when (< (abs (- ma mi)) 1d-12)
-	  return-from normalize-img result
+	  (return-from normalize-img result)
 	  #+nil(error "image contains constant data, can't normalize."))
 	(let ((s (/ 255d0 (- ma mi))))
 	 (do-rectangle (j i 0 y 0 x)
