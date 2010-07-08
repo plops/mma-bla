@@ -1316,3 +1316,119 @@ unset key
 splot \"/dev/shm/o.dat\" u 1:2:3 w l
 #pause -1
 " *central-sphere* *central-sphere*)))
+
+
+;; 
+(defun split-by-char (char string)
+    "Returns a list of substrings of string
+divided by ONE character CHAR each.
+Note: Two consecutive CHAR will be seen as
+if there were an empty string between them."
+    (declare (character char)
+	     (string string))
+    (loop for i = 0 then (1+ j)
+       as j = (position char string :start i)
+       collect (subseq string i j)
+       while j))
+
+#+nil
+(split-by-char #\x "12x124x42")
+
+(defun parse-raw-filename (fn)
+  "Parses a filename like
+/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000.raw and returns
+291 354 41 and 91 as multiple values."
+  (declare (string fn)
+	   (values (or null fixnum) fixnum fixnum fixnum &optional))
+  (let* ((p- (position #\- fn :from-end t))
+	 (part (subseq fn (1+ p-)))
+	 (p_ (position #\_ part))
+	 (sizes (subseq part 0 p_))
+	 (numlist (split-by-char #\x sizes)))
+    (unless (eq 4 (length numlist))
+      (error "didn't read 4 dimensions as expected."))
+    (destructuring-bind (x y z time)
+	(mapcar #'read-from-string numlist)
+     (values x y z time))))
+
+
+#+nil
+(parse-raw-filename "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000.raw")
+
+(defun read-raw-stack-video-frame (fn time)
+  (declare (string fn)
+	   (fixnum time)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
+  (multiple-value-bind (x y z maxtime)
+      (parse-raw-filename fn)
+      (unless (< time maxtime)
+	(error "requested time ~d is to big (must be <~d!)" time maxtime))
+      (let* ((vol (make-array (list z y x)
+			      :element-type '(unsigned-byte 8)))
+	     (vol1 (sb-ext:array-storage-vector vol)))
+	(with-open-file (s fn :direction :input
+			   :element-type '(unsigned-byte 8))
+	  (file-position s (* x y z time))
+	  (read-sequence vol1 s))
+	vol)))
+
+(defun convert3-ub8/cdf (vol)
+  (declare ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (complex double-float) 3) &optional))
+  (destructuring-bind (z y x)
+      (array-dimensions vol)
+   (let ((res (make-array (array-dimensions vol)
+			  :element-type '(complex double-float))))
+     (do-box (k j i 0 z 0 y 0 x)
+       (setf (aref res k j i) (complex (* 1d0 (aref vol k j i)))))
+     res)))
+
+(defun convert3-cdf/df (vol &key (function #'abs))
+  (declare ((simple-array (complex double-float) 3) vol)
+	   (function function)
+	   (values (simple-array double-float 3) &optional))
+  (destructuring-bind (z y x)
+      (array-dimensions vol)
+    (let ((res (make-array (array-dimensions vol)
+			   :element-type 'double-float)))
+      (do-box (k j i 0 z 0 y 0 x)
+	(setf (aref res k j i) (funcall function (aref vol k j i))))
+      res)))
+
+#+nil
+(time 
+ (let* ((a (convert3-ub8/cdf (read-raw-stack-video-frame
+			      "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000.raw"
+			      90))))
+   (destructuring-bind (z y x)
+       (array-dimensions a)
+     (let ((b (draw-sphere 5d0 z y x)))
+       (defparameter conv (convert3-cdf/df (convolve3-circ a b)))))
+   nil))
+
+#+nil
+(find-maxima3 conv)
+
+(defun find-maxima3 (conv)
+  (declare ((simple-array double-float 3) conv)
+	   (values (simple-array vec-i 1) &optional))
+ (destructuring-bind (z y x)
+     (array-dimensions conv)
+   (let ((centers (make-array 0 :element-type 'vec-i
+			      :initial-element (make-vec-i)
+			      :adjustable t
+			      :fill-pointer t)))
+     (do-box (k j i 6 (- z 3) 1 (1- y) 1 (1- x))
+       (let ((v (aref conv k j i)))
+	 (when (and (< (aref conv k j (1- i)) v)
+		    (< (aref conv k j (1+ i)) v)
+		    (< (aref conv k (1- j) i) v)
+		    (< (aref conv k (1+ j) i) v)
+		    (< (aref conv (1- k) j i) v)
+		    (< (aref conv (1+ k) j i) v))
+	   (vector-push-extend
+	    (make-vec-i :z k :y j :x i)
+	    centers))))
+     (make-array (length centers)
+		 :element-type 'vec-i
+		 :initial-contents centers))))
