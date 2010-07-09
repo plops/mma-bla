@@ -620,7 +620,10 @@ be floating point values. If they point outside of IMG 0 is returned."
 			  (values null &optional))
 		save-stack-ub8))
 (defun save-stack-ub8 (fn vol)
-  (ensure-directories-exist fn)
+  (ensure-directories-exist (if (eq (1- (length fn))
+				    (position #\/ fn :from-end t))
+				fn
+				(format nil "~a/" fn)))
   (destructuring-bind (z y x)
       (array-dimensions vol)
     (let ((b (make-array (list y x)
