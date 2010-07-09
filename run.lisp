@@ -1402,12 +1402,20 @@ if there were an empty string between them."
 			      90))))
    (destructuring-bind (z y x)
        (array-dimensions a)
-     (let ((b (draw-sphere 5d0 z y x)))
+     (defparameter *a* a)
+     (let ((b (draw-oval 12d0 z y x)))
        (defparameter conv (convert3-cdf/df (convolve3-circ a b)))))
    nil))
 
 #+nil
 (find-maxima3 conv)
+
+#+nil
+(destructuring-bind (z y x)
+    (array-dimensions *a*)
+  (let ((b (draw-ovals 12d0 (find-maxima3 conv) (ensure-even z) (ensure-even y) (ensure-even x))))
+    (write-pgm (convert-img (cross-section-xz b 42))
+	       "/home/martin/tmp/time0.pgm")))
 
 (defun find-maxima3 (conv)
   (declare ((simple-array double-float 3) conv)
@@ -1432,3 +1440,71 @@ if there were an empty string between them."
      (make-array (length centers)
 		 :element-type 'vec-i
 		 :initial-contents centers))))
+
+
+#+nil 
+(time (let* ((dx .21d0)
+	(dz .21d0)
+	(x 100)
+	(y x)
+	(z 100))
+   (multiple-value-bind (ex ey ez)
+       (psf:electric-field-psf z y x (* dz z) (* dx x) :integrand-evaluations 200)
+     (defparameter *kex* (fftshift3 (ft3 ex)))
+     (defparameter *key* (fftshift3 (ft3 ey)))
+     (defparameter *kez* (fftshift3 (ft3 ez)))
+     nil)))
+
+(save-stack-ub8 "/home/martin/tmp/kex" (normalize-vol *kex*))
+(save-stack-ub8 "/home/martin/tmp/key" (normalize-vol *key*))
+(save-stack-ub8 "/home/martin/tmp/kez" (normalize-vol *kez*))
+
+#+nil
+(time
+ (let* ((x 100)
+	(y x)
+	(z 100)
+	(grat (make-array (list z y x) :element-type '(complex double-float))))
+   (let ((k (floor z 2)))
+     (do-rectangle (j i 0 y 0 x)
+       (setf (aref grat k j i) (complex (* 1d0 (mod i 4))))))
+   (defparameter *kgrat* (fftshift3 (ft3 grat)))
+   nil))
+
+(save-stack-ub8 "/home/martin/tmp/kgrat" (normalize-vol *kgrat*))
+
+(destructuring-bind (z y x)
+    (array-dimensions *kex*)
+ (let* ((ex (ift3 (fftshift3 (.* *kgrat* *kex*))))
+	(ey (ift3 (fftshift3 (.* *kgrat* *key*))))
+	(ez (ift3 (fftshift3 (.* *kgrat* *kez*))))
+	(intens (make-array (array-dimensions ex)
+			    :element-type '(complex double-float))))
+   (do-box (k j i 0 z 0 y 0 x)
+     (setf (aref intens k j i)
+	   (+ (* (conjugate (aref ex k j i)) (aref ex k j i))
+	      (* (conjugate (aref ey k j i)) (aref ey k j i))
+	      (* (conjugate (aref ez k j i)) (aref ez k j i)))))
+   (defparameter *intens* intens)
+   (save-stack-ub8 "/home/martin/tmp/intens-grat" (normalize-vol intens)))) 
+
+;; A circular window in the center of the BFP with radius Rap gives
+;; rise to rays up to the angle beta into sample space. The radius of
+;; the focal sphere is n*f. Therefore one can write
+;; sin(beta)=Rap/(n*f). Changing illumination direction of the grating
+;; will shear the intensity image. In order to generate an image of
+;; limited coherence one has to convolve each plane with a disk. The
+;; radius of the disk is: Rd(z)=z*sin(beta) with defocus z. 
+;; Eliminate sin(beta):
+;; Rd(z)=abs(z*Rap/(n*f))
+;; for a 63x objective we get f=2.61, with n=1.515 
+
+(destructuring-bind (z y x)
+    (array-dimensions *intens*)
+  (let ((n 1.515d0)
+	(f (lens:focal-length-from-magnification 63d0))
+	(Rap 2d0)
+	(dz .21d0))
+    (dotimes (k z)
+      (let ((Rd-pixels (abs (* (- k (floor z 2)) dz (/ Rap (* n f))))))
+	(format t "~a~%" Rd-pixels)))))
