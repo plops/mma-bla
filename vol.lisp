@@ -1,6 +1,11 @@
 (defpackage :vol
   (:use :cl :sb-alien :sb-c-call)
   (:export
+   #:fftshift2
+   #:ft2
+   #:ift2
+   #:convolve2-circ
+
    #:fftshift3
    #:ft3
    #:ift3
@@ -56,6 +61,15 @@
   (out (* double-float))
   (sign int)
   (flags unsigned-int))
+
+(define-alien-routine ("fftw_plan_dft_2d" plan-dft-2d)
+    (* int)
+  (n0 int)
+  (n1 int)
+  (in (* double-float))
+  (out (* double-float))
+  (sign int)
+  (flags unsigned-int))
  
 ;; C-standard "row-major" order, so that the last dimension has the
 ;; fastest-varying index in the array.
@@ -77,6 +91,54 @@ point."
 	     (loop for ,i from ,xmin below ,xmax do
 		  (progn ,@body)))))
  
+
+(defun fftshift2 (in)
+  (declare ((simple-array (complex double-float) 2) in)
+	   (values (simple-array (complex double-float) 2) &optional))
+  (let ((out (make-array (array-dimensions in)
+			 :element-type '(complex double-float))))
+   (destructuring-bind (w1 w0)
+       (array-dimensions in)
+     (do-rectangle (j i 0 w1 0 w0)
+       (let* ((ii (if (> i (/ w0 2))
+		      (+ w0 (/ w0 2) (- i))
+		      (- (/ w0 2) i)))
+	      (jj (if (> j (/ w1 2))
+		      (+ w1 (/ w1 2) (- j))
+		      (- (/ w1 2) j))))
+	 (setf (aref out j i)
+	       (aref in jj ii))
+	 nil)))
+   out))
+
+(defun ft2 (in &key (forward t))
+  (declare ((simple-array (complex double-float) 2) in)
+	   (boolean forward)
+	   (values (simple-array (complex double-float) 2) &optional))
+  (let ((dims (array-dimensions in)))
+    (destructuring-bind (y x)
+	dims
+      (let* ((out (make-array dims :element-type '(complex double-float))))
+	(sb-sys:with-pinned-objects (in out)
+	  (let ((p (plan-dft-2d y x
+				(sb-sys:vector-sap 
+				 (sb-ext:array-storage-vector in))
+				(sb-sys:vector-sap 
+				 (sb-ext:array-storage-vector out))
+				(if forward
+				    +forward+
+				   +backward+)
+				+estimate+)))
+	    (execute p)))
+	(when forward ;; normalize if forward
+	  (let ((1/n (/ 1d0 (* x y))))
+	    (do-rectangle (j i 0 y 0 x)
+	      (setf (aref out j i) (* 1/n (aref out j i))))))
+	out))))
+
+(defmacro ift2 (in)
+  `(ft2 ,in :forward nil))
+
  
 ;; fftshift3 /home/martin/usb/y2009/1123/1.lisp
 (declaim (ftype (function ((simple-array (complex double-float) (* * *)))
@@ -142,6 +204,16 @@ point."
 
 (defmacro ift3 (in)
   `(ft3 ,in :forward nil))
+
+(defun convolve2-circ (vola volb)
+  (declare ((simple-array (complex double-float) 2) vola volb)
+	   (values (simple-array (complex double-float) 2) &optional))
+  (let* ((da (array-dimensions vola))
+	 (db (array-dimensions volb))
+	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
+    (when (some #'null compare-ab)
+      (error "convolve3-circ expects both input arrays to have the same dimensions.")))
+  (ift2 (.* (ft2 vola) (ft2 volb))))
  
 (declaim 
  (type (function 
