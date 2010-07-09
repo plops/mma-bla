@@ -595,14 +595,16 @@ be floating point values. If they point outside of IMG 0 is returned."
 		     :initial-contents '((1 2) (2 3)))))
   (interpolate2 a .5d0 .2d0)) 
 
-
-
 (declaim (ftype (function (string (simple-array (complex double-float) 3)
 				  &key (:function function))
 			  (values null &optional))
 		save-stack))
 (defun save-stack (fn vol &key (function #'realpart))
-  (ensure-directories-exist fn)
+  ;; add a slash / if there isn't one
+  (ensure-directories-exist (if (eq (1- (length fn))
+					    (position #\/ fn :from-end t))
+					fn
+					(format nil "~a/" fn)))
   (destructuring-bind (z y x)
       (array-dimensions vol)
     (let ((b (make-array (list y x)
