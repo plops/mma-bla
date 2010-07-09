@@ -33,6 +33,9 @@
    #:.*
    #:.+
    #:s*
+   #:.*2
+   #:.+2
+   #:s*2
    #:convolve3-circ
    #:convolve3
 
@@ -51,6 +54,15 @@
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
  
 (load-shared-object "/usr/lib/libfftw3.so.3")
+
+(define-alien-routine ("fftw_execute" execute)
+    void
+  (plan (* int)))
+ 
+(defconstant +forward+ 1)
+(defconstant +backward+ -1)
+(defconstant +estimate+ (ash 1 6))
+
  
 (define-alien-routine ("fftw_plan_dft_3d" plan-dft-3d)
     (* int)
@@ -167,13 +179,6 @@ point."
 	     nil)))))
    out))
  
-(define-alien-routine ("fftw_execute" execute)
-    void
-  (plan (* int)))
- 
-(defconstant +forward+ 1)
-(defconstant +backward+ -1)
-(defconstant +estimate+ (ash 1 6))
  
 (declaim (ftype (function ((simple-array (complex double-float) (* * *))
 			   &key (:forward boolean))
@@ -213,7 +218,7 @@ point."
 	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
     (when (some #'null compare-ab)
       (error "convolve3-circ expects both input arrays to have the same dimensions.")))
-  (ift2 (.* (ft2 vola) (ft2 volb))))
+  (ift2 (.*2 (ft2 vola) (ft2 volb))))
  
 (declaim 
  (type (function 
@@ -613,11 +618,35 @@ be floating point values. If they point outside of IMG 0 is returned."
 	(write-pgm b (format nil "~a/~3,'0d.pgm" fn k)))))
   nil)
 
-(declaim (ftype (function ((simple-array (complex double-float) 3)
-			   (simple-array (complex double-float) 3))
-			  (values (simple-array (complex double-float) 3) &optional))
-		.* .+))
+(defun .*2 (vola volb)
+  (declare ((simple-array (complex double-float) 2) vola volb)
+	   (values (simple-array (complex double-float) 2) &optional))
+  (let ((result (make-array (array-dimensions vola)
+			    :element-type (array-element-type vola))))
+   (destructuring-bind (y x)
+       (array-dimensions vola)
+     (do-rectangle (j i 0 y 0 x)
+       (setf (aref result j i)
+	     (* (aref vola j i)
+		(aref volb j i)))))
+   result))
+
+(defun .+2 (vola volb)
+  (declare ((simple-array (complex double-float) 2) vola volb)
+	   (values (simple-array (complex double-float) 2) &optional))
+  (let ((result (make-array (array-dimensions vola)
+			    :element-type (array-element-type vola))))
+   (destructuring-bind (y x)
+       (array-dimensions vola)
+     (do-rectangle (j i 0 y 0 x)
+       (setf (aref result j i)
+	     (+ (aref vola j i)
+		(aref volb j i)))))
+   result))
+
 (defun .* (vola volb)
+  (declare ((simple-array (complex double-float) 3) vola volb)
+	   (values (simple-array (complex double-float) 3) &optional))
   (let ((result (make-array (array-dimensions vola)
 			    :element-type (array-element-type vola))))
    (destructuring-bind (z y x)
@@ -629,6 +658,8 @@ be floating point values. If they point outside of IMG 0 is returned."
    result))
 
 (defun .+ (vola volb)
+  (declare ((simple-array (complex double-float) 3) vola volb)
+	   (values (simple-array (complex double-float) 3) &optional))
   (let ((result (make-array (array-dimensions vola)
 			    :element-type (array-element-type vola))))
    (destructuring-bind (z y x)
@@ -643,6 +674,16 @@ be floating point values. If they point outside of IMG 0 is returned."
 			  (values (simple-array (complex double-float) 3) &optional))
 		s*))
 (defun s* (s vol)
+  (let* ((a (sb-ext:array-storage-vector vol))
+	 (n (length a)))
+    (dotimes (i n)
+      (setf (aref a i) (* s (aref a i)))))
+  vol)
+
+(defun s*2 (s vol)
+  (declare (double-float s)
+	   ((simple-array (complex double-float) 2) vol)
+	   (values (simple-array (complex double-float) 2) &optional))
   (let* ((a (sb-ext:array-storage-vector vol))
 	 (n (length a)))
     (dotimes (i n)
