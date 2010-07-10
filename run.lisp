@@ -1072,7 +1072,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	  (zh (* .5d0 z))
 	  (n (length centers))
 	  (result (make-array n :element-type 'sphere
-			      :initial-element (make-sphere))))
+			      :initial-contents (loop for i below n collect
+						     (make-sphere)))))
      (labels ((convert-point (point)
 		(declare (vec-i point)
 			 (values vec &optional))
@@ -1441,7 +1442,6 @@ if there were an empty string between them."
 		 :element-type 'vec-i
 		 :initial-contents centers))))
 
-
 #+nil 
 (time (let* ((dx .1d0)
 	     (dz .1d0)
@@ -1460,6 +1460,9 @@ if there were an empty string between them."
  (save-stack-ub8 "/home/martin/tmp/key" (normalize-vol *key*))
  (save-stack-ub8 "/home/martin/tmp/kez" (normalize-vol *kez*))
  )
+#+NIL
+(write-pgm (normalize-img (cross-section-xz *kex*))
+	   "/home/martin/tmp/kex.pgm")
 #+nil
 (time
  (destructuring-bind (z y x)
