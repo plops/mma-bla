@@ -103,6 +103,28 @@ point."
 	     (loop for ,i from ,xmin below ,xmax do
 		  (progn ,@body)))))
  
+(defun fftshift1 (in)
+  (declare ((simple-array (complex double-float) 1) in)
+	   (values (simple-array (complex double-float) 1) &optional))
+  (let* ((n (length in))
+	 (nh (floor n 2))
+	 (out (make-array n
+			  :element-type '(complex double-float))))
+    (dotimes (i (length in))
+      (let ((ii (mod (+ i nh) n)))
+	(setf (aref out ii) (aref in i))))
+    out))
+#+nil
+(let* ((ls '(1 2 3 4 5 6 7 8 9))
+      (a (make-array (length ls)
+		     :element-type '(complex double-float)
+		     :initial-contents (mapcar
+					#'(lambda (z) (coerce z 
+							 '(complex double-float)))
+					ls))))
+  (fftshift1 a))
+
+
 
 (defun fftshift2 (in)
   (declare ((simple-array (complex double-float) 2) in)
@@ -111,16 +133,13 @@ point."
 			 :element-type '(complex double-float))))
    (destructuring-bind (w1 w0)
        (array-dimensions in)
-     (do-rectangle (j i 0 w1 0 w0)
-       (let* ((ii (if (> i (/ w0 2))
-		      (+ w0 (/ w0 2) (- i))
-		      (- (/ w0 2) i)))
-	      (jj (if (> j (/ w1 2))
-		      (+ w1 (/ w1 2) (- j))
-		      (- (/ w1 2) j))))
-	 (setf (aref out j i)
-	       (aref in jj ii))
-	 nil)))
+     (let ((wh0 (floor w0 2))
+	   (wh1 (floor w1 2)))
+      (do-rectangle (j i 0 w1 0 w0)
+	(let* ((ii (mod (+ i wh0) w0))
+	       (jj (mod (+ j wh1) w1)))
+	  (setf (aref out j i)
+		(aref in jj ii))))))
    out))
 
 (defun ft2 (in &key (forward t))
@@ -152,32 +171,25 @@ point."
   `(ft2 ,in :forward nil))
 
  
-;; fftshift3 /home/martin/usb/y2009/1123/1.lisp
-(declaim (ftype (function ((simple-array (complex double-float) (* * *)))
-			  (values (simple-array (complex double-float) (* * *))
-				  &optional))
-		fftshift3))
+;; was originally fftshift3 /home/martin/usb/y2009/1123/1.lisp
+;; now it is better and work for odd dimensions
 (defun fftshift3 (in)
+  (declare ((simple-array (complex double-float) 3) in)
+	   (values (simple-array (complex double-float) 3) &optional))
   (let ((out (make-array (array-dimensions in)
 			 :element-type '(complex double-float))))
-   (destructuring-bind (w2 w1 w0)
-       (array-dimensions in)
-     (dotimes (k w2) 
-       (dotimes (j w1)
-	 (dotimes (i w0)
-	   (let* ((ii (if (> i (/ w0 2))
-			  (+ w0 (/ w0 2) (- i))
-			  (- (/ w0 2) i)))
-		  (jj (if (> j (/ w1 2))
-			  (+ w1 (/ w1 2) (- j))
-			  (- (/ w1 2) j)))
-		  (kk (if (> k (/ w2 2))
-			  (+ w2 (/ w2 2) (- k))
-			  (- (/ w2 2) k))))
-	     (setf (aref out k j i)
-		   (aref in kk jj ii))
-	     nil)))))
-   out))
+    (destructuring-bind (w2 w1 w0)
+	(array-dimensions in)
+      (let ((wh0 (floor w0 2))
+	    (wh1 (floor w1 2))
+	    (wh2 (floor w2 2)))
+	(do-box (k j i 0 w2 0 w1 0 w0)
+	  (let ((ii (mod (+ i wh0) w0))
+		(jj (mod (+ j wh1) w1))
+		(kk (mod (+ k wh2) w2)))
+	    (setf (aref out k j i)
+		  (aref in kk jj ii))))))
+    out))
  
  
 (declaim (ftype (function ((simple-array (complex double-float) (* * *))
@@ -583,14 +595,16 @@ be floating point values. If they point outside of IMG 0 is returned."
 		     :initial-contents '((1 2) (2 3)))))
   (interpolate2 a .5d0 .2d0)) 
 
-
-
 (declaim (ftype (function (string (simple-array (complex double-float) 3)
 				  &key (:function function))
 			  (values null &optional))
 		save-stack))
 (defun save-stack (fn vol &key (function #'realpart))
-  (ensure-directories-exist fn)
+  ;; add a slash / if there isn't one
+  (ensure-directories-exist (if (eq (1- (length fn))
+					    (position #\/ fn :from-end t))
+					fn
+					(format nil "~a/" fn)))
   (destructuring-bind (z y x)
       (array-dimensions vol)
     (let ((b (make-array (list y x)
@@ -606,7 +620,10 @@ be floating point values. If they point outside of IMG 0 is returned."
 			  (values null &optional))
 		save-stack-ub8))
 (defun save-stack-ub8 (fn vol)
-  (ensure-directories-exist fn)
+  (ensure-directories-exist (if (eq (1- (length fn))
+				    (position #\/ fn :from-end t))
+				fn
+				(format nil "~a/" fn)))
   (destructuring-bind (z y x)
       (array-dimensions vol)
     (let ((b (make-array (list y x)
