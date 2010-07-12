@@ -1372,79 +1372,72 @@ if there were an empty string between them."
 	  (read-sequence vol1 s))
 	vol)))
 
-(defparameter *short-image-types*
-  '(((complex double-float) . cdf)
-    (double-float . df)
-    ((unsigned-byte 8) . ub8)))
-
-(defun find-short-type-name (type)
-  (cdr (assoc type *short-image-types* :test #'equal)))
-#+nil
-(find-short-type-name '(complex double-float))
-(defun find-long-type-name (short-type)
-  (car (rassoc short-type *short-image-types*)))
-#+nil
-(find-long-type-name 'df)
-
+;; for writing several type conversion functions
 (defmacro def-convert (dim in-type out-type &optional (function '#'identity)
 		       (short-function-name nil))
-  `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
-			   dim 
-			   (find-short-type-name in-type)
-			   (find-short-type-name out-type)
-			   (if short-function-name
-			       short-function-name
-			       (subseq (format nil "~a" function)
-				       2)))) (a)
-     (declare ((simple-array ,in-type ,dim) a)
-	      (values (simple-array ,out-type ,dim) &optional))
-     (let ((res (make-array (array-dimensions a)
-			     :element-type (quote ,out-type))))
-       ,(ecase dim
-	       (3 `(destructuring-bind (z y x)
-		       (array-dimensions a)
-		     (do-box (k j i 0 z 0 y 0 x)
-		       (setf (aref res k j i)
-			     (coerce (funcall ,function (aref a k j i)) (quote ,out-type))))))
-	       (2 `(destructuring-bind (y x)
-		       (array-dimensions a)
-		     (do-rectangle (j i 0 y 0 x)
-		       (setf (aref res j i)
-			     (coerce (funcall ,function (aref a j i)) (quote ,out-type)))))))
-       res)))
+  (let ((short-image-types
+	 '(((complex double-float) . cdf)
+	   (double-float . df)
+	   ((unsigned-byte 8) . ub8))))
+    (labels ((find-short-type-name (type)
+	       (cdr (assoc type short-image-types :test #'equal)))
+	     (find-long-type-name (short-type)
+	       (car (rassoc short-type short-image-types))))
+      `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
+			       dim 
+			       (find-short-type-name in-type)
+			       (find-short-type-name out-type)
+			       (if short-function-name
+				   short-function-name
+				   (subseq (format nil "~a" function)
+					   2)))) (a)
+	 (declare ((simple-array ,in-type ,dim) a)
+		  (values (simple-array ,out-type ,dim) &optional))
+	 (let ((res (make-array (array-dimensions a)
+				:element-type (quote ,out-type))))
+	   ,(ecase dim
+		   (3 `(destructuring-bind (z y x)
+			   (array-dimensions a)
+			 (do-box (k j i 0 z 0 y 0 x)
+			   (setf (aref res k j i)
+				 (funcall ,function (aref a k j i))))))
+		  (2 `(destructuring-bind (y x)
+			  (array-dimensions a)
+			(do-rectangle (j i 0 y 0 x)
+			  (setf (aref res j i)
+				(funcall ,function (aref a j i)))))))
+	  res)))))
 
-(def-convert 3 (unsigned-byte 8) (complex double-float))
-(def-convert 3 double-float (complex double-float))
-(def-convert 3 double-float (unsigned-byte 8) #'floor)
-(def-convert 3 (complex double-float) double-float #'realpart)
-(def-convert 3 (complex double-float) (unsigned-byte 8) #'(lambda (z) (floor (realpart z)))
-	     floor-realpart)
+(def-convert 3 (unsigned-byte 8) (complex double-float)
+	     #'(lambda (c) (complex (* 1d0 c))) complex)
+;(def-convert 3 double-float (complex double-float))
+;(def-convert 3 double-float (unsigned-byte 8) #'floor)
+;(def-convert 3 (complex double-float) double-float #'realpart)
+;(def-convert 3 (complex double-float) (unsigned-byte 8)
+;	     #'(lambda (z) (floor (realpart z)))
+;	     floor-realpart)
 
-(coerce 1d0 '(unsigned-byte 8))
 
+;; 256^3 ub8->cdf 42.6s
+;; 128^3 ub8->cdf 5.4s
+;; 128^3 lin nocoerce .276s
+(let ((a (make-array (list 128 128 128)
+		      :element-type '(unsigned-byte 8))))
+  (time (convert3-ub8/cdf-complex a))
+  (time (linconvert3-ub8/cdf a))
+   nil)
 
-(defun convert3-ub8/cdf (vol)
-  (declare ((simple-array (unsigned-byte 8) 3) vol)
+(defun linconvert3-ub8/cdf (a)
+  (declare ((simple-array (unsigned-byte 8) 3) a)
 	   (values (simple-array (complex double-float) 3) &optional))
-  (destructuring-bind (z y x)
-      (array-dimensions vol)
-   (let ((res (make-array (array-dimensions vol)
-			  :element-type '(complex double-float))))
-     (do-box (k j i 0 z 0 y 0 x)
-       (setf (aref res k j i) (complex (* 1d0 (aref vol k j i)))))
-     res)))
+  (let* ((res (make-array (array-dimensions a)
+			  :element-type '(complex double-float)))
+	 (res1 (sb-ext:array-storage-vector res))
+	 (a1 (sb-ext:array-storage-vector a)))
+    (dotimes (i (length a1))
+      (setf (aref res1 i) (complex (* 1d0 (aref a1 i)))))
+    res))
 
-(defun convert3-cdf/df (vol &key (function #'abs))
-  (declare ((simple-array (complex double-float) 3) vol)
-	   (function function)
-	   (values (simple-array double-float 3) &optional))
-  (destructuring-bind (z y x)
-      (array-dimensions vol)
-    (let ((res (make-array (array-dimensions vol)
-			   :element-type 'double-float)))
-      (do-box (k j i 0 z 0 y 0 x)
-	(setf (aref res k j i) (funcall function (aref vol k j i))))
-      res)))
 
 #+nil
 (time 
