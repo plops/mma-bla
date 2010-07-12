@@ -1,3 +1,4 @@
+
 #.(progn (require :asdf)
 	 (require :vector)
 	 (require :vol)
@@ -1393,64 +1394,77 @@ if there were an empty string between them."
 					   2)))) (a)
 	 (declare ((simple-array ,in-type ,dim) a)
 		  (values (simple-array ,out-type ,dim) &optional))
-	 (let ((res (make-array (array-dimensions a)
-				:element-type (quote ,out-type))))
-	   ,(ecase dim
-		   (3 `(destructuring-bind (z y x)
-			   (array-dimensions a)
-			 (do-box (k j i 0 z 0 y 0 x)
-			   (setf (aref res k j i)
-				 (funcall ,function (aref a k j i))))))
-		  (2 `(destructuring-bind (y x)
-			  (array-dimensions a)
-			(do-rectangle (j i 0 y 0 x)
-			  (setf (aref res j i)
-				(funcall ,function (aref a j i)))))))
-	  res)))))
+	 (let* ((res (make-array (array-dimensions a)
+				 :element-type (quote ,out-type)))
+		(res1 (sb-ext:array-storage-vector res))
+		(a1 (sb-ext:array-storage-vector a))
+		(n (length a1)))
+	   (dotimes (i n)
+	     (setf (aref res1 i)
+		   (funcall ,function (aref a1 i))))
+	   res)))))
 
 (def-convert 3 (unsigned-byte 8) (complex double-float)
 	     #'(lambda (c) (complex (* 1d0 c))) complex)
-;(def-convert 3 double-float (complex double-float))
-;(def-convert 3 double-float (unsigned-byte 8) #'floor)
-;(def-convert 3 (complex double-float) double-float #'realpart)
-;(def-convert 3 (complex double-float) (unsigned-byte 8)
-;	     #'(lambda (z) (floor (realpart z)))
-;	     floor-realpart)
+(def-convert 3 double-float (complex double-float)
+	     #'(lambda (d) (complex d)) complex)
+(def-convert 3 double-float (unsigned-byte 8) #'floor)
+(def-convert 3 (complex double-float) double-float #'realpart)
+(def-convert 3 (complex double-float) double-float #'abs)
+(def-convert 3 (complex double-float) double-float #'phase)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (realpart z)))
+	     realpart)
+
+#+nil
+(convert3-cdf/ub8-realpart
+ (make-array (list 3 3 3) :element-type '(complex double-float)))
 
 
-;; 256^3 ub8->cdf 42.6s
-;; 128^3 ub8->cdf 5.4s
-;; 128^3 lin nocoerce .276s
-(let ((a (make-array (list 128 128 128)
-		      :element-type '(unsigned-byte 8))))
-  (time (convert3-ub8/cdf-complex a))
-  (time (linconvert3-ub8/cdf a))
-   nil)
+(defmacro def-normalize (dim function)
+  `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
+     (declare ((simple-array (complex double-float) ,dim) a)
+	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
+     (let* ((res (make-array (array-dimensions a)
+			     :element-type '(unsigned-byte 8)))
+	    (res1 (sb-ext:array-storage-vector res))
+	    (b (,(intern (format nil "CONVERT~d-CDF/DF-~a" dim function)) a))
+	    (b1 (sb-ext:array-storage-vector b))
+	    (ma (reduce #'max b1))
+	    (mi (reduce #'min b1))
+	    (s (if (eq mi ma) 
+		   0d0
+		   (/ 255d0 (- ma mi)))))
+       (dotimes (i (length b1))
+	 (setf (aref res1 i)
+	       (floor (* s (- (aref b1 i) mi)))))
+       res)))
 
-(defun linconvert3-ub8/cdf (a)
-  (declare ((simple-array (unsigned-byte 8) 3) a)
-	   (values (simple-array (complex double-float) 3) &optional))
-  (let* ((res (make-array (array-dimensions a)
-			  :element-type '(complex double-float)))
-	 (res1 (sb-ext:array-storage-vector res))
-	 (a1 (sb-ext:array-storage-vector a)))
-    (dotimes (i (length a1))
-      (setf (aref res1 i) (complex (* 1d0 (aref a1 i)))))
-    res))
+(def-normalize 3 abs)
+(def-normalize 3 realpart)
+
+#+nil
+(let ((a (make-array (list 3 4 5)
+		     :element-type '(complex double-float))))
+  (setf (aref a 1 1 1) (complex 1d0 1d0))
+  (normalize3-cdf/ub8 a))
 
 
 #+nil
 (time 
- (let* ((a (convert3-ub8/cdf (read-raw-stack-video-frame
-			      "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000.raw"
-			      90))))
+ (let* ((a (convert3-ub8/cdf-complex
+	    (read-raw-stack-video-frame
+	     "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw"
+	     0))))
    (destructuring-bind (z y x)
        (array-dimensions a)
      (defparameter *a* a)
      (let ((b (draw-oval 12d0 z y x)))
-       (defparameter conv (convert3-cdf/df (convolve3-circ a b)))))
+       (defparameter conv (normalize3-cdf/ub8-realpart
+			   (fftshift3 (convolve3-circ a b))))))
    nil))
-
+#+nil
+(save-stack-ub8 "/home/martin/tmp/conv/" conv)
 
 #+nil
 (find-maxima3 conv)
