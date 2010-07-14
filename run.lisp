@@ -27,14 +27,19 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		   &optional))
   (let ((sphere (make-array (list z y x)
 			    :element-type '(unsigned-byte 8))))
-    (do-box (k j i 0 z 0 y 0 x)
-      (let ((r (sqrt (+ (square (- i (* .5d0 x)))
-			(square (- j (* .5d0 y)))
-			(square (- k (* .5d0 z)))))))
-	(setf (aref sphere k j i)
-	      (if (< r radius)
-		  1 0))))
+    (let ((xh (floor x 2))
+	  (yh (floor y 2))
+	  (zh (floor z 2)))
+     (do-box (k j i 0 z 0 y 0 x)
+       (let ((r (sqrt (+ (square (* 1d0 (- i xh)))
+			 (square (* 1d0 (- j yh)))
+			 (square (* 1d0 (- k zh)))))))
+	 (setf (aref sphere k j i)
+	       (if (< r radius)
+		   1 0)))))
     sphere))
+#+nil
+(count-non-zero-ub8 (draw-sphere-ub8 1d0 41 58 70))
 
 (defun draw-oval-ub8 (radius z y x)
   (declare (double-float radius)
@@ -1527,8 +1532,6 @@ DX."
 	(incf sum)))
     sum))
 
-(nconc )
-
 #+nil
 (time 
  (let ((ao (decimate-xy-ub8
@@ -1538,7 +1541,7 @@ DX."
 	     0))))
    (destructuring-bind (z y x)
        (array-dimensions ao)
-    (let* ((timestep 7)
+    (let* ((timestep 22)
 	   (o (loop for radius from 1 upto 10 collect
 		   (let* ((oval (draw-sphere-ub8 (* 1d0 radius) z y x))
 			  (volume (count-non-zero-ub8 oval)))
@@ -1564,8 +1567,9 @@ DX."
 		  (loop for el in (find-maxima3-df conv-df) do
 		       (destructuring-bind (height pos)
 			   el
-			(format s "~f ~a~%" 
+			(format s "~f ~d ~a~%" 
 				(/ height volume)
+				volume
 				pos)))))
 	       (sb-ext:gc :full t)))
 	nil)))))
