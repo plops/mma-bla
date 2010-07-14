@@ -1,4 +1,3 @@
-
 #.(progn (require :asdf)
 	 (require :vector)
 	 (require :vol)
@@ -21,27 +20,29 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ||#
 
 
-
-(declaim (ftype (function (double-float fixnum fixnum fixnum)
-			  (values (simple-array (complex double-float) 3)
-				  &optional))
-		draw-sphere draw-oval))
-(defun draw-sphere (radius z y x)
+(defun draw-sphere-ub8 (radius z y x)
+  (declare (double-float radius)
+	   (fixnum z y x)
+	   (values (simple-array (unsigned-byte 8) 3)
+		   &optional))
   (let ((sphere (make-array (list z y x)
-			    :element-type '(complex double-float))))
+			    :element-type '(unsigned-byte 8))))
     (do-box (k j i 0 z 0 y 0 x)
       (let ((r (sqrt (+ (square (- i (* .5d0 x)))
 			(square (- j (* .5d0 y)))
 			(square (- k (* .5d0 z)))))))
 	(setf (aref sphere k j i)
 	      (if (< r radius)
-		  (complex 1d0)
-		  (complex 0d0)))))
+		  1 0))))
     sphere))
 
-(defun draw-oval (radius z y x)
+(defun draw-oval-ub8 (radius z y x)
+  (declare (double-float radius)
+	   (fixnum z y x)
+	   (values (simple-array (unsigned-byte 8) 3)
+		   &optional))
   (let ((sphere (make-array (list z y x)
-			    :element-type '(complex double-float)))
+			    :element-type '(unsigned-byte 8)))
 	(scale-z 5d0))
     (do-box (k j i 0 z 0 y 0 x)
       (let ((r (sqrt (+ (square (- i (* .5d0 x)))
@@ -49,8 +50,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 			(square (* scale-z (- k (* .5d0 z))))))))
 	(setf (aref sphere k j i)
 	      (if (< r radius)
-		  (complex 1d0)
-		  (complex 0d0)))))
+		  1
+		  0))))
     sphere))
 
 (declaim (ftype (function ()
@@ -78,7 +79,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
       #+nil(setf *stack* stack)
       ;; find centers of cells by convolving with sphere, actually an
       ;; oval because the z resolution is smaller than the transversal
-      (let* ((sphere (draw-oval 11d0 z y x))
+      (let* ((sphere (convert3-ub8/cdf-complex (draw-oval-ub8 11d0 z y x)))
 	     (conv (convolve3-circ stack (fftshift3 sphere)))
 	     (conv-byte (make-array (list y x)
 				   :element-type '(unsigned-byte 8)))
@@ -160,7 +161,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		     (- (floor (vec-i-y c) div-y) rh)
 		     (- (floor (vec-i-x c) div-x) rh))
 	       (complex 1d0 0d0)))
-    (convolve3-circ points (draw-sphere radius z y x))))
+    (convolve3-circ points
+		    (convert3-ub8/cdf-complex (draw-sphere-ub8 radius z y x)))))
 
 
 
@@ -183,7 +185,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		    (vec-i-y c)
 		    (vec-i-x c))
 	      (complex 1d0 0d0))))
-    (convolve3-circ points (fftshift3 (draw-sphere radius z y x)))))
+    (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
+				       (draw-sphere-ub8 radius z y x))))))
 
 (defun draw-ovals (radius centers z y x)
   (let* ((dims (list z y x))
@@ -197,7 +200,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		    (vec-i-y c)
 		    (vec-i-x c))
 	      (complex 1d0 0d0))))
-    (convolve3-circ points (fftshift3 (draw-oval radius z y x)))))
+    (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
+				       (draw-oval-ub8 radius z y x))))))
 
 
 
@@ -1404,9 +1408,8 @@ if there were an empty string between them."
 	     (setf (aref res1 i)
 		   (funcall ,function (aref a1 i))))
 	   res)))))
-
 (def-convert 3 (unsigned-byte 8) (complex double-float)
-	     #'(lambda (c) (complex (* 1d0 c))) complex)
+		  #'(lambda (c) (complex (* 1d0 c))) complex)
 (def-convert 3 double-float (complex double-float)
 	     #'(lambda (d) (complex d)) complex)
 (def-convert 3 double-float (unsigned-byte 8) #'floor)
@@ -1416,13 +1419,20 @@ if there were an empty string between them."
 (def-convert 3 (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (realpart z)))
 	     realpart)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (phase z)))
+	     phase)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (abs z)))
+	     abs)
+
 
 #+nil
 (convert3-cdf/ub8-realpart
  (make-array (list 3 3 3) :element-type '(complex double-float)))
 
 
-(defmacro def-normalize (dim function)
+(defmacro def-normalize-cdf (dim function)
   `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
      (declare ((simple-array (complex double-float) ,dim) a)
 	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
@@ -1441,8 +1451,28 @@ if there were an empty string between them."
 	       (floor (* s (- (aref b1 i) mi)))))
        res)))
 
-(def-normalize 3 abs)
-(def-normalize 3 realpart)
+(def-normalize-cdf 3 abs)
+(def-normalize-cdf 3 realpart)
+
+(defmacro def-normalize-df (dim function)
+  `(defun ,(intern (format nil "NORMALIZE~d-DF/UB8-~a" dim function)) (a)
+     (declare ((simple-array double-float ,dim) a)
+	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
+     (let* ((res (make-array (array-dimensions a)
+			     :element-type '(unsigned-byte 8)))
+	    (res1 (sb-ext:array-storage-vector res))
+	    (b1 (sb-ext:array-storage-vector a))
+	    (ma (reduce #'max b1))
+	    (mi (reduce #'min b1))
+	    (s (if (eq mi ma) 
+		   0d0
+		   (/ 255d0 (- ma mi)))))
+       (dotimes (i (length b1))
+	 (setf (aref res1 i)
+	       (floor (* s (- (aref b1 i) mi)))))
+       res)))
+
+(def-normalize-df 3 realpart)
 
 #+nil
 (let ((a (make-array (list 3 4 5)
@@ -1451,21 +1481,98 @@ if there were an empty string between them."
   (normalize3-cdf/ub8 a))
 
 
+(defun decimate-xy-ub8 (dx vol)
+  "Reduce increase transversal sampling distance by odd integer factor
+DX."
+  (declare (fixnum dx)
+	   ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
+  (unless (eq (mod dx 2) 1)
+    (error "Factor DX has to be odd."))
+  (destructuring-bind (z y x)
+      (array-dimensions vol)
+    (let* ((dx2 (* dx dx))
+	   (nx (floor x dx))
+	   (ny (floor y dx))
+	   (result (make-array (list z ny nx)
+			       :element-type '(unsigned-byte 8))))
+      (do-box (k j i 0 z 0 ny 0 nx)
+	(let ((sum 0))
+	  (do-rectangle (jj ii 0 dx 0 dx)
+	    (incf sum (aref vol
+			    k
+			    (+ (* dx j) jj)
+			    (+ (* dx i) ii))))
+	  (setf (aref result k j i) (floor sum dx2))))
+      result)))
+;; for dx=5:
+;; 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+;; x x x q x
+;;           x o x x x
+;;                     x x x x x
+;;                               x x x x x
+;;                                         x x x x ?
+;; dxh=2, n=24
+;; output size floor(n,dx)=4
+;; position of q: ii=3, i=0: dx*i+ii=5*0+3=3
+;; position of o: ii=1, i=1: dx*i+ii=5+1=6
+
+(defun count-non-zero-ub8 (vol)
+  (declare ((simple-array (unsigned-byte 8) 3) vol)
+	   (values fixnum &optional))
+  (let* ((sum 0)
+	 (vol1 (sb-ext:array-storage-vector vol)))
+    (dotimes (i (length vol1))
+      (when (< 0 (aref vol1 i))
+	(incf sum)))
+    sum))
+
+(nconc )
+
 #+nil
 (time 
- (let* ((a (convert3-ub8/cdf-complex
+ (let ((ao (decimate-xy-ub8
+	    5
 	    (read-raw-stack-video-frame
 	     "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw"
 	     0))))
    (destructuring-bind (z y x)
-       (array-dimensions a)
-     (defparameter *a* a)
-     (let ((b (draw-oval 12d0 z y x)))
-       (defparameter conv (normalize3-cdf/ub8-realpart
-			   (fftshift3 (convolve3-circ a b))))))
-   nil))
+       (array-dimensions ao)
+    (let* ((timestep 7)
+	   (o (loop for radius from 1 upto 10 collect
+		   (let* ((oval (draw-sphere-ub8 (* 1d0 radius) z y x))
+			  (volume (count-non-zero-ub8 oval)))
+		     (list radius volume (ft3 (convert3-ub8/cdf-complex oval)))))))
+      (let* ((ao (decimate-xy-ub8 
+		  5
+		  (read-raw-stack-video-frame
+		   "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw"
+		   timestep)))
+	     (a (convert3-ub8/cdf-complex ao))
+	     (ka (ft3 a)))
+	(loop for i in o do
+	     (destructuring-bind (radius volume oval)
+		 i
+	       (let* ((dir (format nil "/home/martin/tmp/o~d" radius))
+		      (conv (fftshift3 (ift3 (.* ka oval))))
+		      (conv-df (convert3-cdf/df-realpart conv)))
+		 (save-stack-ub8 dir
+				(normalize3-df/ub8-realpart conv-df))
+		(with-open-file (s (format nil "~a/maxima" dir)
+				   :if-exists :supersede
+				   :direction :output)
+		  (loop for el in (find-maxima3-df conv-df) do
+		       (destructuring-bind (height pos)
+			   el
+			(format s "~f ~a~%" 
+				(/ height volume)
+				pos)))))
+	       (sb-ext:gc :full t)))
+	nil)))))
 #+nil
-(save-stack-ub8 "/home/martin/tmp/conv/" conv)
+(sb-ext:gc :full t)
+#+nil
+(save-stack-ub8 "/home/martin/tmp/conv" conv)
 
 #+nil
 (find-maxima3 conv)
@@ -1477,12 +1584,12 @@ if there were an empty string between them."
     (write-pgm (convert-img (cross-section-xz b 42))
 	       "/home/martin/tmp/time0.pgm")))
 
-(defun find-maxima3 (conv)
+(defun find-maxima3-df (conv)
   (declare ((simple-array double-float 3) conv)
-	   (values (simple-array vec-i 1) &optional))
+	   (values cons #+nil (simple-array vec-i 1) &optional))
  (destructuring-bind (z y x)
      (array-dimensions conv)
-   (let ((centers (make-array 0 :element-type 'vec-i
+   (let ((centers nil #+nil(make-array 0 :element-type 'vec-i
 			      :initial-element (make-vec-i)
 			      :adjustable t
 			      :fill-pointer t)))
@@ -1494,10 +1601,16 @@ if there were an empty string between them."
 		    (< (aref conv k (1+ j) i) v)
 		    (< (aref conv (1- k) j i) v)
 		    (< (aref conv (1+ k) j i) v))
-	   (vector-push-extend
+	   ;; this is TOO slow
+	   #+nil(setf centers (append centers
+				 (list (list v (make-vec-i :z k :y j :x i)))))
+	   (setf centers (nconc centers 
+				(list (list v (make-vec-i :z k :y j :x i)))))
+	   #+nil(vector-push-extend
 	    (make-vec-i :z k :y j :x i)
 	    centers))))
-     (make-array (length centers)
+     centers
+   #+nil  (make-array (length centers)
 		 :element-type 'vec-i
 		 :initial-contents centers))))
 
