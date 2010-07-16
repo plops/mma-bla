@@ -29,17 +29,31 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 			    :element-type '(unsigned-byte 8))))
     (let ((xh (floor x 2))
 	  (yh (floor y 2))
-	  (zh (floor z 2)))
+	  (zh (floor z 2))
+	  (radius2 (* radius radius)))
      (do-box (k j i 0 z 0 y 0 x)
-       (let ((r (sqrt (+ (square (* 1d0 (- i xh)))
-			 (square (* 1d0 (- j yh)))
-			 (square (* 1d0 (- k zh)))))))
+       (let ((r2 (+ (expt (* 1d0 (- i xh)) 2)
+		    (expt (* 1d0 (- j yh)) 2)
+		    (expt (* 1d0 (- k zh)) 2))))
 	 (setf (aref sphere k j i)
-	       (if (< r radius)
+	       (if (< r2 radius2)
 		   1 0)))))
     sphere))
 #+nil
 (count-non-zero-ub8 (draw-sphere-ub8 1d0 41 58 70))
+#+nil
+(let ((a (draw-sphere-ub8 1d0
+			  4 4 4
+			  ;;3 3 3
+			  ;;41 58 70
+			  ))
+      (res ()))
+ (destructuring-bind (z y x)
+     (array-dimensions a)
+   (do-box (k j i 0 z 0 y 0 x)
+     (when (eq 1 (aref a k j i))
+       (setf res (list k j i))))
+   res))
 
 (defun draw-oval-ub8 (radius z y x)
   (declare (double-float radius)
@@ -1541,7 +1555,7 @@ DX."
 	     0))))
    (destructuring-bind (z y x)
        (array-dimensions ao)
-    (let* ((timestep 22)
+    (let* ((timestep 90)
 	   (o (loop for radius from 1 upto 10 collect
 		   (let* ((oval (draw-sphere-ub8 (* 1d0 radius) z y x))
 			  (volume (count-non-zero-ub8 oval)))
@@ -1570,8 +1584,7 @@ DX."
 			(format s "~f ~d ~a~%" 
 				(/ height volume)
 				volume
-				pos)))))
-	       (sb-ext:gc :full t)))
+				pos)))))))
 	nil)))))
 #+nil
 (sb-ext:gc :full t)
@@ -1608,8 +1621,11 @@ DX."
 	   ;; this is TOO slow
 	   #+nil(setf centers (append centers
 				 (list (list v (make-vec-i :z k :y j :x i)))))
-	   (setf centers (nconc centers 
+	   ;; this is faster
+	   #+nil(setf centers (nconc centers 
 				(list (list v (make-vec-i :z k :y j :x i)))))
+	   ;; I think push is the right thing to do
+	   (push (list v (make-vec-i :z k :y j :x i)) centers)
 	   #+nil(vector-push-extend
 	    (make-vec-i :z k :y j :x i)
 	    centers))))
