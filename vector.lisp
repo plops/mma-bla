@@ -8,7 +8,7 @@
    #:cross
    #:m #:rotation-matrix #:m*
    #:vec-i #:make-vec-i #:vec-i-x #:vec-i-y #:vec-i-z
-   #:v.-i #:v+-i #:v--i #:norm-i))
+   #:v.-i #:v+-i #:v--i #:v*-i #:norm-i))
 
 (in-package :vector)
 
@@ -37,10 +37,9 @@
 (deftype mat ()
   `(simple-array double-float (3 3)))
 
-(declaim (ftype (function (&optional double-float double-float double-float)
-			  (values vec &optional))
-		v))
 (defun v (&optional (x 0d0) (y 0d0) (z 0d0))
+  (declare (double-float x y z)
+	   (values vec &optional))
   (make-array 3
 	      :element-type 'double-float
 	      :initial-contents (list x y z)))
@@ -90,15 +89,40 @@
   "Subtract two vectors."
   (v-op - a b))
 
-
-(declaim (ftype (function (vec double-float)
-			  (values vec &optional))
-		v*))
-(defun  v* (a scalar)
+#+nil (defun  v* (a scalar)
   "Multiply vector with scalar."
   (declare (double-float scalar)
-	   (vec a))
+	   (vec a)
+	   (values vec &optional))
   (let* ((result (v)))
+    (dotimes (i 3)
+      (setf (aref result i) (* scalar (aref a i))))
+    result))
+
+(defun  %v* (a scalar)
+  "Multiply vector with scalar."
+  (declare (double-float scalar)
+	   (vec a)
+	   (values vec &optional))
+  (let* ((result (v)))
+    (dotimes (i 3)
+      (setf (aref result i) (* scalar (aref a i))))
+    result))
+
+(defmacro v* (a scalar)
+  (if (numberp scalar)
+      `(%v* ,a (load-time-value (* 1d0 ,scalar)))
+      `(%v* ,a ,scalar)))
+#+nil
+(v* (v 1d0) 4)
+
+
+(defun  v*-i (a scalar)
+  "Multiply vector with scalar."
+  (declare (fixnum scalar)
+	   (vec-i a)
+	   (values vec-i &optional))
+  (let* ((result (make-vec-i)))
     (dotimes (i 3)
       (setf (aref result i) (* scalar (aref a i))))
     result))

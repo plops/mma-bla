@@ -1548,43 +1548,41 @@ DX."
 
 #+nil
 (time 
- (let ((ao (decimate-xy-ub8
-	    5
-	    (read-raw-stack-video-frame
-	     "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw"
-	     0))))
+ (let* ((fn "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw")
+	(ao (decimate-xy-ub8 5
+			     (read-raw-stack-video-frame fn 0))))
    (destructuring-bind (z y x)
        (array-dimensions ao)
-    (let* ((timestep 90)
-	   (o (loop for radius from 1 upto 10 collect
-		   (let* ((oval (draw-sphere-ub8 (* 1d0 radius) z y x))
-			  (volume (count-non-zero-ub8 oval)))
-		     (list radius volume (ft3 (convert3-ub8/cdf-complex oval)))))))
-      (let* ((ao (decimate-xy-ub8 
-		  5
-		  (read-raw-stack-video-frame
-		   "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw"
-		   timestep)))
-	     (a (convert3-ub8/cdf-complex ao))
-	     (ka (ft3 a)))
-	(loop for i in o do
-	     (destructuring-bind (radius volume oval)
-		 i
-	       (let* ((dir (format nil "/home/martin/tmp/o~d" radius))
-		      (conv (fftshift3 (ift3 (.* ka oval))))
-		      (conv-df (convert3-cdf/df-realpart conv)))
+     (let* ((timestep 20)
+	    (o (loop for radius from 1 upto 10 collect
+		    (let* ((oval (draw-sphere-ub8 (* 1d0 radius) z y x))
+			   (volume (count-non-zero-ub8 oval)))
+		      (list radius volume
+			    (ft3 (convert3-ub8/cdf-complex oval)))))))
+       (let* ((ao (decimate-xy-ub8 5
+				   (read-raw-stack-video-frame fn timestep)))
+	      (a (convert3-ub8/cdf-complex ao))
+	      (ka (ft3 a)))
+	 (loop for i in o do
+	      (destructuring-bind (radius volume oval)
+		  i
+		(let* ((dir (format nil "/home/martin/tmp/o~d" radius))
+		       (conv (fftshift3 (ift3 (.* ka oval))))
+		       (conv-df (convert3-cdf/df-realpart conv)))
 		 (save-stack-ub8 dir
-				(normalize3-df/ub8-realpart conv-df))
-		(with-open-file (s (format nil "~a/maxima" dir)
-				   :if-exists :supersede
+				 (normalize3-df/ub8-realpart conv-df))
+		 (with-open-file (s (format nil "~a/maxima" dir)
+				    :if-exists :supersede
 				   :direction :output)
-		  (loop for el in (find-maxima3-df conv-df) do
-		       (destructuring-bind (height pos)
-			   el
-			(format s "~f ~d ~a~%" 
-				(/ height volume)
-				volume
-				pos)))))))
+		   (loop for el in (find-maxima3-df conv-df) do
+			(destructuring-bind (height pos)
+			    el
+			  (format s "~f ~d ~a~%" 
+				  (/ height volume)
+				  volume
+				  (v*-i 
+				   (map 'vec-i #'(lambda (x) (floor x 2)) pos)
+				   2))))))))
 	nil)))))
 #+nil
 (sb-ext:gc :full t)
@@ -1603,7 +1601,7 @@ DX."
 
 (defun find-maxima3-df (conv)
   (declare ((simple-array double-float 3) conv)
-	   (values cons #+nil (simple-array vec-i 1) &optional))
+	   (values (simple-array * 1) &optional))
  (destructuring-bind (z y x)
      (array-dimensions conv)
    (let ((centers nil #+nil(make-array 0 :element-type 'vec-i
@@ -1629,7 +1627,8 @@ DX."
 	   #+nil(vector-push-extend
 	    (make-vec-i :z k :y j :x i)
 	    centers))))
-     centers
+;;    (nreverse centers)
+     (coerce centers 'simple-vector) ;; I saw this in raylisps load-obj
    #+nil  (make-array (length centers)
 		 :element-type 'vec-i
 		 :initial-contents centers))))
