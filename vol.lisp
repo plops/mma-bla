@@ -1,50 +1,81 @@
 (defpackage :vol
-  (:use :cl :sb-alien :sb-c-call)
-  (:export
-   #:fftshift2
-   #:ft2
-   #:ift2
-   #:convolve2-circ
+   (:use :cl :sb-alien :sb-c-call)
+   (:export
+    #:fftshift2
+    #:ft2
+    #:ift2
+    #:convolve2-circ
 
-   #:fftshift3
-   #:ft3
-   #:ift3
-   #:read-pgm
-   #:write-pgm
-   #:histogram
-   #:get-linear-array
-   #:read-stack
-   #:square
-   #:linear-regression
-   #:clamp
-   #:interp1
-   #:interpolate2
+    #:fftshift3
+    #:ft3
+    #:ift3
+    #:read-pgm
+    #:write-pgm
+    #:histogram
+    #:get-linear-array
+    #:read-stack
+    #:square
+    #:linear-regression
+    #:clamp
+    #:interp1
+    #:interpolate2
 
-   #:+forward+
-   #:+backward+
-   #:+estimate+
+    #:+forward+
+    #:+backward+
+    #:+estimate+
    
-   #:do-rectangle
-   #:do-box
-   #:with-slice
+    #:do-rectangle
+    #:do-box
+    #:with-slice
    
-   #:save-stack
-   #:save-stack-ub8
-   #:.*
-   #:.+
-   #:s*
-   #:.*2
-   #:.+2
-   #:s*2
-   #:convolve3-circ
-   #:convolve3
+    #:save-stack
+    #:save-stack-ub8
+    #:.*
+    #:.+
+    #:s*
+    #:.*2
+    #:.+2
+    #:s*2
+    #:convolve3-circ
+    #:convolve3
 
-   #:convert-vol
-   #:convert-img
-   #:resample-half
-   #:cross-section-xz
-   #:normalize-img
-   #:normalize-vol))
+    #:resample-half
+    #:cross-section-xz
+
+    #:convert3-cdf/df-imagpart
+    #:convert3-df/ub8-floor
+    #:convert2-ub8/cdf-complex
+    #:convert2-cdf/df-realpart
+    #:convert2-df/cdf-complex
+    #:convert3-ub8/cdf-complex
+    #:convert2-cdf/ub8-realpart
+    #:convert3-cdf/df-phase
+    #:convert2-cdf/ub8-abs
+    #:convert3-cdf/df-realpart
+    #:convert3-df/cdf-complex
+    #:convert2-cdf/ub8-phase
+    #:convert3-cdf/df-abs
+    #:convert2-cdf/df-imagpart
+    #:convert3-cdf/ub8-abs
+    #:convert2-cdf/df-phase
+    #:convert2-cdf/df-abs
+    #:convert3-cdf/ub8-phase
+    #:convert2-df/ub8-floor
+    #:convert3-cdf/ub8-realpart
+
+    #:normalize2-cdf/ub8-phase
+    #:normalize3-cdf/ub8-phase
+    #:normalize2-cdf/ub8-realpart
+    #:normalize2-df/ub8-floor
+    #:normalize2-cdf/ub8-abs
+    #:normalize3-df/ub8-realpart
+    #:normalize3-cdf/ub8-abs
+    #:normalize3-cdf/ub8-realpart
+    #:normalize3-df/ub8-floor
+    #:normalize-ub8
+
+    #:count-non-zero-ub8
+    #:decimate-xy-ub8))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -825,54 +856,207 @@ be floating point values. If they point outside of IMG 0 is returned."
 	      (aref a j y i)))
       b)))
 
-(declaim (ftype (function ((simple-array (complex double-float) 2)
-			   &key (:function function))
-			  (values (simple-array (unsigned-byte 8) 2)
-				  &optional))
-		normalize-img))
-(defun normalize-img (a &key (function #'abs))
-  (destructuring-bind (y x)
-      (array-dimensions a)
-    (let ((b (make-array (list y x)
-			 :element-type 'double-float)))
-      (do-rectangle (j i 0 y 0 x)
-	(setf (aref b j i)
-	      (funcall function (aref a j i))))
-      (let* ((b1 (sb-ext:array-storage-vector b))
-	     (ma (reduce #'max b1))
-	     (mi (reduce #'min b1))
-	     (result (make-array (list y x)
-				 :element-type '(unsigned-byte 8))))
-	(when (< (abs (- ma mi)) 1d-12)
-	  (return-from normalize-img result)
-	  #+nil(error "image contains constant data, can't normalize."))
-	(let ((s (/ 255d0 (- ma mi))))
-	 (do-rectangle (j i 0 y 0 x)
-	   (setf (aref result j i)
-		 (floor (* s (- (aref b j i) mi))))))
-	result))))
+;; for writing several type conversion functions
+;; will have a name like convert3-ub8/cdf-complex
+(defmacro def-convert (dim in-type out-type &optional (function '#'identity)
+		       (short-function-name nil))
+  (let ((short-image-types
+	 '(((complex double-float) . cdf)
+	   (double-float . df)
+	   ((unsigned-byte 8) . ub8))))
+    (labels ((find-short-type-name (type)
+	       (cdr (assoc type short-image-types :test #'equal)))
+	     (find-long-type-name (short-type)
+	       (car (rassoc short-type short-image-types))))
+      `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
+			       dim 
+			       (find-short-type-name in-type)
+			       (find-short-type-name out-type)
+			       (if short-function-name
+				   short-function-name
+				   (subseq (format nil "~a" function)
+					   2)))) (a)
+	 (declare ((simple-array ,in-type ,dim) a)
+		  (values (simple-array ,out-type ,dim) &optional))
+	 (let* ((res (make-array (array-dimensions a)
+				 :element-type (quote ,out-type)))
+		(res1 (sb-ext:array-storage-vector res))
+		(a1 (sb-ext:array-storage-vector a))
+		(n (length a1)))
+	   (dotimes (i n)
+	     (setf (aref res1 i)
+		   (funcall ,function (aref a1 i))))
+	   res)))))
+(def-convert 3 (unsigned-byte 8) (complex double-float)
+		  #'(lambda (c) (complex (* 1d0 c))) complex)
+(def-convert 3 double-float (complex double-float)
+	     #'(lambda (d) (complex d)) complex)
+(def-convert 3 double-float (unsigned-byte 8) #'floor)
+(def-convert 3 (complex double-float) double-float #'realpart)
+(def-convert 3 (complex double-float) double-float #'abs)
+(def-convert 3 (complex double-float) double-float #'phase)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (realpart z)))
+	     realpart)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (phase z)))
+	     phase)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (abs z)))
+	     abs)
 
-(declaim (ftype (function ((simple-array (complex double-float) 3)
-			   &key (:function function))
-			  (values (simple-array (unsigned-byte 8) 3)
-				  &optional))
-		normalize-vol))
-(defun normalize-vol (a &key (function #'abs))
+(def-convert 2 (unsigned-byte 8) (complex double-float)
+		  #'(lambda (c) (complex (* 1d0 c))) complex)
+(def-convert 2 double-float (complex double-float)
+	     #'(lambda (d) (complex d)) complex)
+(def-convert 2 double-float (unsigned-byte 8) #'floor)
+(def-convert 2 (complex double-float) double-float #'realpart)
+(def-convert 2 (complex double-float) double-float #'abs)
+(def-convert 2 (complex double-float) double-float #'phase)
+(def-convert 2 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (realpart z)))
+	     realpart)
+(def-convert 2 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (phase z)))
+	     phase)
+(def-convert 2 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (abs z)))
+	     abs)
+
+
+#+nil
+(convert3-cdf/ub8-realpart
+ (make-array (list 3 3 3) :element-type '(complex double-float)))
+
+;; will have a name like normalize3-cdf/ub8-abs
+(defmacro def-normalize-cdf (dim function)
+  `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
+     (declare ((simple-array (complex double-float) ,dim) a)
+	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
+     (let* ((res (make-array (array-dimensions a)
+			     :element-type '(unsigned-byte 8)))
+	    (res1 (sb-ext:array-storage-vector res))
+	    (b (,(intern (format nil "CONVERT~d-CDF/DF-~a" dim function)) a))
+	    (b1 (sb-ext:array-storage-vector b))
+	    (ma (reduce #'max b1))
+	    (mi (reduce #'min b1))
+	    (s (if (eq mi ma) 
+		   0d0
+		   (/ 255d0 (- ma mi)))))
+       (dotimes (i (length b1))
+	 (setf (aref res1 i)
+	       (floor (* s (- (aref b1 i) mi)))))
+       res)))
+
+(def-normalize-cdf 3 abs)
+(def-normalize-cdf 3 realpart)
+(def-normalize-cdf 3 phase)
+
+(def-normalize-cdf 2 abs)
+(def-normalize-cdf 2 realpart)
+(def-normalize-cdf 2 phase)
+
+
+(defmacro def-normalize-df (dim function)
+  `(defun ,(intern (format nil "NORMALIZE~d-DF/UB8-~a" dim function)) (a)
+     (declare ((simple-array double-float ,dim) a)
+	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
+     (let* ((res (make-array (array-dimensions a)
+			     :element-type '(unsigned-byte 8)))
+	    (res1 (sb-ext:array-storage-vector res))
+	    (b1 (sb-ext:array-storage-vector a))
+	    (ma (reduce #'max b1))
+	    (mi (reduce #'min b1))
+	    (s (if (eq mi ma) 
+		   0d0
+		   (/ 255d0 (- ma mi)))))
+       (dotimes (i (length b1))
+	 (setf (aref res1 i)
+	       (floor (* s (- (aref b1 i) mi)))))
+       res)))
+
+(def-normalize-df 3 floor)
+(def-normalize-df 2 floor)
+
+(defun normalize-ub8 (a)
+  (declare ((simple-array * *) a)
+	   (values (simple-array (unsigned-byte 8) *) &optional))
+  (etypecase a
+    ((simple-array (complex double-float) 2) (normalize2-cdf/ub8-realpart a))
+    ((simple-array (complex double-float) 3) (normalize3-cdf/ub8-realpart a))
+    ((simple-array double-float 2) (normalize2-df/ub8-floor a))
+    ((simple-array double-float 3) (normalize3-df/ub8-floor a))))
+
+#+nil
+(let ((a (make-array (list 3 4 5)
+		     :element-type '(complex double-float))))
+  (setf (aref a 1 1 1) (complex 1d0 1d0))
+  (normalize3-cdf/ub8 a))
+
+#+nil ;; find the names of all the functions that were defined by the
+      ;; above macros, for exporting
+(let ((res ()))
+  (with-package-iterator (next-symbol *package* :internal)
+    (loop (multiple-value-bind (more? symbol)
+	      (next-symbol)
+	    (if more?
+		(push symbol res)
+		(return)))))
+  (loop for s in (delete-if-not #'(lambda (x) 
+				    (let* ((pat #+nil "CONVERT" 
+					     "NORMALI"
+					     )
+					   (lpat (length pat)))
+				      (when (< lpat (length x))
+					(string= pat x 
+						 :end1 lpat
+						 :end2 lpat))))
+				(mapcar #'(lambda (x) 
+					    (format nil "~a" x)) res))
+     do (format t "#:~a~%" (string-downcase s))))
+
+
+(defun decimate-xy-ub8 (dx vol)
+  "Increase transversal sampling distance by odd integer factor DX."
+  (declare (fixnum dx)
+	   ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
+  (unless (eq (mod dx 2) 1)
+    (error "Factor DX has to be odd."))
   (destructuring-bind (z y x)
-      (array-dimensions a)
-    (let ((b (make-array (list z y x)
-			 :element-type 'double-float)))
-      (do-box (k j i 0 z 0 y 0 x)
-	(setf (aref b k j i)
-	      (funcall function (aref a k j i))))
-      (let* ((b1 (sb-ext:array-storage-vector b))
-	     (ma (reduce #'max b1))
-	     (mi (reduce #'min b1))
-	     (result (make-array (list z y x)
-				 :element-type '(unsigned-byte 8)))
-	     (s (/ 255d0 (- ma mi))))
-	(do-box (k j i 0 z 0 y 0 x)
-	  (setf (aref result k j i)
-		(floor (* s (- (aref b k j i) mi)))))
-	result))))
+      (array-dimensions vol)
+    (let* ((dx2 (* dx dx))
+	   (nx (floor x dx))
+	   (ny (floor y dx))
+	   (result (make-array (list z ny nx)
+			       :element-type '(unsigned-byte 8))))
+      (do-box (k j i 0 z 0 ny 0 nx)
+	(let ((sum 0))
+	  (do-rectangle (jj ii 0 dx 0 dx)
+	    (incf sum (aref vol
+			    k
+			    (+ (* dx j) jj)
+			    (+ (* dx i) ii))))
+	  (setf (aref result k j i) (floor sum dx2))))
+      result)))
+;; for dx=5:
+;; 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+;; x x x q x
+;;           x o x x x
+;;                     x x x x x
+;;                               x x x x x
+;;                                         x x x x ?
+;; dxh=2, n=24
+;; output size floor(n,dx)=4
+;; position of q: ii=3, i=0: dx*i+ii=5*0+3=3
+;; position of o: ii=1, i=1: dx*i+ii=5+1=6
 
+(defun count-non-zero-ub8 (vol)
+  (declare ((simple-array (unsigned-byte 8) 3) vol)
+	   (values fixnum &optional))
+  (let* ((sum 0)
+	 (vol1 (sb-ext:array-storage-vector vol)))
+    (dotimes (i (length vol1))
+      (when (< 0 (aref vol1 i))
+	(incf sum)))
+    sum))

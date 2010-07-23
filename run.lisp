@@ -421,7 +421,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				   2d0
 				   1d0) 0d0))))
 	    (convolve3-circ points (fftshift3 (draw-oval radius z y x)))))))
-   (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-vol spheres))
+   (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-ub8 spheres))
    (sb-ext:gc :full t)))
 
 #+nil ;; construct LCOS image
@@ -502,14 +502,14 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	   "/home/martin/tmp/slice-x-psf-cut.pgm")
 
 #+nil
-(save-stack-ub8 "/home/martin/tmp/psf" (normalize-vol *psf*))
+(save-stack-ub8 "/home/martin/tmp/psf" (normalize-ub8 *psf*))
 
 
 #+nil ;; draw lines into the light distribution in the specimen
 (destructuring-bind (z y x)
     (array-dimensions *slice-x-psf*)
   (let ((coord (elt *centers* 31))
-	(vol (normalize-vol *slice-x-psf*))
+	(vol (normalize-ub8 *slice-x-psf*))
 	(dx 2.d-4)
 	(dz 1d-3))
     #+nil(draw-ray-into-vol (* dx (- (floor x 2) (vec-i-x coord)))
@@ -544,7 +544,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 (progn
   (setf *slice-x-psf-times-spheres* (.* *spheres* *slice-x-psf*))
   (save-stack-ub8 "/home/martin/tmp/slice-x-psf-times-spheres"
-		 (normalize-vol *slice-x-psf-times-spheres*)))
+		 (normalize-ub8 *slice-x-psf-times-spheres*)))
 
 
 #+nil ;; blur with detection psf
@@ -571,12 +571,12 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
        (do-box (k j i 0 zz 0 yy 0 xx)
 	 (setf (aref psf-big (+ oz k) (+ oy j) (+ ox i))
 	       (aref psf k j i)))))
-   (save-stack-ub8 "/home/martin/tmp/psf-detect-big" (normalize-vol psf-big))
+   (save-stack-ub8 "/home/martin/tmp/psf-detect-big" (normalize-ub8 psf-big))
    (sb-ext:gc :full t)
    (defparameter *camera-volume* (convolve3-circ *slice-x-psf-times-spheres*
 						 (fftshift3 psf-big)))
    (save-stack-ub8 "/home/martin/tmp/camera-volume"
-		   (normalize-vol *camera-volume*))
+		   (normalize-ub8 *camera-volume*))
    (sb-ext:gc :full t)))
 
 
@@ -589,7 +589,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		      :element-type '(complex double-float))))
    (setf (aref a 12 12 12) (complex 255d0))
 #+nil   (setf (aref b 0 0 0) (complex 255d0))
-   (save-stack-ub8 "/home/martin/tmp/conv-test" (normalize-vol (convolve3-circ a (fftshift3 b))))))
+   (save-stack-ub8 "/home/martin/tmp/conv-test" (normalize-ub8 (convolve3-circ a (fftshift3 b))))))
 
 
 #+nil ;; output the xz cross section centered on a sphere in the middle
@@ -604,7 +604,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	     "/home/martin/tmp/cut-exfluo.pgm"))
 
 #+nil
-(save-stack-ub8 "/home/martin/tmp/spheres" (normalize-vol *spheres*))
+(save-stack-ub8 "/home/martin/tmp/spheres" (normalize-ub8 *spheres*))
 
 #+nil
 (let ((sli (make-array (array-dimensions *spheres*)
@@ -619,7 +619,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
        (setf (aref sli k j i)
 	     (* 10 (aref sli k j i)))))
     (defparameter *sli* sli))
-  (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-vol *sli*)))
+  (save-stack-ub8 "/home/martin/tmp/spheres" (normalize-ub8 *sli*)))
 
 
 
@@ -641,7 +641,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 (time (let* ((radius .5d0)
 	(x (- 1d0 radius))
 	(psf (angular-psf x 0d0 radius)))
-   (write-pgm (normalize-img (cross-section-xz (fftshift3 (ft3 psf))))
+   (write-pgm (normalize-ub8 (cross-section-xz (fftshift3 (ft3 psf))))
 	      "/home/martin/tmp/cut-intens.pgm")))
 #+nil
 (let* ((intens (psf:intensity-psf 64 64 64 10d0 5d0))
@@ -990,12 +990,12 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 				:wavelength lambd
 				:integrand-evaluations integrand-evaluations)
       (when debug 
-	(write-pgm (normalize-img (cross-section-xz e0))
+	(write-pgm (normalize-ub8 (cross-section-xz e0))
 		   "/home/martin/tmp/cut-0psf.pgm"))
      (let ((k0 (fftshift3 (ft3 e0)))
 	   (k1 (fftshift3 (ft3 e1)))
 	   (k2 (fftshift3 (ft3 e2))))
-       (when debug (write-pgm (normalize-img (cross-section-xz k0))
+       (when debug (write-pgm (normalize-ub8 (cross-section-xz k0))
 			      "/home/martin/tmp/cut-1psf-k.pgm"))
        (let* ((cr window-radius)
 	      (cx window-x)
@@ -1015,7 +1015,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	   (setf (aref k0 k j i) (* (aref k0 k j i) (aref window j i))
 		 (aref k1 k j i) (* (aref k1 k j i) (aref window j i))
 		 (aref k2 k j i) (* (aref k2 k j i) (aref window j i))))
-	 (when debug (write-pgm (normalize-img (cross-section-xz k0))
+	 (when debug (write-pgm (normalize-ub8 (cross-section-xz k0))
 		     "/home/martin/tmp/cut-2psf-k-mul.pgm"))
 	 (let* ((e0 (ift3 (fftshift3 k0)))
 		(e1 (ift3 (fftshift3 k1)))
@@ -1027,10 +1027,10 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		      (* (aref e1 k j i) (conjugate (aref e1 k j i)))
 		      (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
 	   (when debug
-	     (write-pgm (normalize-img (cross-section-xz intens))
+	     (write-pgm (normalize-ub8 (cross-section-xz intens))
 			"/home/martin/tmp/cut-3psf-intens.pgm")
 	     (let ((k (fftshift3 (ft3 intens))))
-	       (write-pgm (normalize-img (cross-section-xz k))
+	       (write-pgm (normalize-ub8 (cross-section-xz k))
 			  "/home/martin/tmp/cut-4psf-intk.pgm")))
 	   intens))))))
 
@@ -1396,156 +1396,6 @@ if there were an empty string between them."
 	  (file-position s (* x y z time))
 	  (read-sequence vol1 s))
 	vol)))
-
-;; for writing several type conversion functions
-(defmacro def-convert (dim in-type out-type &optional (function '#'identity)
-		       (short-function-name nil))
-  (let ((short-image-types
-	 '(((complex double-float) . cdf)
-	   (double-float . df)
-	   ((unsigned-byte 8) . ub8))))
-    (labels ((find-short-type-name (type)
-	       (cdr (assoc type short-image-types :test #'equal)))
-	     (find-long-type-name (short-type)
-	       (car (rassoc short-type short-image-types))))
-      `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
-			       dim 
-			       (find-short-type-name in-type)
-			       (find-short-type-name out-type)
-			       (if short-function-name
-				   short-function-name
-				   (subseq (format nil "~a" function)
-					   2)))) (a)
-	 (declare ((simple-array ,in-type ,dim) a)
-		  (values (simple-array ,out-type ,dim) &optional))
-	 (let* ((res (make-array (array-dimensions a)
-				 :element-type (quote ,out-type)))
-		(res1 (sb-ext:array-storage-vector res))
-		(a1 (sb-ext:array-storage-vector a))
-		(n (length a1)))
-	   (dotimes (i n)
-	     (setf (aref res1 i)
-		   (funcall ,function (aref a1 i))))
-	   res)))))
-(def-convert 3 (unsigned-byte 8) (complex double-float)
-		  #'(lambda (c) (complex (* 1d0 c))) complex)
-(def-convert 3 double-float (complex double-float)
-	     #'(lambda (d) (complex d)) complex)
-(def-convert 3 double-float (unsigned-byte 8) #'floor)
-(def-convert 3 (complex double-float) double-float #'realpart)
-(def-convert 3 (complex double-float) double-float #'abs)
-(def-convert 3 (complex double-float) double-float #'phase)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (realpart z)))
-	     realpart)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (phase z)))
-	     phase)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (abs z)))
-	     abs)
-
-
-#+nil
-(convert3-cdf/ub8-realpart
- (make-array (list 3 3 3) :element-type '(complex double-float)))
-
-
-(defmacro def-normalize-cdf (dim function)
-  `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
-     (declare ((simple-array (complex double-float) ,dim) a)
-	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
-     (let* ((res (make-array (array-dimensions a)
-			     :element-type '(unsigned-byte 8)))
-	    (res1 (sb-ext:array-storage-vector res))
-	    (b (,(intern (format nil "CONVERT~d-CDF/DF-~a" dim function)) a))
-	    (b1 (sb-ext:array-storage-vector b))
-	    (ma (reduce #'max b1))
-	    (mi (reduce #'min b1))
-	    (s (if (eq mi ma) 
-		   0d0
-		   (/ 255d0 (- ma mi)))))
-       (dotimes (i (length b1))
-	 (setf (aref res1 i)
-	       (floor (* s (- (aref b1 i) mi)))))
-       res)))
-
-(def-normalize-cdf 3 abs)
-(def-normalize-cdf 3 realpart)
-
-(defmacro def-normalize-df (dim function)
-  `(defun ,(intern (format nil "NORMALIZE~d-DF/UB8-~a" dim function)) (a)
-     (declare ((simple-array double-float ,dim) a)
-	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
-     (let* ((res (make-array (array-dimensions a)
-			     :element-type '(unsigned-byte 8)))
-	    (res1 (sb-ext:array-storage-vector res))
-	    (b1 (sb-ext:array-storage-vector a))
-	    (ma (reduce #'max b1))
-	    (mi (reduce #'min b1))
-	    (s (if (eq mi ma) 
-		   0d0
-		   (/ 255d0 (- ma mi)))))
-       (dotimes (i (length b1))
-	 (setf (aref res1 i)
-	       (floor (* s (- (aref b1 i) mi)))))
-       res)))
-
-(def-normalize-df 3 realpart)
-
-#+nil
-(let ((a (make-array (list 3 4 5)
-		     :element-type '(complex double-float))))
-  (setf (aref a 1 1 1) (complex 1d0 1d0))
-  (normalize3-cdf/ub8 a))
-
-
-(defun decimate-xy-ub8 (dx vol)
-  "Reduce increase transversal sampling distance by odd integer factor
-DX."
-  (declare (fixnum dx)
-	   ((simple-array (unsigned-byte 8) 3) vol)
-	   (values (simple-array (unsigned-byte 8) 3) &optional))
-  (unless (eq (mod dx 2) 1)
-    (error "Factor DX has to be odd."))
-  (destructuring-bind (z y x)
-      (array-dimensions vol)
-    (let* ((dx2 (* dx dx))
-	   (nx (floor x dx))
-	   (ny (floor y dx))
-	   (result (make-array (list z ny nx)
-			       :element-type '(unsigned-byte 8))))
-      (do-box (k j i 0 z 0 ny 0 nx)
-	(let ((sum 0))
-	  (do-rectangle (jj ii 0 dx 0 dx)
-	    (incf sum (aref vol
-			    k
-			    (+ (* dx j) jj)
-			    (+ (* dx i) ii))))
-	  (setf (aref result k j i) (floor sum dx2))))
-      result)))
-;; for dx=5:
-;; 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
-;; x x x q x
-;;           x o x x x
-;;                     x x x x x
-;;                               x x x x x
-;;                                         x x x x ?
-;; dxh=2, n=24
-;; output size floor(n,dx)=4
-;; position of q: ii=3, i=0: dx*i+ii=5*0+3=3
-;; position of o: ii=1, i=1: dx*i+ii=5+1=6
-
-(defun count-non-zero-ub8 (vol)
-  (declare ((simple-array (unsigned-byte 8) 3) vol)
-	   (values fixnum &optional))
-  (let* ((sum 0)
-	 (vol1 (sb-ext:array-storage-vector vol)))
-    (dotimes (i (length vol1))
-      (when (< 0 (aref vol1 i))
-	(incf sum)))
-    sum))
-
 #+nil
 (time 
  (let* ((fn "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw")
@@ -1570,7 +1420,7 @@ DX."
 		       (conv (fftshift3 (ift3 (.* ka oval))))
 		       (conv-df (convert3-cdf/df-realpart conv)))
 		 (save-stack-ub8 dir
-				 (normalize3-df/ub8-realpart conv-df))
+				 (normalize-ub8-df/ub8-realpart conv-df))
 		 (with-open-file (s (format nil "~a/maxima" dir)
 				    :if-exists :supersede
 				   :direction :output)
@@ -1633,169 +1483,3 @@ DX."
 		 :element-type 'vec-i
 		 :initial-contents centers))))
 
-#+nil 
-(time (let* ((dx .1d0)
-	     (dz .1d0)
-	     (x 100)
-	     (y x)
-	     (z 100))
-	(multiple-value-bind (ex ey ez)
-       (psf:electric-field-psf z y x (* dz z) (* dx x) :integrand-evaluations 200)
-	  (defparameter *kex* (fftshift3 (ft3 ex)))
-	  (defparameter *key* (fftshift3 (ft3 ey)))
-	  (defparameter *kez* (fftshift3 (ft3 ez)))
-	  nil)))
-#+Nil
-(progn
- (save-stack-ub8 "/home/martin/tmp/kex" (normalize-vol *kex*))
- (save-stack-ub8 "/home/martin/tmp/key" (normalize-vol *key*))
- (save-stack-ub8 "/home/martin/tmp/kez" (normalize-vol *kez*))
- )
-#+NIL
-(write-pgm (normalize-img (cross-section-xz *kex*))
-	   "/home/martin/tmp/kex.pgm")
-#+nil
-(time
- (destructuring-bind (z y x)
-     (array-dimensions *kex*)
-   (let* ((grat (make-array (list z y x) :element-type '(complex double-float))))
-     (let ((k (floor z 2)))
-       (do-rectangle (j i 0 y 0 x)
-	 (setf (aref grat k j i) (complex (* 1d0 (mod i 8))))))
-     (defparameter *kgrat* (fftshift3 (ft3 grat)))
-     nil)))
-#+nil
-(save-stack-ub8 "/home/martin/tmp/kgrat" (normalize-vol *kgrat*))
-#+nil ;; store laser grating
-(destructuring-bind (z y x)
-    (array-dimensions *kex*)
- (let* ((ex (ift3 (fftshift3 (.* *kgrat* *kex*))))
-	(ey (ift3 (fftshift3 (.* *kgrat* *key*))))
-	(ez (ift3 (fftshift3 (.* *kgrat* *kez*))))
-	(intens (make-array (array-dimensions ex)
-			    :element-type '(complex double-float))))
-   (do-box (k j i 0 z 0 y 0 x)
-     (setf (aref intens k j i)
-	   (+ (* (conjugate (aref ex k j i)) (aref ex k j i))
-	      (* (conjugate (aref ey k j i)) (aref ey k j i))
-	      (* (conjugate (aref ez k j i)) (aref ez k j i)))))
-   (defparameter *intens* intens)
-   (save-stack-ub8 "/home/martin/tmp/intens-grat" (normalize-vol intens)))) 
-#+nil ;; store laser psf
-(destructuring-bind (z y x)
-    (array-dimensions *kex*)
- (let* ((ex (ift3 (fftshift3 *kex*)))
-	(ey (ift3 (fftshift3 *key*)))
-	(ez (ift3 (fftshift3 *kez*)))
-	(intens (make-array (array-dimensions ex)
-			    :element-type '(complex double-float))))
-   (do-box (k j i 0 z 0 y 0 x)
-     (setf (aref intens k j i)
-	   (+ (* (conjugate (aref ex k j i)) (aref ex k j i))
-	      (* (conjugate (aref ey k j i)) (aref ey k j i))
-	      (* (conjugate (aref ez k j i)) (aref ez k j i)))))
-   (defparameter *intens-psf-laser* intens)
-   (save-stack-ub8 "/home/martin/tmp/intens-psf-laser" (normalize-vol intens))))
-#+nil
-(write-pgm 
- (normalize-img (cross-section-xz *intens-psf-laser*))
- "/home/martin/tmp/intens-psf-laser.pgm")
-
-#+nil
-(time
- (save-stack-ub8 "/home/martin/tmp/kintens-grat" 
-		 (normalize-vol (fftshift3 (ft3 *intens*))
-				:function #'(lambda (z) (let ((v (abs z)))
-							  (if (< v 1d-12)
-							      -10d0
-							      (log v)))))))
-
-;; A circular window in the center of the BFP with radius Rap gives
-;; rise to rays up to the angle beta into sample space. The radius of
-;; the focal sphere is n*f. Therefore one can write
-;; sin(beta)=Rap/(n*f). Changing illumination direction of the grating
-;; will shear the intensity image. In order to generate an image of
-;; limited coherence one has to convolve each plane with a disk. The
-;; radius of the disk is: Rd(z)=z*sin(beta) with defocus z. 
-;; Eliminate sin(beta):
-;; Rd(z)=abs(z*Rap/(n*f))
-;; for a 63x objective we get f=2.61, with n=1.515 
-
-(defun draw-disk (radius y x)
-  (declare (double-float radius)
-	   (fixnum y x)
-	   (values (simple-array (complex double-float) 2) &optional))
-  (let ((result (make-array (list y x) :element-type '(complex double-float)))
-	(xh (floor x 2))
-	(yh (floor y 2))
-	(r2 (* radius radius)))
-    (do-rectangle (j i 0 y 0 x)
-      (let* ((ii (- i xh))
-	     (jj (- j yh))
-	     (rr2 (+ (* ii ii) (* jj jj))))
-	(when (< rr2 r2)
-	  (setf (aref result j i) (complex (/ r2))))))
-    result))
-#+nil
-(write-pgm (normalize-img
-	    (fftshift2 (convolve2-circ
-			(draw-disk 12d0 100 200)
-			(draw-disk 12d0 100 200)))) "/home/martin/tmp/disk.pgm")
-
-(sb-alien:define-alien-routine ("j1" bessel-j1)
-    sb-alien:double
-  (arg sb-alien:double))
-
-;; isi.ssl.berkeley.edu/~tatebe/whitepapers/FT%20of%20Uniform%20Disk.pdf
-(defun draw-disk-precise (radius y x)
-  (declare (double-float radius)
-	   (fixnum y x)
-	   (values (simple-array (complex double-float) 2) &optional))
-  (let ((a (make-array (list y x)
-		       :element-type '(complex double-float)))
-	(xh (floor x 2))
-	(yh (floor y 2)))
-    (do-rectangle (j i 0 y 0 x)
-      (let* ((xx (/ (* 1d0 (- i xh)) x))
-	     (yy (/ (* 1d0 (- j yh)) y))
-	     (f (sqrt (+ (* xx xx) (* yy yy)))))
-	(setf (aref a j i) (if (< f 1d-12)
-			       (complex (* pi radius))
-			       (complex (/ (bessel-j1 (* 2d0 pi f radius))
-					   f))))))
-    (fftshift2 (ift2 a))))
-
-#+NIL
-(write-pgm (normalize-img (draw-disk-precise 12.3d0 300 300))
-	   "/home/martin/tmp/disk.pgm")
-
-#+nil
-(time
- (destructuring-bind (z y x)
-     (array-dimensions *intens*)
-   (let ((n 1.515d0)
-	 (f (lens:focal-length-from-magnification 63d0))
-	 (Rap 2d0)
-	 (dz .21d0)
-	 (result (make-array (array-dimensions *intens*)
-			     :element-type '(complex double-float))))
-     (dotimes (k z)
-       (unless (eq k (floor z 2))
-	(let* ((Rd-pixels (abs (* (- k (floor z 2)) dz (/ Rap (* n f)))))
-	       (disk (draw-disk-precise Rd-pixels y x))
-	       (img (make-array (list y x) :element-type '(complex double-float))))
-	  (write-pgm (convert-img (s*2 .01d0 disk))
-		     (format nil "/home/martin/tmp/disk/disk~3,'0d.pgm" k))
-	  (do-rectangle (j i 0 y 0 x)
-	    (setf (aref img j i) (aref *intens* k j i)))
-	  (let ((conv (fftshift2 (convolve2-circ img disk))))
-	    (do-rectangle (j i 0 y 0 x)
-	      (setf (aref result k j i) (aref conv j i)))))))
-     (defparameter *intens-disk* result)
-     (save-stack-ub8 "/home/martin/tmp/intens-grat-conv" (normalize-vol result))
-     (save-stack-ub8 "/home/martin/tmp/kintens-grat-conv"
-		     (normalize-vol (ft3 result)
-				    :function #'(lambda (z) (let ((v (abs z)))
-							      (if (< v 1d-12)
-								  -10d0
-								  (log v)))))))))

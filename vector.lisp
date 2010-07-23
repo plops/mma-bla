@@ -44,22 +44,19 @@
 	      :element-type 'double-float
 	      :initial-contents (list x y z)))
 
-(declaim (ftype (function (vec vec)
-			  (values double-float &optional))
-		v.))
 (defun v. (a b)
   "Dot product between two vectors."
+  (declare (vec a b)
+	   (values double-float &optional))
   (let ((sum 0d0))
     (declare (double-float sum))
     (dotimes (i 3)
       (incf sum (* (aref a i)
 		   (aref b i))))
     sum))
-
-(declaim (ftype (function (vec vec)
-			  (values vec &optional))
-		cross))
 (defun cross (a b)
+  (declare (vec a b)
+	   (values vec &optional))
   (v (- (* (aref a 1) (aref b 2))
         (* (aref a 2) (aref b 1)))
      (- (* (aref a 2) (aref b 0))
@@ -117,15 +114,6 @@
 (v* (v 1d0) 4)
 
 
-(defun  v*-i (a scalar)
-  "Multiply vector with scalar."
-  (declare (fixnum scalar)
-	   (vec-i a)
-	   (values vec-i &optional))
-  (let* ((result (make-vec-i)))
-    (dotimes (i 3)
-      (setf (aref result i) (* scalar (aref a i))))
-    result))
 
 (declaim (ftype (function (vec)
 			  (values double-float &optional))
@@ -160,12 +148,12 @@
               :element-type 'double-float
               :initial-contents (list (list a b c) (list d e f) (list g h i))))
 
-(declaim (ftype (function (double-float vec)
-			  (values mat &optional))
-		rotation-matrix))
 (defun rotation-matrix (angle vect)
   "Create matrix that rotates by ANGLE radians around the direction
  VECT. VECT must be normalized."
+  (declare ((double-float 0d0 #.(* 2d0 pi)) angle)
+	   (vec vect)
+	   (values mat &optional))
   (let* ((u (aref vect 0))
          (v (aref vect 1))
          (w (aref vect 2))
@@ -189,12 +177,12 @@
 #+nil
 (rotation-matrix (/ pi 2) (v 0d0 0d0 1d0))
 
-(declaim (ftype (function (mat vec)
-			  (values vec &optional))
-		m*))
 (defun m* (matrix vect)
   "Multiply MATRIX with VECT. Copies 4th component w from VECT into
 result."
+  (declare (mat matrix)
+	   (vec vect)
+	   (values vec &optional))
   (let ((res (v)))
     (dotimes (i 3)
       (dotimes (j 3)
@@ -216,10 +204,9 @@ result."
 (defstruct (vec-i (:type (vector fixnum)))
   (x 0) (y 0) (z 0))
 
-(declaim (ftype (function (vec-i vec-i)
-			  (values fixnum &optional))
-		v.-i))
 (defun v.-i (a b)
+  (declare (vec-i a b)
+	   (values fixnum &optional))
   (+ (* (vec-i-x a) (vec-i-x b))
      (* (vec-i-y a) (vec-i-y b))
      (* (vec-i-z a) (vec-i-z b))))
@@ -236,8 +223,17 @@ result."
 	      :y (+ (vec-i-y a) (vec-i-y b))
 	      :z (+ (vec-i-z a) (vec-i-z b))))
 
-(declaim (ftype (function (vec-i)
-			  (values double-float &optional))
-		norm-i))
 (defun norm-i (a)
+  (declare (vec-i a)
+	   (values double-float &optional))
   (sqrt (* 1d0 (v.-i a a))))
+
+(defun  v*-i (a scalar)
+  "Multiply vector with scalar."
+  (declare (fixnum scalar)
+	   (vec-i a)
+	   (values vec-i &optional))
+  (let* ((result (make-vec-i)))
+    (dotimes (i 3)
+      (setf (aref result i) (* scalar (aref a i))))
+    result))
