@@ -1,4 +1,5 @@
 #.(progn (require :asdf)
+	 (require :alexandria)
 	 (require :vector)
 	 (require :vol)
 	 (require :psf)
@@ -11,10 +12,12 @@
   (:use :cl :vector :vol :raytrace
 	:bresenham))
 (in-package :run)
+
+
 #||
 mkdir ~/tmp
 cp /home/martin/0519/MedianofCelegans-10-02-09-LSM700-t58.tif ~/tmp/med.tif
-cd ~/tmp/
+cd ~/tmp/ 
 tiffsplit med.tif
 for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ||#
