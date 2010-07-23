@@ -13,6 +13,68 @@
 	:bresenham))
 (in-package :run)
 
+#+nil ;; find the centers of the nuclei and store into *centers*
+(multiple-value-bind (c ch dims)
+       (find-centers)
+   (defparameter *centers* c)
+   (defparameter *dims* dims)
+   (sb-ext:gc :full t))
+
+#+nil ;; as a model of fluorophore concentration draw ovals around the
+      ;; positions in *centers* and store into *spheres*
+(time 
+ (let ((spheres
+	(destructuring-bind (z y x)
+	    *dims*
+	  (draw-ovals 12d0 *centers* z y x))))
+   (defparameter *spheres* spheres)
+   (write-pgm (normalize2-cdf/ub8-realpart
+	       (cross-section-xz *spheres* 
+				 (vec-i-y (elt *centers* 31))))
+	      "/home/martin/tmp/spheres-cut.pgm")
+   (sb-ext:gc :full t)))
+
+#+nil
+(time (save-stack-ub8 "/home/martin/tmp/spheres" 
+		      (normalize3-cdf/ub8-realpart *spheres*)))
+
+#+nil ;; calculate intensity psf to fill volume as big as *spheres*
+(let* ((dx .2d0)
+       (dz 1d0)
+       (psf (destructuring-bind (z y x)
+		*dims*
+	      (let ((r 100))
+	       (psf:intensity-psf z r r (* z dz) (* r dx)
+				  :integrand-evaluations 400)))))
+  (defparameter *psf* psf)
+  (write-pgm (normalize2-cdf/ub8-realpart (cross-section-xz psf))
+	    "/home/martin/tmp/psf.pgm"))
+
+#+nil
+(time
+ (destructuring-bind (z y x)
+     (array-dimensions *spheres*)
+  (let ((l (convolve3-nocrop 
+	    (let ((zz (vec-i-z (elt *centers* 31))))
+	      (extract-bbox3-cdf *spheres* (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
+						  :end (v (* 1d0 (1- x))
+							  (* 1d0 (1- y))
+							  (* 1d0 zz)))))
+	    *psf*)))
+    (defparameter *conv-l* l)
+    (write-pgm (normalize2-cdf/ub8-realpart (cross-section-xz l (vec-i-y (elt *centers* 31))))
+	       "/home/martin/tmp/conv.pgm"))))
+
+#+nil
+(time (save-stack-ub8 "/home/martin/tmp/conv-l"
+		 (normalize3-cdf/ub8-realpart *conv-l*)))
+
+#+nil
+(time (progn
+   (defparameter Lf (.* *conv-l* *spheres*))
+   (write-pgm (normalize2-cdf/ub8-realpart 
+	       (cross-section-xz Lf (vec-i-y (elt *centers* 31))))
+	      "/home/martin/tmp/conv-lf.pgm")))
 
 #||
 mkdir ~/tmp

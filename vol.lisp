@@ -39,6 +39,7 @@
     #:.+2
     #:s*2
     #:convolve3-circ
+    #:convolve3-nocrop
     #:convolve3
 
     #:resample-half
@@ -48,12 +49,14 @@
     #:convert3-df/ub8-floor
     #:convert2-ub8/cdf-complex
     #:convert2-cdf/df-realpart
+    #:convert2-cdf/df-imagpart
     #:convert2-df/cdf-complex
     #:convert3-ub8/cdf-complex
     #:convert2-cdf/ub8-realpart
     #:convert3-cdf/df-phase
     #:convert2-cdf/ub8-abs
     #:convert3-cdf/df-realpart
+    #:convert3-cdf/df-imagpart
     #:convert3-df/cdf-complex
     #:convert2-cdf/ub8-phase
     #:convert3-cdf/df-abs
@@ -64,15 +67,18 @@
     #:convert3-cdf/ub8-phase
     #:convert2-df/ub8-floor
     #:convert3-cdf/ub8-realpart
+    #:convert3-cdf/ub8-imagpart
 
     #:normalize2-cdf/ub8-phase
     #:normalize3-cdf/ub8-phase
     #:normalize2-cdf/ub8-realpart
+    #:normalize2-cdf/ub8-imagpart
     #:normalize2-df/ub8-floor
     #:normalize2-cdf/ub8-abs
     #:normalize3-df/ub8-realpart
     #:normalize3-cdf/ub8-abs
     #:normalize3-cdf/ub8-realpart
+    #:normalize3-cdf/ub8-imagpart
     #:normalize3-df/ub8-floor
     #:normalize-ub8
 
@@ -88,6 +94,8 @@
     #:find-bbox2-ub8
     #:find-bbox3-ub8
     #:extract-bbox3-ub8
+    #:extract-bbox3-cdf
+    #:extract-bbox3-df
     #:replace-bbox3-ub8))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
@@ -705,17 +713,24 @@ be floating point values. If they point outside of IMG 0 is returned."
 		(aref volb j i)))))
    result))
 
-(defun .* (vola volb)
+(defun .* (vola volb &optional volb-bbox)
   (declare ((simple-array (complex double-float) 3) vola volb)
 	   (values (simple-array (complex double-float) 3) &optional))
   (let ((result (make-array (array-dimensions vola)
 			    :element-type (array-element-type vola))))
    (destructuring-bind (z y x)
        (array-dimensions vola)
-     (do-box (k j i 0 z 0 y 0 x)
-       (setf (aref result k j i)
-	     (* (aref vola k j i)
-		(aref volb k j i)))))
+     (destructuring-bind (zz yy xx)
+	 (array-dimensions volb)
+       (if volb-bbox
+	   (do-box (k j i 0 z 0 y 0 x))
+	 (progn 
+	   (unless (and (= z zz) (= y yy) (= x xx))
+	     (error "volumes don't have the same size, use a bbox"))
+	   (do-box (k j i 0 z 0 y 0 x)
+	     (setf (aref result k j i)
+		   (* (aref vola k j i)
+		      (aref volb k j i))))))))
    result))
 
 (defun .+ (vola volb)
@@ -751,12 +766,9 @@ be floating point values. If they point outside of IMG 0 is returned."
       (setf (aref a i) (* s (aref a i)))))
   vol)
 
-
-(declaim (ftype (function ((simple-array (complex double-float) 3)
-			   (simple-array (complex double-float) 3))
-			  (values (simple-array (complex double-float) 3) &optional))
-		convolve3-circ convolve3))
 (defun convolve3-circ (vola volb)
+  (declare ((simple-array (complex double-float) 3) vola volb)
+	   (values (simple-array (complex double-float) 3) &optional))
   (let* ((da (array-dimensions vola))
 	 (db (array-dimensions volb))
 	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
@@ -764,8 +776,19 @@ be floating point values. If they point outside of IMG 0 is returned."
       (error "convolve3-circ expects both input arrays to have the same dimensions.")))
   (ift3 (.* (ft3 vola) (ft3 volb))))
 
+(defun front (i) ;; extra size needed to accommodate kernel overlap
+		 ;; there is a difference between even and odd kernels
+  (declare (fixnum i)
+	   (values fixnum &optional))
+  (max 0
+       (if (evenp i)
+	   (floor i 2)
+	   (1- (floor i 2)))))
+
 ;; volb is the kernel
-(defun convolve3 (vola volb)
+(defun convolve3-nocrop (vola volb)
+    (declare ((simple-array (complex double-float) 3) vola volb)
+	   (values (simple-array (complex double-float) 3) vec-i &optional))
   (destructuring-bind (za ya xa)
       (array-dimensions vola)
     (destructuring-bind (zb yb xb)
@@ -776,25 +799,36 @@ be floating point values. If they point outside of IMG 0 is returned."
 			       :element-type '(complex double-float)))
 	     (bigb (make-array (array-dimensions biga)
 			       :element-type '(complex double-float)))
-	     (fzb (floor zb 2))
-	     (fyb (floor yb 2))
-	     (fxb (floor xb 2))
-	     (fza (floor za 2))
-	     (fya (floor ya 2))
-	     (fxa (floor xa 2)))
+	     (fzb (front zb))
+	     (fyb (front yb))
+	     (fxb (front xb))
+	     (fza (front za))
+	     (fya (front ya))
+	     (fxa (front xa))
+	     (start (make-vec-i :x fxb :y fyb :z fzb)))
 	(do-box (k j i 0 za 0 ya 0 xa)
 	  (setf (aref biga (+ k fzb) (+ j fyb) (+ i fxb))
 		(aref vola k j i)))
 	(do-box (k j i 0 zb 0 yb 0 xb)
 	  (setf (aref bigb (+ k fza) (+ j fya) (+ i fxa))
 		(aref volb k j i)))
-	(let* ((conv (convolve3-circ biga (fftshift3 bigb)))
-	       (result (make-array (array-dimensions vola)
-				   :element-type '(complex double-float))))
-	  (do-box (k j i 0 za 0 ya 0 xa)
-	    (setf (aref result k j i)
-		  (aref conv (+ k fzb) (+ j fyb) (+ i fxb))))
-	  result)))))
+	(values (convolve3-circ biga (fftshift3 bigb))
+		start)))))
+
+(defun convolve3 (vola volb)
+  (destructuring-bind (za ya xa)
+      (array-dimensions vola)
+    (multiple-value-bind (conv start)
+	(convolve3-nocrop vola volb)
+      (let* ((result (make-array (array-dimensions vola)
+				 :element-type '(complex double-float)))
+	     (oz (vec-i-z start))
+	     (oy (vec-i-y start))
+	     (ox (vec-i-x start)))
+	(do-box (k j i 0 za 0 ya 0 xa)
+	  (setf (aref result k j i)
+	       (aref conv (+ k oz) (+ j oy) (+ i ox))))
+	result))))
 
 #+nil
 (let ((a (make-array (list 100 200 300)
@@ -804,35 +838,6 @@ be floating point values. If they point outside of IMG 0 is returned."
   (convolve3 a b)
   nil)
 
-
-(declaim (ftype (function ((simple-array (complex double-float) 3))
-			  (values (simple-array (unsigned-byte 8) 3)
-				  &optional))
-		convert-vol))
-(defun convert-vol (vol)
-  (destructuring-bind (z y x)
-      (array-dimensions vol)
-   (let ((result (make-array (array-dimensions vol)
-			     :element-type '(unsigned-byte 8))))
-     (do-box (k j i 0 z 0 y 0 x)
-       (setf (aref result k j i)
-	     (clamp (floor (* 255 (abs (aref vol k j i)))))))
-     result)))
-
-(declaim (ftype (function ((simple-array (complex double-float) 2)
-			   &optional function)
-			  (values (simple-array (unsigned-byte 8) 2)
-				  &optional))
-		convert-img))
-(defun convert-img (img &optional (function #'abs))
-  (destructuring-bind (y x)
-      (array-dimensions img)
-   (let ((result (make-array (array-dimensions img)
-			     :element-type '(unsigned-byte 8))))
-     (do-rectangle (j i 0 y 0 x)
-       (setf (aref result j i)
-	     (clamp (floor (funcall function (aref img j i))))))
-     result)))
 
 (declaim (ftype (function ((simple-array (complex double-float) 3))
 			  (values (simple-array (complex double-float) 3) 
@@ -906,11 +911,15 @@ be floating point values. If they point outside of IMG 0 is returned."
 	     #'(lambda (d) (complex d)) complex)
 (def-convert 3 double-float (unsigned-byte 8) #'floor)
 (def-convert 3 (complex double-float) double-float #'realpart)
+(def-convert 3 (complex double-float) double-float #'imagpart)
 (def-convert 3 (complex double-float) double-float #'abs)
 (def-convert 3 (complex double-float) double-float #'phase)
 (def-convert 3 (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (realpart z)))
 	     realpart)
+(def-convert 3 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (imagpart z)))
+	     imagpart)
 (def-convert 3 (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (phase z)))
 	     phase)
@@ -924,11 +933,15 @@ be floating point values. If they point outside of IMG 0 is returned."
 	     #'(lambda (d) (complex d)) complex)
 (def-convert 2 double-float (unsigned-byte 8) #'floor)
 (def-convert 2 (complex double-float) double-float #'realpart)
+(def-convert 2 (complex double-float) double-float #'imagpart)
 (def-convert 2 (complex double-float) double-float #'abs)
 (def-convert 2 (complex double-float) double-float #'phase)
 (def-convert 2 (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (realpart z)))
 	     realpart)
+(def-convert 2 (complex double-float) (unsigned-byte 8)
+	     #'(lambda (z) (floor (imagpart z)))
+	     imagpart)
 (def-convert 2 (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (phase z)))
 	     phase)
@@ -963,10 +976,12 @@ be floating point values. If they point outside of IMG 0 is returned."
 
 (def-normalize-cdf 3 abs)
 (def-normalize-cdf 3 realpart)
+(def-normalize-cdf 3 imagpart)
 (def-normalize-cdf 3 phase)
 
 (def-normalize-cdf 2 abs)
 (def-normalize-cdf 2 realpart)
+(def-normalize-cdf 2 imagpart)
 (def-normalize-cdf 2 phase)
 
 
@@ -1228,32 +1243,41 @@ pixels are zero."
 	 (make-bbox :start (v (* 1d0 l) (* 1d0 (top)) (* 1d0 (front)))
 		    :end (v (* 1d0 r) (* 1d0 (bottom)) (* 1d0 (back)))))))))
 
-(defun extract-bbox3-ub8 (a bbox)
-  (declare ((simple-array (unsigned-byte 8) 3) a)
-	   (bbox bbox)
-	   (values (simple-array (unsigned-byte 8) 3) &optional))
-  (destructuring-bind (z y x)
-      (array-dimensions a)
-    (with-slots (start end)
-	bbox
-     (unless (and (< (vec-x end) x)
-		  (< (vec-y end) y)
-		  (< (vec-z end) z))
-       (error "bbox is bigger than array"))
-     (let* ((sx (floor (vec-x start)))
-	    (sy (floor (vec-y start)))
-	    (sz (floor (vec-y start)))
-	    (widths (v+ (v- end start) (v 1d0 1d0 1d0)))
-	    (res (make-array (list (floor (vec-z widths))
-				   (floor (vec-y widths))
-				   (floor (vec-x widths)))
-			     :element-type '(unsigned-byte 8))))
-       (destructuring-bind (zz yy xx)
-	   (array-dimensions res)
-	(do-box (k j i 0 zz 0 yy 0 xx)
-	  (setf (aref res k j i)
-		(aref a (+ k sz) (+ j sy) (+ i sx)))))
-       res))))
+(defmacro def-extract-bbox3 ()
+  `(progn
+     ,@(loop for i in '((df double-float)
+			(cdf (complex double-float))
+			(ub8 (unsigned-byte 8))) collect
+	    (destructuring-bind (short long)
+	       i
+	      `(defun ,(intern (format nil "EXTRACT-BBOX3-~a" short)) (a bbox)
+		(declare ((simple-array ,long 3) a)
+			 (bbox bbox)
+			 (values (simple-array ,long 3) &optional))
+		(destructuring-bind (z y x)
+		    (array-dimensions a)
+		  (with-slots (start end)
+		      bbox
+		    (unless (and (< (vec-x end) x)
+				 (< (vec-y end) y)
+				 (< (vec-z end) z))
+		      (error "bbox is bigger than array"))
+		    (let* ((sx (floor (vec-x start)))
+			   (sy (floor (vec-y start)))
+			   (sz (floor (vec-z start)))
+			   (widths (v+ (v- end start) (v 1d0 1d0 1d0)))
+			   (res (make-array (list (floor (vec-z widths))
+						  (floor (vec-y widths))
+						  (floor (vec-x widths)))
+					    :element-type ',long)))
+		      (destructuring-bind (zz yy xx)
+			  (array-dimensions res)
+			(do-box (k j i 0 zz 0 yy 0 xx)
+			  (setf (aref res k j i)
+				(aref a (+ k sz) (+ j sy) (+ i sx)))))
+		      res))))))))
+(def-extract-bbox3)
+
 
 (defun replace-bbox3-ub8 (a b bbox)
   "A beeing a big array, and B a smaller one with BBOX giving its
