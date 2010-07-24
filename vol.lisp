@@ -316,13 +316,10 @@ point."
 	(read-sequence data-1d s))
       data)))
  
-(declaim
- (ftype (function
-	 ((array (unsigned-byte 8) 2)
-	  string) 
-	 (values null &optional))
-	write-pgm))
-(defun write-pgm (img filename)
+(defun write-pgm (filename img)
+  (declare (simple-string filename)
+	   ((array (unsigned-byte 8) 2) img)
+	   (values null &optional))
   (destructuring-bind (h w)
       (array-dimensions img)
     (declare ((integer 0 65535) w h))
@@ -665,7 +662,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 	(do-rectangle (j i 0 y 0 x)
 	  (setf (aref b j i)
 		(clamp (floor (* 255 (funcall function (aref vol k j i)))))))
-	(write-pgm b (format nil "~a/~3,'0d.pgm" fn k)))))
+	(write-pgm (format nil "~a/~3,'0d.pgm" fn k) b))))
   nil)
 
 (declaim (ftype (function (string (simple-array (unsigned-byte 8) 3))
@@ -684,7 +681,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 	(do-rectangle (j i 0 y 0 x)
 	  (setf (aref b j i)
 		(aref vol k j i)))
-	(write-pgm b (format nil "~a/~3,'0d.pgm" fn k)))))
+	(write-pgm (format nil "~a/~3,'0d.pgm" fn k) b))))
   nil)
 
 (defun .*2 (vola volb)
@@ -787,6 +784,11 @@ be floating point values. If they point outside of IMG 0 is returned."
 
 ;; volb is the kernel
 (defun convolve3-nocrop (vola volb)
+  "Convolve VOLA with VOLB. We consider VOLB as the convolution
+kernel. Returns (values result vec). RESULT is an arrays that is as
+big as necessary to accommodate the convolution and VEC contains the
+relative coordinates to find the original sample positions of array
+VOLA in RESULT."
     (declare ((simple-array (complex double-float) 3) vola volb)
 	   (values (simple-array (complex double-float) 3) vec-i &optional))
   (destructuring-bind (za ya xa)

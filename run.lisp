@@ -28,45 +28,54 @@
 	    *dims*
 	  (draw-ovals 12d0 *centers* z y x))))
    (defparameter *spheres* spheres)
-   (write-pgm (normalize2-cdf/ub8-realpart
+   (write-pgm "/home/martin/tmp/spheres-cut.pgm"
+	      (normalize2-cdf/ub8-realpart
 	       (cross-section-xz *spheres* 
-				 (vec-i-y (elt *centers* 31))))
-	      "/home/martin/tmp/spheres-cut.pgm")
+				 (vec-i-y (elt *centers* 31)))))
    (sb-ext:gc :full t)))
 
 #+nil
 (time (save-stack-ub8 "/home/martin/tmp/spheres" 
 		      (normalize3-cdf/ub8-realpart *spheres*)))
 
-#+nil ;; calculate intensity psf to fill volume as big as *spheres*
+#+nil ;; calculate intensity psf 
 (let* ((dx .2d0)
        (dz 1d0)
        (psf (destructuring-bind (z y x)
 		*dims*
 	      (let ((r 100))
-	       (psf:intensity-psf z r r (* z dz) (* r dx)
-				  :integrand-evaluations 400)))))
+	       (psf:intensity-psf (* 2 z) r r (* z dz) (* r dx)
+				  :integrand-evaluations 100)))))
   (defparameter *psf* psf)
-  (write-pgm (normalize2-cdf/ub8-realpart (cross-section-xz psf))
-	    "/home/martin/tmp/psf.pgm"))
+  (write-pgm "/home/martin/tmp/psf.pgm"
+	     (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
+  (sb-ext:gc :full t))
 
 #+nil
 (time
  (destructuring-bind (z y x)
      (array-dimensions *spheres*)
-  (let ((l (convolve3-nocrop 
-	    (let ((zz (vec-i-z (elt *centers* 31))))
-	      (extract-bbox3-cdf *spheres* (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
-						  :end (v (* 1d0 (1- x))
-							  (* 1d0 (1- y))
-							  (* 1d0 zz)))))
-	    *psf*)))
-    (defparameter *conv-l* l)
-    (write-pgm (normalize2-cdf/ub8-realpart (cross-section-xz l (vec-i-y (elt *centers* 31))))
-	       "/home/martin/tmp/conv.pgm"))))
+   (let* ((zz (vec-i-z (elt *centers* 31)))
+	  (current-slice-bbox (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
+				   :end (v (* 1d0 (1- x))
+					   (* 1d0 (1- y))
+					   (* 1d0 zz))))
+	  (current-slice (extract-bbox3-cdf *spheres* current-slice-bbox)))
+    (multiple-value-bind (conv conv-start)
+	(convolve3-nocrop current-slice *psf*)
+      (defparameter *conv-l* conv)
+      (defparameter *conv-l-s* (v--i (make-vec-i :z zz)
+				     conv-start))
+      (write-pgm "/home/martin/tmp/conv.pgm"
+		 (normalize2-cdf/ub8-realpart 
+		  (cross-section-xz 
+		   conv
+		   (vec-i-y (elt *centers* 31))))))
+    (sb-ext:gc :full t))))
 
 #+nil
-(time (save-stack-ub8 "/home/martin/tmp/conv-l"
+(time 
+ (save-stack-ub8 "/home/martin/tmp/conv-l"
 		 (normalize3-cdf/ub8-realpart *conv-l*)))
 
 #+nil
@@ -75,6 +84,20 @@
    (write-pgm (normalize2-cdf/ub8-realpart 
 	       (cross-section-xz Lf (vec-i-y (elt *centers* 31))))
 	      "/home/martin/tmp/conv-lf.pgm")))
+
+(defun mean-realpart (a)
+  (declare ((simple-array (complex double-float) *) a)
+	   (values double-float &optional))
+  (let* ((a1 (sb-ext:array-storage-vector a))
+	 (sum 0d0)
+	 (n (length a1)))
+    (dotimes (i n)
+      (incf sum (realpart (aref a1 i))))
+    (/ sum n)))
+
+#+nil
+(mean-realpart *conv-l*)
+
 
 #||
 mkdir ~/tmp
