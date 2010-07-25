@@ -13,104 +13,165 @@
 	:bresenham))
 (in-package :run)
 
-#+nil ;; find the centers of the nuclei and store into *centers*
-(multiple-value-bind (c ch dims)
-       (find-centers)
-   (defparameter *centers* c)
-   (defparameter *dims* dims)
-   (sb-ext:gc :full t))
+#+nil
+(init-ft)
 
-#+nil ;; as a model of fluorophore concentration draw ovals around the
-      ;; positions in *centers* and store into *spheres*
-(time 
- (let ((spheres
-	(destructuring-bind (z y x)
-	    *dims*
-	  (draw-ovals 12d0 *centers* z y x))))
-   (defparameter *spheres* spheres)
-   (write-pgm "/home/martin/tmp/spheres-cut.pgm"
-	      (normalize2-cdf/ub8-realpart
+(defmacro defstuff ()
+  `(progn
+     ,@(loop for i in '(*centers* *dims* *spheres* *psf* *conv-l* *conv-l-s*
+			*conv-plane* *conv-plane-s*
+			Lf L-plane*f)
+	  collect
+	    `(defparameter ,i nil))))
+
+(defstuff)
+
+(defun init-model ()
+  ;; find the centers of the nuclei and store into *centers*
+  (multiple-value-bind (c ch dims)
+      (find-centers)
+    (defparameter *centers* c)
+    (defparameter *dims* dims)
+    (sb-ext:gc :full t))
+  
+  ;; as a model of fluorophore concentration draw ovals around the
+  ;; positions in *centers* and store into *spheres*
+  (let ((spheres
+	 (destructuring-bind (z y x)
+	     *dims*
+	   (draw-ovals 12d0 *centers* z y x))))
+    (defparameter *spheres* spheres)
+    (write-pgm "/home/martin/tmp/spheres-cut.pgm"
+	       (normalize2-cdf/ub8-realpart
 	       (cross-section-xz *spheres* 
 				 (vec-i-y (elt *centers* 31)))))
-   (sb-ext:gc :full t)))
+   (sb-ext:gc :full t))
+  
+;; store the fluorophore concentration
+  (save-stack-ub8 "/home/martin/tmp/spheres" 
+		  (normalize3-cdf/ub8-realpart *spheres*)))
 
-#+nil
-(time (save-stack-ub8 "/home/martin/tmp/spheres" 
-		      (normalize3-cdf/ub8-realpart *spheres*)))
-
-#+nil ;; calculate intensity psf 
-(time
- (let* ((dx .2d0)
-	(dz 1d0)
-	(psf (destructuring-bind (z y x)
-		 *dims*
-	       (let ((r 100))
+(defun init-psf ()
+  ;; calculate intensity psf, make extend in z big enough to span the
+  ;; full fluorophore concentration even when looking at the bottom
+  ;; plane of it
+  (let* ((dx .2d0)
+	 (dz 1d0)
+	 (psf (destructuring-bind (z y x)
+		  *dims*
+		(let ((r 100))
 		 (psf:intensity-psf (* 2 z) r r (* z dz) (* r dx)
 				    :integrand-evaluations 400)))))
-   (defparameter *psf* psf)
-   (write-pgm "/home/martin/tmp/psf.pgm"
-	      (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
-   (sb-ext:gc :full t)))
+    (defparameter *psf* psf)
+    (write-pgm "/home/martin/tmp/psf.pgm"
+	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
+    (sb-ext:gc :full t)))
 
-#+nil
-(time
- (destructuring-bind (z y x)
-     (array-dimensions *spheres*)
-   (let* ((zz (vec-i-z (elt *centers* 31)))
-	  (current-slice-bbox (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
-				   :end (v (* 1d0 (1- x))
-					   (* 1d0 (1- y))
-					   (* 1d0 zz))))
-	  (current-slice (extract-bbox3-cdf *spheres* current-slice-bbox)))
-    (multiple-value-bind (conv conv-start)
-	(convolve3-nocrop current-slice *psf*)
-      (defparameter *conv-l* conv)
-      (defparameter *conv-l-s* (v--i (make-vec-i :z zz)
-				     conv-start))
-      (write-pgm "/home/martin/tmp/conv.pgm"
-		 (normalize2-cdf/ub8-realpart 
-		  (cross-section-xz 
-		   conv
-		   (vec-i-y (v+-i conv-start (elt *centers* 31)))))))
-    (sb-ext:gc :full t))))
-
-#+nil
-(time 
- (save-stack-ub8 "/home/martin/tmp/conv-l"
-		 (normalize3-cdf/ub8-realpart *conv-l*)))
-
-#+nil
-(time (progn
-   (defparameter Lf (.* *conv-l* *spheres* *conv-l-s*))
-   (write-pgm "/home/martin/tmp/conv-lf.pgm"
+(defun clem ()
+  ;; Extract one specific plane from the fluorophore concentration
+  ;; model and convolve with intensity psf. The result is the light
+  ;; distribution in the sample.
+  (destructuring-bind (z y x)
+      (array-dimensions *spheres*)
+    (let* ((zz (vec-i-z (elt *centers* 31)))
+	   (current-slice-bbox (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
+					  :end (v (* 1d0 (1- x))
+						  (* 1d0 (1- y))
+						  (* 1d0 zz))))
+	   (current-slice (extract-bbox3-cdf *spheres* current-slice-bbox)))
+      (multiple-value-bind (conv conv-start)
+	  (convolve3-nocrop current-slice *psf*)
+	(defparameter *conv-l* conv)
+	(defparameter *conv-l-s* (v--i (make-vec-i :z zz)
+				       conv-start))
+	(write-pgm "/home/martin/tmp/conv.pgm"
+		   (normalize2-cdf/ub8-realpart 
+		    (cross-section-xz 
+		     conv
+		     (vec-i-y (v+-i conv-start (elt *centers* 31)))))))
+      (sb-ext:gc :full t)))
+  
+  ;; store light distribution
+  (save-stack-ub8 "/home/martin/tmp/conv-l"
+		 (normalize3-cdf/ub8-realpart *conv-l*))
+  
+  ;; multiply fluorophore concentration with light distribution, this
+  ;; gives the excitation pattern in the sample
+  (progn
+    (defparameter Lf (.* *conv-l* *spheres* *conv-l-s*))
+    (write-pgm "/home/martin/tmp/conv-lf.pgm"
 	      (normalize2-cdf/ub8-realpart 
-	       (cross-section-xz Lf (vec-i-y (elt *centers* 31)))))))
-
-(defun mean-realpart (a)
-  (declare ((simple-array (complex double-float) *) a)
-	   (values double-float &optional))
-  (let* ((a1 (sb-ext:array-storage-vector a))
-	 (sum 0d0)
-	 (n (length a1)))
-    (dotimes (i n)
-      (incf sum (realpart (aref a1 i))))
-    (/ sum n)))
-
-#+nil
-(mean-realpart Lf)
-
-#+nil
-(destructuring-bind (z y x)
-    (array-dimensions Lf)
-  (let* ((zz (1- (floor z 2)))
-	 (in-focus (extract-bbox3-cdf Lf (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
+	       (cross-section-xz Lf (vec-i-y (elt *centers* 31))))))
+  
+  ;; estimate in-focus and out-of-focus excitation for this particular
+  ;; excitation regime
+  (destructuring-bind (z y x)
+      (array-dimensions Lf)
+    (let* ((zz (1- (floor z 2)))
+	   (in-focus (extract-bbox3-cdf Lf (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
 						      :end (v (* 1d0 (1- x))
 							      (* 1d0 (1- y))
 							      (* 1d0 zz))))))
-    (save-stack-ub8 "/home/martin/tmp/Lf" (normalize3-cdf/ub8-realpart in-focus))
-    (/ (mean-realpart in-focus)
-       (mean-realpart Lf))))
+      (save-stack-ub8 "/home/martin/tmp/Lf" (normalize3-cdf/ub8-realpart in-focus))
+      (/ (mean-realpart in-focus)
+	 (mean-realpart Lf)))))
 
+
+(defun widefield ()
+  ;; convolve a plane with the psf
+  (destructuring-bind (z y x)
+      (array-dimensions *spheres*)
+    (declare (ignore z))
+    (let* ((zz (vec-i-z (elt *centers* 31)))
+	   (current-slice (make-array (list 1 y x)
+				      :element-type '(complex double-float)
+				      :initial-element (complex 1d0))))
+      (multiple-value-bind (conv conv-start)
+	  (convolve3-nocrop current-slice *psf*)
+	(defparameter *conv-plane* conv)
+	(defparameter *conv-plane-s* (v--i (make-vec-i :z zz)
+					   conv-start))
+	(write-pgm "/home/martin/tmp/conv-plane.pgm"
+		   (normalize2-cdf/ub8-realpart 
+		    (cross-section-xz 
+		     conv
+		     (vec-i-y (v+-i conv-start (elt *centers* 31)))))))
+      (sb-ext:gc :full t)))
+
+  ;; multiply fluorophore concentration with light distribution, this
+  ;; gives the excitation pattern in the sample
+  (progn
+    (defparameter L-plane*f (.* *conv-plane* *spheres* *conv-plane-s*))
+    (write-pgm "/home/martin/tmp/conv-plane-lf.pgm"
+	       (normalize2-cdf/ub8-realpart 
+		(cross-section-xz L-plane*f (vec-i-y (elt *centers* 31))))))
+  
+  ;; estimate in-focus and out-of-focus excitation for this particular
+  ;; excitation regime
+  (destructuring-bind (z y x)
+      (array-dimensions L-plane*f)
+    (let* ((zz (1- (floor z 2)))
+	   (in-focus (extract-bbox3-cdf L-plane*f (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
+							     :end (v (* 1d0 (1- x))
+								     (* 1d0 (1- y))
+								     (* 1d0 zz))))))
+      #+nil  (save-stack-ub8 "/home/martin/tmp/Lf" (normalize3-cdf/ub8-realpart in-focus))
+      (/ (mean-realpart in-focus)
+	 (mean-realpart L-plane*f)))))
+
+#+nil
+(time
+ (progn
+   (init-model)
+   (init-psf)))
+
+#+nil
+(time
+ (clem))
+
+#+nil
+(time
+ (widefield))
 
 #||
 mkdir ~/tmp

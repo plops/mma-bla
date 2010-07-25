@@ -96,7 +96,10 @@
     #:extract-bbox3-ub8
     #:extract-bbox3-cdf
     #:extract-bbox3-df
-    #:replace-bbox3-ub8))
+    #:replace-bbox3-ub8
+    
+    #:init-ft
+    #:mean-realpart))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -105,7 +108,25 @@
 #+nil (declaim (optimize (speed 3) (debug 1) (safety 1)))
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
  
-(load-shared-object "/usr/lib/libfftw3.so.3")
+(load-shared-object "/usr/lib/libfftw3.so")
+
+;; multithreading for fftw is just a matter of two initializing
+;; function calls, see:
+;; http://www.fftw.org/fftw3_doc/Usage-of-Multi_002dthreaded-FFTW.html#Usage-of-Multi_002dthreaded-FFTW
+(load-shared-object "/usr/lib/libfftw3_threads.so")
+
+(define-alien-routine ("fftw_init_threads" init-threads)
+    int)
+(define-alien-routine ("fftw_plan_with_nthreads" plan-with-nthreads)
+    void
+  (nthreads int))
+
+(defun init-ft ()
+  (init-threads)
+  (plan-with-nthreads 8))
+
+;; to clean up completely call void fftw_cleanup_threads(void)
+
 
 (define-alien-routine ("fftw_execute" execute)
     void
@@ -733,7 +754,6 @@ relative position of VOLA inside VOLB."
 			  (<= xx (+ x sx)))
 	       (error "VOLA isn't contained in VOLB when shifted by VOLB-START. ~a" 
 		      (list zz (+ z sz))))
-	     (format t "~a~%" (list z y x sz sy sx))
 	     (do-box (k j i 0 zz 0 yy 0 xx)
 	       (setf (aref result k j i)
 		     (* (aref volb k j i)
@@ -1352,3 +1372,13 @@ coordinates relative to A, replace the contents of A with B."
        (ex (extract-bbox3-ub8 a box)))
   (replace-bbox3-ub8 empty ex box))
 
+(defun mean-realpart (a)
+  "Calculate the average value over all the samples in volume A."
+  (declare ((simple-array (complex double-float) *) a)
+	   (values double-float &optional))
+  (let* ((a1 (sb-ext:array-storage-vector a))
+	 (sum 0d0)
+	 (n (length a1)))
+    (dotimes (i n)
+      (incf sum (realpart (aref a1 i))))
+    (/ sum n)))
