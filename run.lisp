@@ -39,17 +39,18 @@
 		      (normalize3-cdf/ub8-realpart *spheres*)))
 
 #+nil ;; calculate intensity psf 
-(let* ((dx .2d0)
-       (dz 1d0)
-       (psf (destructuring-bind (z y x)
-		*dims*
-	      (let ((r 100))
-	       (psf:intensity-psf (* 2 z) r r (* z dz) (* r dx)
-				  :integrand-evaluations 100)))))
-  (defparameter *psf* psf)
-  (write-pgm "/home/martin/tmp/psf.pgm"
-	     (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
-  (sb-ext:gc :full t))
+(time
+ (let* ((dx .2d0)
+	(dz 1d0)
+	(psf (destructuring-bind (z y x)
+		 *dims*
+	       (let ((r 100))
+		 (psf:intensity-psf (* 2 z) r r (* z dz) (* r dx)
+				    :integrand-evaluations 400)))))
+   (defparameter *psf* psf)
+   (write-pgm "/home/martin/tmp/psf.pgm"
+	      (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
+   (sb-ext:gc :full t)))
 
 #+nil
 (time
@@ -70,7 +71,7 @@
 		 (normalize2-cdf/ub8-realpart 
 		  (cross-section-xz 
 		   conv
-		   (vec-i-y (elt *centers* 31))))))
+		   (vec-i-y (v+-i conv-start (elt *centers* 31)))))))
     (sb-ext:gc :full t))))
 
 #+nil
@@ -80,10 +81,10 @@
 
 #+nil
 (time (progn
-   (defparameter Lf (.* *conv-l* *spheres*))
-   (write-pgm (normalize2-cdf/ub8-realpart 
-	       (cross-section-xz Lf (vec-i-y (elt *centers* 31))))
-	      "/home/martin/tmp/conv-lf.pgm")))
+   (defparameter Lf (.* *conv-l* *spheres* *conv-l-s*))
+   (write-pgm "/home/martin/tmp/conv-lf.pgm"
+	      (normalize2-cdf/ub8-realpart 
+	       (cross-section-xz Lf (vec-i-y (elt *centers* 31)))))))
 
 (defun mean-realpart (a)
   (declare ((simple-array (complex double-float) *) a)
@@ -96,7 +97,19 @@
     (/ sum n)))
 
 #+nil
-(mean-realpart *conv-l*)
+(mean-realpart Lf)
+
+#+nil
+(destructuring-bind (z y x)
+    (array-dimensions Lf)
+  (let* ((zz (1- (floor z 2)))
+	 (in-focus (extract-bbox3-cdf Lf (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
+						      :end (v (* 1d0 (1- x))
+							      (* 1d0 (1- y))
+							      (* 1d0 zz))))))
+    (save-stack-ub8 "/home/martin/tmp/Lf" (normalize3-cdf/ub8-realpart in-focus))
+    (/ (mean-realpart in-focus)
+       (mean-realpart Lf))))
 
 
 #||
