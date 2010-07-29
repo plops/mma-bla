@@ -101,7 +101,8 @@
     #:init-ft
     #:mean-realpart
     #:normalize2-df/df
-    #:with-arrays))
+    #:with-arrays
+    #:normalize->ub8))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -963,41 +964,62 @@ VOLA in RESULT."
 	     #'(lambda (z) (floor (abs z)))
 	     abs)
 
-
 #+nil
 (convert3-cdf/ub8-realpart
  (make-array (list 3 3 3) :element-type '(complex double-float)))
 
 ;; will have a name like normalize3-cdf/ub8-abs
-(defmacro def-normalize-cdf (dim function)
-  `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
-     (declare ((simple-array (complex double-float) ,dim) a)
-	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
-     (let* ((res (make-array (array-dimensions a)
-			     :element-type '(unsigned-byte 8)))
-	    (res1 (sb-ext:array-storage-vector res))
-	    (b (,(intern (format nil "CONVERT~d-CDF/DF-~a" dim function)) a))
-	    (b1 (sb-ext:array-storage-vector b))
-	    (ma (reduce #'max b1))
-	    (mi (reduce #'min b1))
-	    (s (if (eq mi ma) 
-		   0d0
-		   (/ 255d0 (- ma mi)))))
-       (dotimes (i (length b1))
-	 (setf (aref res1 i)
-	       (floor (* s (- (aref b1 i) mi)))))
-       res)))
+(defmacro def-normalize-cdf (function)
+  `(progn
+    ,@(loop for dim from 2 upto 3 collect
+     `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
+	(declare ((simple-array (complex double-float) ,dim) a)
+		 (values (simple-array (unsigned-byte 8) ,dim) &optional))
+	(let* ((res (make-array (array-dimensions a)
+				:element-type '(unsigned-byte 8)))
+	       (res1 (sb-ext:array-storage-vector res))
+	       (b (,(intern (format nil "CONVERT~d-CDF/DF-~a" dim function)) a))
+	       (b1 (sb-ext:array-storage-vector b))
+	       (ma (reduce #'max b1))
+	       (mi (reduce #'min b1))
+	       (s (if (< (abs (- mi ma)) 1d-12)
+		      0d0
+		      (/ 255d0 (- ma mi)))))
+	  (dotimes (i (length b1))
+	    (setf (aref res1 i)
+		  (floor (* s (- (aref b1 i) mi)))))
+	  res)))))
 
-(def-normalize-cdf 3 abs)
-(def-normalize-cdf 3 realpart)
-(def-normalize-cdf 3 imagpart)
-(def-normalize-cdf 3 phase)
+(def-normalize-cdf abs)
+(def-normalize-cdf realpart)
+(def-normalize-cdf imagpart)
+(def-normalize-cdf phase)
 
-(def-normalize-cdf 2 abs)
-(def-normalize-cdf 2 realpart)
-(def-normalize-cdf 2 imagpart)
-(def-normalize-cdf 2 phase)
 
+(defmacro def-general-normalize ()
+  (let ((cases nil)
+	(types '((df double-float floor)
+		 (cdf (complex double-float) realpart))))
+    (loop for dim from 1 upto 3 collect
+	 (loop for q in types
+	    do
+	      (destructuring-bind (short long func)
+		  q
+		(let* ((norm (intern (format nil "NORMALIZE~D-~A/UB8-~A"
+					     dim short func))))
+		  (push `((simple-array ,long ,dim) (,norm a))
+			cases)))))
+   `(defun normalize->ub8 (a)
+      "Convert a 1d, 2d or 3d double or complex array into ub8."
+      (declare ((simple-array * *) a)
+	       (values (simple-array (unsigned-byte 8) *) &optional))
+      (typecase a
+	,@cases))))
+
+(def-general-normalize)
+
+#+nil
+(normalize->ub8 (make-array (list 12 23) :element-type '(complex double-float)))
 
 (defmacro def-normalize-df (dim function)
   `(defun ,(intern (format nil "NORMALIZE~d-DF/UB8-~a" dim function)) (a)
@@ -1009,7 +1031,7 @@ VOLA in RESULT."
 	    (b1 (sb-ext:array-storage-vector a))
 	    (ma (reduce #'max b1))
 	    (mi (reduce #'min b1))
-	    (s (if (eq mi ma) 
+	    (s (if (< (abs (- mi ma)) 1d-12) 
 		   0d0
 		   (/ 255d0 (- ma mi)))))
        (dotimes (i (length b1))
