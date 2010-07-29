@@ -100,7 +100,8 @@
     
     #:init-ft
     #:mean-realpart
-    #:normalize2-df/df))
+    #:normalize2-df/df
+    #:with-arrays))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -114,6 +115,8 @@
 ;; multithreading for fftw is just a matter of two initializing
 ;; function calls, see:
 ;; http://www.fftw.org/fftw3_doc/Usage-of-Multi_002dthreaded-FFTW.html#Usage-of-Multi_002dthreaded-FFTW
+#+nil
+(progn
 (load-shared-object "/usr/lib/libfftw3_threads.so")
 
 (define-alien-routine ("fftw_init_threads" init-threads)
@@ -124,7 +127,7 @@
 
 (defun init-ft ()
   (init-threads)
-  (plan-with-nthreads 8))
+  (plan-with-nthreads 8)))
 
 ;; to clean up completely call void fftw_cleanup_threads(void)
 
@@ -159,8 +162,14 @@
  
 ;; C-standard "row-major" order, so that the last dimension has the
 ;; fastest-varying index in the array.
- 
 
+(defmacro with-arrays (arrays &body body)
+  "Provides a corresponding accessor for each array as a local macro,
+so that (ARRAY ...) corresponds to (AREF ARRAY ...)."
+  `(macrolet ,(mapcar (lambda (array)
+                        `(,array (&rest indices) `(aref ,',array ,@indices)))
+                      arrays)
+     ,@body))
  
 (defmacro do-rectangle ((j i ymin ymax xmin xmax) &body body)
   "Loop through 2d points in ymin .. ymax-1. e.g. call with 0 y 0 x to
@@ -197,8 +206,6 @@ point."
 							 '(complex double-float)))
 					ls))))
   (fftshift1 a))
-
-
 
 (defun fftshift2 (in)
   (declare ((simple-array (complex double-float) 2) in)
@@ -527,49 +534,34 @@ the array bounds."
       (aref a j i)
       (complex 0d0)))
 
+(defmacro def-interp1 ()
+  (let ((types '((ub8 (unsigned-byte 8) double-float)
+		 (df double-float double-float)
+		 (cdf (complex double-float) (complex double-float)))))
+   `(progn
+      ,@(loop for ty in types collect
+	     (destructuring-bind (short long retour)
+		 ty
+	       (let ((fun (intern (format nil "INTERP1-~A" short))))
+		 `(progn 
+		   (declaim (inline ,fun))
+		   (defun ,fun (a b xi)
+		    "Interpolate between values A and B. Returns A for
+  xi=0 and B for xi=1."
+		    (declare (,long a b)
+			     (double-float xi)
+			     (values ,retour &optional))
+		    (+ (* (- 1d0 xi) a) (* xi b))))))))))
 
-(declaim (ftype (function ((unsigned-byte 8)
-			   (unsigned-byte 8)
-			   double-float)
-			  (values double-float &optional))
-		interp1-ub8)
-	 (inline interp1-ub8))
-(defun interp1-ub8 (a b xi)
-    "Interpolate between values A and B. Returns A for xi=0 and B for
-  xi=1."
-  (+ (* (- 1d0 xi) a) (* xi b)))
+(def-interp1)
 
-(declaim (ftype (function (double-float double-float double-float)
-			  (values double-float &optional))
-		interp1-df)
-	 (inline interp1-df))
-(defun interp1-df (a b xi)
-    "Interpolate between values A and B. Returns A for xi=0 and B for
-  xi=1."
-  (+ (* (- 1d0 xi) a) (* xi b)))
-
-(declaim (ftype (function ((complex double-float) 
-			   (complex double-float) double-float)
-			  (values (complex double-float) &optional))
-		interp1-cdf)
-	 (inline interp1-cdf))
-(defun interp1-cdf (a b xi)
-    "Interpolate between values A and B. Returns A for xi=0 and B for
-  xi=1."
-  (+ (* (- 1d0 xi) a) (* xi b)))
-
-(declaim (ftype (function ((or (unsigned-byte 8)
-			       double-float
-			       (complex double-float))
-			   (or (unsigned-byte 8)
-			       double-float
-			       (complex double-float))
-			   double-float)
-			  (values (or double-float
-				      (complex double-float)) &optional))
-		interp1)
-	 (inline interp1))
+(declaim (inline interp1))
 (defun interp1 (a b xi)
+  (declare ((or (unsigned-byte 8)
+		double-float
+		(complex double-float)) a b)
+	   (double-float xi)
+	   (values (or double-float (complex double-float) &optional)))
   (etypecase a
     ((unsigned-byte 8) (interp1-ub8 a b xi))
     (double-float (interp1-df a b xi))
@@ -916,76 +908,58 @@ VOLA in RESULT."
 
 ;; for writing several type conversion functions
 ;; will have a name like convert3-ub8/cdf-complex
-(defmacro def-convert (dim in-type out-type &optional (function '#'identity)
+;; the dimension is looped over 1, 2 and 3
+(defmacro def-convert (in-type out-type &optional (function '#'identity)
 		       (short-function-name nil))
-  (let ((short-image-types
-	 '(((complex double-float) . cdf)
-	   (double-float . df)
-	   ((unsigned-byte 8) . ub8))))
-    (labels ((find-short-type-name (type)
-	       (cdr (assoc type short-image-types :test #'equal)))
-	     (find-long-type-name (short-type)
-	       (car (rassoc short-type short-image-types))))
-      `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
-			       dim 
-			       (find-short-type-name in-type)
-			       (find-short-type-name out-type)
-			       (if short-function-name
-				   short-function-name
-				   (subseq (format nil "~a" function)
-					   2)))) (a)
-	 (declare ((simple-array ,in-type ,dim) a)
-		  (values (simple-array ,out-type ,dim) &optional))
-	 (let* ((res (make-array (array-dimensions a)
-				 :element-type (quote ,out-type)))
-		(res1 (sb-ext:array-storage-vector res))
-		(a1 (sb-ext:array-storage-vector a))
-		(n (length a1)))
-	   (dotimes (i n)
-	     (setf (aref res1 i)
-		   (funcall ,function (aref a1 i))))
-	   res)))))
-(def-convert 3 (unsigned-byte 8) (complex double-float)
-		  #'(lambda (c) (complex (* 1d0 c))) complex)
-(def-convert 3 double-float (complex double-float)
-	     #'(lambda (d) (complex d)) complex)
-(def-convert 3 double-float (unsigned-byte 8) #'floor)
-(def-convert 3 (complex double-float) double-float #'realpart)
-(def-convert 3 (complex double-float) double-float #'imagpart)
-(def-convert 3 (complex double-float) double-float #'abs)
-(def-convert 3 (complex double-float) double-float #'phase)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (realpart z)))
-	     realpart)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (imagpart z)))
-	     imagpart)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (phase z)))
-	     phase)
-(def-convert 3 (complex double-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (abs z)))
-	     abs)
+  `(progn
+     ,@(loop for dim from 1 upto 3 collect
+	   (let ((short-image-types
+		  '(((complex double-float) . cdf)
+		    (double-float . df)
+		    ((unsigned-byte 8) . ub8))))
+	     (labels ((find-short-type-name (type)
+			(cdr (assoc type short-image-types :test #'equal)))
+		      (find-long-type-name (short-type)
+			(car (rassoc short-type short-image-types))))
+	       `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
+					dim 
+					(find-short-type-name in-type)
+					(find-short-type-name out-type)
+					(if short-function-name
+					    short-function-name
+					    (subseq (format nil "~a" function)
+						    2)))) (a)
+		  (declare ((simple-array ,in-type ,dim) a)
+			   (values (simple-array ,out-type ,dim) &optional))
+		  (let* ((res (make-array (array-dimensions a)
+					  :element-type (quote ,out-type)))
+			 (res1 (sb-ext:array-storage-vector res))
+			 (a1 (sb-ext:array-storage-vector a))
+			 (n (length a1)))
+		    (dotimes (i n)
+		      (setf (aref res1 i)
+			    (funcall ,function (aref a1 i))))
+		    res)))))))
 
-(def-convert 2 (unsigned-byte 8) (complex double-float)
+(def-convert (unsigned-byte 8) (complex double-float)
 		  #'(lambda (c) (complex (* 1d0 c))) complex)
-(def-convert 2 double-float (complex double-float)
+(def-convert double-float (complex double-float)
 	     #'(lambda (d) (complex d)) complex)
-(def-convert 2 double-float (unsigned-byte 8) #'floor)
-(def-convert 2 (complex double-float) double-float #'realpart)
-(def-convert 2 (complex double-float) double-float #'imagpart)
-(def-convert 2 (complex double-float) double-float #'abs)
-(def-convert 2 (complex double-float) double-float #'phase)
-(def-convert 2 (complex double-float) (unsigned-byte 8)
+(def-convert double-float (unsigned-byte 8) #'floor)
+(def-convert (complex double-float) double-float #'realpart)
+(def-convert (complex double-float) double-float #'imagpart)
+(def-convert (complex double-float) double-float #'abs)
+(def-convert (complex double-float) double-float #'phase)
+(def-convert (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (realpart z)))
 	     realpart)
-(def-convert 2 (complex double-float) (unsigned-byte 8)
+(def-convert (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (imagpart z)))
 	     imagpart)
-(def-convert 2 (complex double-float) (unsigned-byte 8)
+(def-convert (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (phase z)))
 	     phase)
-(def-convert 2 (complex double-float) (unsigned-byte 8)
+(def-convert (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (abs z)))
 	     abs)
 
