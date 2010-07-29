@@ -562,7 +562,7 @@ the array bounds."
 		double-float
 		(complex double-float)) a b)
 	   (double-float xi)
-	   (values (or double-float (complex double-float) &optional)))
+	   (values (or double-float (complex double-float)) &optional))
   (etypecase a
     ((unsigned-byte 8) (interp1-ub8 a b xi))
     (double-float (interp1-df a b xi))
