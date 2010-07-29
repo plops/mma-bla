@@ -99,7 +99,8 @@
     #:replace-bbox3-ub8
     
     #:init-ft
-    #:mean-realpart))
+    #:mean-realpart
+    #:normalize2-df/df))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -302,8 +303,8 @@ point."
 	 (db (array-dimensions volb))
 	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
     (when (some #'null compare-ab)
-      (error "convolve3-circ expects both input arrays to have the same dimensions.")))
-  (ift2 (.*2 (ft2 vola) (ft2 volb))))
+      (error "convolve3-circ expects both input arrays to have the same dimensions."))
+    (ift2 (s*2 (* 1d0 (reduce #'* da)) (.*2 (ft2 vola) (ft2 volb))))))
  
 (declaim 
  (type (function 
@@ -1044,6 +1045,23 @@ VOLA in RESULT."
 
 (def-normalize-df 3 floor)
 (def-normalize-df 2 floor)
+
+(defun normalize2-df/df (a)
+  (declare ((simple-array double-float 2) a)
+	   (values (simple-array double-float 2) &optional))
+  (let* ((res (make-array (array-dimensions a)
+			  :element-type 'double-float))
+	 (res1 (sb-ext:array-storage-vector res))
+	 (a1 (sb-ext:array-storage-vector a))
+	 (ma (reduce #'max a1))
+	 (mi (reduce #'min a1))
+	 (s (if (eq mi ma)
+		0d0
+		(/ 1d0 (- ma mi)))))
+    (dotimes (i (length a1))
+      (setf (aref res1 i)
+	    (* s (- (aref a1 i) mi))))
+    res))
 
 (defun normalize-ub8 (a)
   (declare ((simple-array * *) a)
