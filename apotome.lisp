@@ -171,7 +171,7 @@
 	     (setf (aref img j i) (aref *intens* k j i)))
 	   (let ((conv (fftshift2 (convolve2-circ img disk))))
 	     (do-rectangle (j i 0 y 0 x)
-	       (setf (aref result k j i) (+ (aref disk j i) (aref conv j i))))))))
+	       (setf (aref result k j i) (aref conv j i)))))))
      (defparameter *intens-disk* result)
      (save-stack-ub8 "/home/martin/tmp/intens-grat-conv" (normalize3-cdf/ub8-abs result))
      (save-stack-ub8 "/home/martin/tmp/kintens-grat-conv"
