@@ -47,7 +47,7 @@
 				 (vec-i-y (elt *centers* 31)))))
    (sb-ext:gc :full t))
   
-;; store the fluorophore concentration
+  ;; store the fluorophore concentration
   (save-stack-ub8 "/home/martin/tmp/spheres" 
 		  (normalize3-cdf/ub8-realpart *spheres*)))
 
@@ -1124,7 +1124,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
  ;; shown in k space constant
   (let* ((na numerical-aperture)
 	 (ri immersion-index)
-	 (lambd wavelength)
+	 (lambd (/ wavelength ri))
 	 (dz (* .5d0 lambd))
 	 (dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
 					   (let ((sinphi (/ na ri)))
@@ -1149,7 +1149,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	(psf:electric-field-psf z y x (* z dz3) (* x dx3)
 				:numerical-aperture na
 				:immersion-index ri
-				:wavelength lambd
+				:wavelength wavelength
 				:integrand-evaluations integrand-evaluations)
       (when debug 
 	(write-pgm (normalize-ub8 (cross-section-xz e0))

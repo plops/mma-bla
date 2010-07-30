@@ -99,7 +99,7 @@
 			    (numerical-aperture 1.38d0) (wavelength .480d0))
   "Return the cylindrical coordinates u and v of a given 3D point. All
 lengths in micrometer."
-  (let* ((k (/ (* 2d0 pi)
+  (let* ((k (/ (* 2d0 pi immersion-index)
 	       wavelength))
 	 (sina (/ numerical-aperture
 		  immersion-index))
