@@ -1,4 +1,4 @@
-#.(load "run")
+;; load run.lisp before running this file
 (in-package :run)
 
 (declaim (ftype (function (double-float)
@@ -147,8 +147,8 @@
   (loop for i in '(4.0d-3 -.2d-3) do
    (draw-ray-into-vol i 0d0 .99d0 .0d0 vol)
    #+nil(draw-ray-into-vol i 0d0 -.99d0 .0d0 vol)
-   #+nil(draw-ray-into-vol i 0d0 0d0 .99d0 vol)
-   #+nil(draw-ray-into-vol i 0d0 0d0 -.99d0 vol))
+   (draw-ray-into-vol i 0d0 0d0 .99d0 vol)
+   (draw-ray-into-vol i 0d0 0d0 -.99d0 vol))
 
   (save-stack-ub8 "/home/martin/tmp/line"
 		  vol))
@@ -165,7 +165,7 @@
 ;;        -------+-------
 ;;     -/  h (3) |       \---   (2) q_R=NA/ri*q_max
 ;;    -----------+------------/------------
-;;               | alpha      /---  \-
+;;               | alpha  /---  \-
 ;;               |     /--     	  \
 ;;        	 | /---            \
 ;;      ---------+-----------------+-------
@@ -351,7 +351,15 @@
 
 (defmacro defstuff ()
   `(progn
-     ,@(loop for i in '(*centers* *dims* *sphere-c-r*)
+     ,@(loop for i in '(*dims*    ;; dimensions of the input stack in
+				  ;; pixels and slices
+			*centers* ;; integral center coordinates of
+				  ;; the nuclei (0 .. dim-x) ...
+			*sphere-c-r* ;; scaled (isotropic axis, in
+				     ;; micrometeres) and shifted (so
+				     ;; that origin in center of
+				     ;; volume) coordinates
+			)
 	  collect
 	    `(defparameter ,i nil))))
 
@@ -370,9 +378,7 @@
 	  (yh (* .5d0 y))
 	  (zh (* .5d0 z))
 	  (n (length centers))
-	  (result (make-array n :element-type 'sphere
-			      :initial-contents (loop for i below n collect
-						     (make-sphere)))))
+	  (result-l nil))
      (labels ((convert-point (point)
 		(declare (vec-i point)
 			 (values vec &optional))
@@ -380,15 +386,17 @@
 		   (* dx (- (vec-i-y point) yh))
 		   (* dz (- (vec-i-z point) zh)))))
        (dotimes (i n)
-	 (setf (aref result i) 
-	       (make-sphere :center (convert-point (aref centers i))
-			    :radius (* dx 17d0))))
-       result))))
+	 (push (make-sphere :center (convert-point (aref centers i))
+			    :radius (* dx 17d0))
+	       result-l))
+       (make-array (length result-l) :element-type 'sphere
+		   :initial-contents result-l)))))
 
 (defun init-model ()
   ;; find the centers of the nuclei and store into *centers*
   (multiple-value-bind (c ch dims)
       (find-centers)
+    (declare (ignore ch))
     (defparameter *centers* c)
     (defparameter *dims* dims)
     (sb-ext:gc :full t))
@@ -397,7 +405,39 @@
   (defparameter *spheres-c-r* 
     (create-sphere-array *dims* *centers*)))
 
-(init-model)
+(time (init-model)) ;; 2.7 s
+
+(defun init-psf ()
+  ;; calculate angular intensity psf, make extend in z big enough to
+  ;; span the full fluorophore concentration even when looking at the
+  ;; bottom plane of it
+  
+  ;; the size of the k space must be big enough: 2*bfp-diameter for
+  ;; k_{x,y}, and 2*cap-height for k_z. then the full donut can be
+  ;; accomodated. 
+
+  ;; if only a small part of the cap is selected the dimensions can be
+  ;; reduced accordingly. calculating the size requires to find the
+  ;; intersection of a cylinder and the sphere cap.
+  (let* ((dx .2d0)
+	 (dz 1d0)
+	 (psf (destructuring-bind (z y x)
+		  *dims*
+		(declare (ignore y x))
+		(let ((r 100))
+		  (angular-psf 
+		   :window-radius .4d0
+		   :window-x .6d0
+		   :z (* 8 z) :x (* 2 r) :y (* 2 r) 
+		   :pixel-size-z (* .25d0 dz) :pixel-size-x (* .5d0 dx)
+		   :integrand-evaluations 400
+		   :debug t)))))
+    (defparameter *psf* psf)
+    (write-pgm "/home/martin/tmp/psf.pgm"
+	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
+    (sb-ext:gc :full t)))
+
+(time (init-psf)) ;; 62.2 s
 
 #+nil
 (dotimes (i (length *centers*))
@@ -567,23 +607,45 @@ which point on the periphery of the corresponding circle is meant."
 		     (merit-function
 		      (make-vec2 :x (realpart z)
 				 :y (imagpart z)))))))))))
-#+nil
-(time
- (with-open-file (s "/home/martin/tmp/scan.dat"
+#+nil ;; for plotting with gnuplot
+(with-open-file (s "/home/martin/tmp/scan.dat"
 		    :direction :output
 		    :if-exists :supersede
 		    :if-does-not-exist :create)
    (let ((dx .025d0))
-    (loop for x from -1d0 upto 1d0 by dx do
-	 (loop for y from -1d0 upto 1d0 by dx do
+    (loop for x from -1d0 upto 1d0 by dx and i from 0 do
+	 (loop for y from -1d0 upto 1d0 by dx and j from 0 do
 	      (format s "~4,4f ~4,4f ~4,4f~%"
 		      x y (merit-function
 			   (make-vec2 :x x :y y))))
-	 (terpri s)))))
+	 (terpri s))))
 #+nil(
 gnuplot
 set size square;set palette color positive; set pm3d map; splot "/home/martin/tmp/scan.dat"; pause -1
 )
+
+#+nil ;; store the scan for each nucleus in the bfp
+(time 
+ (let* ((n 100)
+	(a (make-array (list n n) :element-type 'double-float))
+	(nn (length *spheres-c-r*))
+	(mosaicx (ceiling (sqrt nn)))
+	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
+			    :element-type 'double-float)))
+   (dotimes (*nucleus-index* nn)
+     (dotimes (i n)
+       (dotimes (j n)
+	 (let ((x (- (* 2d0 (/ i n)) 1d0))
+	       (y (- (* 2d0 (/ j n)) 1d0)))
+	   (setf (aref a j i)
+		 (merit-function
+		  (make-vec2 :x x :y y))))))
+     (do-rectangle (j i 0 n 0 n)
+       (let ((x (mod *nucleus-index* mosaicx))
+	     (y (floor *nucleus-index* mosaicx)))
+	 (setf (aref mosaic (+ (* n y) j) (+ (* n x) i))
+	       (aref a j i)))))
+   (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-ub8 mosaic))))
 
 (defvar *nucleus-index* 23)
 (defvar *bfp-window-radius* .1d0)
@@ -624,7 +686,7 @@ set size square;set palette color positive; set pm3d map; splot "/home/martin/tm
 				     :if-exists :supersede)
     (simplex-anneal:anneal (simplex-anneal:make-simplex start 1d0)
 			   #'merit-function
-			   :start-temperature 12d0)))
+			   :start-temperature 1d0)))
 
 ;; scan over the full parameters space
 #+nil

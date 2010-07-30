@@ -26,14 +26,16 @@
 
 (defstuff)
 
+
 (defun init-model ()
   ;; find the centers of the nuclei and store into *centers*
   (multiple-value-bind (c ch dims)
       (find-centers)
+    (declare (ignore ch))
     (defparameter *centers* c)
     (defparameter *dims* dims)
     (sb-ext:gc :full t))
-  
+
   ;; as a model of fluorophore concentration draw ovals around the
   ;; positions in *centers* and store into *spheres*
   (let ((spheres
@@ -41,7 +43,7 @@
 	     *dims*
 	   (draw-ovals 12d0 *centers* z y x))))
     (defparameter *spheres* spheres)
-    (write-pgm "/home/martin/tmp/spheres-cut.pgm"
+    (write-pgm "/home/martin/tmp/comp0-spheres-cut.pgm"
 	       (normalize2-cdf/ub8-realpart
 	       (cross-section-xz *spheres* 
 				 (vec-i-y (elt *centers* 31)))))
@@ -59,11 +61,12 @@
 	 (dz 1d0)
 	 (psf (destructuring-bind (z y x)
 		  *dims*
+		(declare (ignore y x))
 		(let ((r 100))
 		 (psf:intensity-psf (* 2 z) r r (* z dz) (* r dx)
 				    :integrand-evaluations 400)))))
     (defparameter *psf* psf)
-    (write-pgm "/home/martin/tmp/psf.pgm"
+    (write-pgm "/home/martin/tmp/comp1-psf.pgm"
 	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
     (sb-ext:gc :full t)))
 
@@ -73,6 +76,7 @@
   ;; distribution in the sample.
   (destructuring-bind (z y x)
       (array-dimensions *spheres*)
+    (declare (ignore z))
     (let* ((zz (vec-i-z (elt *centers* 31)))
 	   (current-slice-bbox (make-bbox :start (v 0d0 0d0 (* 1d0 zz))
 					  :end (v (* 1d0 (1- x))
@@ -84,7 +88,7 @@
 	(defparameter *conv-l* conv)
 	(defparameter *conv-l-s* (v--i (make-vec-i :z zz)
 				       conv-start))
-	(write-pgm "/home/martin/tmp/conv.pgm"
+	(write-pgm "/home/martin/tmp/comp2-conv.pgm"
 		   (normalize2-cdf/ub8-realpart 
 		    (cross-section-xz 
 		     conv
@@ -99,7 +103,7 @@
   ;; gives the excitation pattern in the sample
   (progn
     (defparameter Lf (.* *conv-l* *spheres* *conv-l-s*))
-    (write-pgm "/home/martin/tmp/conv-lf.pgm"
+    (write-pgm "/home/martin/tmp/comp3-conv-lf.pgm"
 	      (normalize2-cdf/ub8-realpart 
 	       (cross-section-xz Lf (vec-i-y (elt *centers* 31))))))
   
@@ -131,7 +135,7 @@
 	(defparameter *conv-plane* conv)
 	(defparameter *conv-plane-s* (v--i (make-vec-i :z zz)
 					   conv-start))
-	(write-pgm "/home/martin/tmp/conv-plane.pgm"
+	(write-pgm "/home/martin/tmp/comp4-conv-plane.pgm"
 		   (normalize2-cdf/ub8-realpart 
 		    (cross-section-xz 
 		     conv
@@ -142,7 +146,7 @@
   ;; gives the excitation pattern in the sample
   (progn
     (defparameter L-plane*f (.* *conv-plane* *spheres* *conv-plane-s*))
-    (write-pgm "/home/martin/tmp/conv-plane-lf.pgm"
+    (write-pgm "/home/martin/tmp/comp5-conv-plane-lf.pgm"
 	       (normalize2-cdf/ub8-realpart 
 		(cross-section-xz L-plane*f (vec-i-y (elt *centers* 31))))))
   
@@ -163,15 +167,15 @@
 (time
  (progn
    (init-model)
-   (init-psf)))
+   (init-psf))) ;; 7.5s 
 
 #+nil
 (time
- (clem))
+ (clem)) ;; 8s, result: 6.5
 
 #+nil
 (time
- (widefield))
+ (widefield)) ;; 5.7s result: 1.8
 
 #||
 mkdir ~/tmp
