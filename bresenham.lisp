@@ -4,13 +4,11 @@
 
 (in-package :bresenham)
 
-(declaim (ftype (function (fixnum fixnum fixnum
-			   fixnum fixnum fixnum
-			   (simple-array (unsigned-byte 8) 3))
-			  (values (simple-array (unsigned-byte 8) 3) &optional))
-		scan-convert-line3x scan-convert-line3y scan-convert-line3z))
 ;; 1986 kaufman
 (defun scan-convert-line3x (x1 y1 z1 x2 y2 z2 vol)
+  (declare (fixnum x1 y1 z1 x2 y2 z2)
+	   ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
   ;; x2 - x1 has to be the biggest difference between endpoint
   ;; coordinates
   (let* ((x x1)
@@ -51,6 +49,9 @@
   vol)
 ;; start from scan-convert-line3x and replace x->$, y->x, $->y
 (defun scan-convert-line3y (x1 y1 z1 x2 y2 z2 vol)
+  (declare (fixnum x1 y1 z1 x2 y2 z2)
+	   ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
   (let* ((y y1)
 	 (dely (- y2 y1))
 	 (x x1)
@@ -86,6 +87,9 @@
   vol)
 ;; replace x->$, z->x, $->z
 (defun scan-convert-line3z (x1 y1 z1 x2 y2 z2 vol)
+  (declare (fixnum x1 y1 z1 x2 y2 z2)
+	   ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
   (let* ((z z1)
 	 (delz (- z2 z1))
 	 (y y1)
@@ -121,10 +125,10 @@
 	 (setf (aref vol z y x) 255)))
   vol)
 
-(declaim (ftype (function (vec-i vec-i (simple-array (unsigned-byte 8) 3))
-			  (values (simple-array (unsigned-byte 8) 3) &optional))
-		scan-convert-line3))
 (defun scan-convert-line3 (start end vol)
+  (declare (vec-i start end)
+	   ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
   (let* ((diff (v--i end start))
 	 (ls (list (list (vec-i-x diff) 2)
 		   (list (vec-i-y diff) 1)
@@ -139,10 +143,10 @@
 	 ;; we have to swap the points when main-diff is negative
 	 (swap-points? (< main-diff 0))
 	 ;; create the function name to dispatch to
-	 (function (intern (format nil "SCAN-CONVERT-LINE3~a" (ecase main-direction
-								(2 'X)
-								(1 'Y)
-								(0 'Z))))))
+	 (function (ecase main-direction
+		     (2 #'scan-convert-line3x)
+		     (1 #'scan-convert-line3y)
+		     (0 #'scan-convert-line3z))))
     (when (eq 0 main-diff)
       (error "start and end point are the same."))
     (if swap-points?

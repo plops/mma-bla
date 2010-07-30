@@ -380,11 +380,10 @@ the coordinates. Return the centroid."
 	   #'rosenbrock
 	   :ftol 1d-5)))
 
-(declaim (ftype (function ((simple-array double-float *)
-			   double-float)
-			  (values (simple-array double-float (* *)) &optional))
-		make-simplex))
 (defun make-simplex (start step)
+  (declare ((simple-array double-float 1) start)
+	   (double-float step)
+	   (values (simple-array double-float 2) &optional))
   (let* ((n (array-dimension start 0))
 	 (result (make-array (list (1+ n) n) :element-type 'double-float)))
     (dotimes (j (1+ n))
@@ -393,7 +392,6 @@ the coordinates. Return the centroid."
     ;; the last point in result stays unaltered
     (dotimes (j n)
       (incf (aref result j j) step))
-    
     result))
 
 ;; (declaim (ftype (function (double-float)

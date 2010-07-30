@@ -1,3 +1,4 @@
+#.(load "run")
 (in-package :run)
 
 (declaim (ftype (function (double-float)
@@ -145,9 +146,9 @@
 (let ((vol (make-array (list 128 128 128) :element-type '(unsigned-byte 8))))
   (loop for i in '(4.0d-3 -.2d-3) do
    (draw-ray-into-vol i 0d0 .99d0 .0d0 vol)
-   (draw-ray-into-vol i 0d0 -.99d0 .0d0 vol)
-   (draw-ray-into-vol i 0d0 0d0 .99d0 vol)
-   (draw-ray-into-vol i 0d0 0d0 -.99d0 vol))
+   #+nil(draw-ray-into-vol i 0d0 -.99d0 .0d0 vol)
+   #+nil(draw-ray-into-vol i 0d0 0d0 .99d0 vol)
+   #+nil(draw-ray-into-vol i 0d0 0d0 -.99d0 vol))
 
   (save-stack-ub8 "/home/martin/tmp/line"
 		  vol))
@@ -299,13 +300,13 @@
 				:wavelength wavelength
 				:integrand-evaluations integrand-evaluations)
       (when debug 
-	(write-pgm (normalize-ub8 (cross-section-xz e0))
-		   "/home/martin/tmp/cut-0psf.pgm"))
+	(write-pgm "/home/martin/tmp/cut-0psf.pgm"
+		   (normalize2-cdf/ub8-abs (cross-section-xz e0))))
      (let ((k0 (fftshift3 (ft3 e0)))
 	   (k1 (fftshift3 (ft3 e1)))
 	   (k2 (fftshift3 (ft3 e2))))
-       (when debug (write-pgm (normalize-ub8 (cross-section-xz k0))
-			      "/home/martin/tmp/cut-1psf-k.pgm"))
+       (when debug (write-pgm "/home/martin/tmp/cut-1psf-k.pgm"
+			      (normalize2-cdf/ub8-abs (cross-section-xz k0))))
        (let* ((cr window-radius)
 	      (cx window-x)
 	      (cy window-y)
@@ -324,8 +325,8 @@
 	   (setf (aref k0 k j i) (* (aref k0 k j i) (aref window j i))
 		 (aref k1 k j i) (* (aref k1 k j i) (aref window j i))
 		 (aref k2 k j i) (* (aref k2 k j i) (aref window j i))))
-	 (when debug (write-pgm (normalize-ub8 (cross-section-xz k0))
-		     "/home/martin/tmp/cut-2psf-k-mul.pgm"))
+	 (when debug (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
+				(normalize2-cdf/ub8-abs (cross-section-xz k0))))
 	 (let* ((e0 (ift3 (fftshift3 k0)))
 		(e1 (ift3 (fftshift3 k1)))
 		(e2 (ift3 (fftshift3 k2)))
@@ -336,60 +337,25 @@
 		      (* (aref e1 k j i) (conjugate (aref e1 k j i)))
 		      (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
 	   (when debug
-	     (write-pgm (normalize-ub8 (cross-section-xz intens))
-			"/home/martin/tmp/cut-3psf-intens.pgm")
+	     (write-pgm "/home/martin/tmp/cut-3psf-intens.pgm"
+			(normalize-ub8 (cross-section-xz intens)))
 	     (let ((k (fftshift3 (ft3 intens))))
-	       (write-pgm (normalize-ub8 (cross-section-xz k))
-			  "/home/martin/tmp/cut-4psf-intk.pgm")))
+	       (write-pgm "/home/martin/tmp/cut-4psf-intk.pgm"
+			  (normalize2-cdf/ub8-abs (cross-section-xz k)))))
 	   intens))))))
 
 #+nil
 (time (progn
-	(angular-psf :x 128 :z 64 :integrand-evaluations 120 :debug t)
+	(angular-psf :x 128 :z 64 :integrand-evaluations 280 :debug t)
 	nil))
 
-#+nil ;; convert coordinates of spheres from integers into doubles,
-      ;; corresponding to mm.
-(let* ((dx .2d-3)
-       (dz 1d-3)
-       (n (length *centers*))
-       (sph (make-array n :element-type 'raytrace::sphere)))
-  (dotimes (i n)
-    (setf (aref sph i)
-	  (make-sphere :center (let ((a (elt *centers* i)))
-							    (v (* dx (vec-i-x a))
-							       (* dx (vec-i-y a))
-							       (* dz (vec-i-z a))))
-		       :radius (* dx 7d0))))
-  (defparameter *sphere-c-r* sph))
+(defmacro defstuff ()
+  `(progn
+     ,@(loop for i in '(*centers* *dims* *sphere-c-r*)
+	  collect
+	    `(defparameter ,i nil))))
 
-#+nil
-(dotimes (i (length *centers*))
-  (format t "~a~%"
-   (raytrace::ray-spheres-intersection (v) (v 0d0 0d0 -1d0) *sphere-c-r* i)))
-
-#+nil
-(declaim (ftype (function (vec)
-			  (values double-float &optional))
-		merit-function))
-#+nil
-(defun merit-function (vec)
-  (raytrace:ray-spheres-intersection 
-   (v 0d0 0d0 0d0) 
-   (normalize (direction (aref vec 0) (aref vec 1)))
-   *sphere-c-r*))
-
-
-#+nil
-(let ((start (make-array 2 :element-type 'double-float
-                          :initial-contents (list 100d0 100d0))))
-   (with-open-file (*standard-output* "/dev/shm/anneal.log"
-                                      :direction :output
-                                      :if-exists :supersede)
-     (anneal (make-simplex start 1d0)
-             #'merit-function
-             :start-temperature 3d0)))
-
+(defstuff)
 
 (defun create-sphere-array (dims centers)
   (declare (cons dims)
@@ -419,12 +385,42 @@
 			    :radius (* dx 17d0))))
        result))))
 
-#+nil 
-(progn
- (defparameter *central-sphere* 22)
- (defparameter *spheres-c-r* 
-   (create-sphere-array *dims* *centers*)))
+(defun init-model ()
+  ;; find the centers of the nuclei and store into *centers*
+  (multiple-value-bind (c ch dims)
+      (find-centers)
+    (defparameter *centers* c)
+    (defparameter *dims* dims)
+    (sb-ext:gc :full t))
+  
+  (defparameter *central-sphere* 22)
+  (defparameter *spheres-c-r* 
+    (create-sphere-array *dims* *centers*)))
 
+(init-model)
+
+#+nil
+(dotimes (i (length *centers*))
+  (format t "~a~%"
+   (raytrace::ray-spheres-intersection (v) (v 0d0 0d0 -1d0) *sphere-c-r* i)))
+
+#+nil
+(progn 
+  (defun merit-function (vec)
+    (declare (vec vec)
+	     (values double-float &optional))
+    (raytrace:ray-spheres-intersection 
+     (v 0d0 0d0 0d0) 
+     (normalize (direction (aref vec 0) (aref vec 1)))
+     *sphere-c-r*))
+  (let ((start (make-array 2 :element-type 'double-float
+                          :initial-contents (list 100d0 100d0))))
+   (with-open-file (*standard-output* "/dev/shm/anneal.log"
+                                      :direction :output
+                                      :if-exists :supersede)
+     (anneal (make-simplex start 1d0)
+             #'merit-function
+             :start-temperature 3d0))))
 
 
 ;; The merit function should get two parameters r and phi.  if r isn't
@@ -441,14 +437,12 @@
 ;; Possibly I shouldn't call it merit function as I try to minimize
 ;; its result.
 
-;; get-ray-behind-objective takes a point on the back focal plane and
-;; a point in the sample and calculates the ray direction ro that
-;; leaves the objective. So its the same calculation that is used for
-;; draw-ray-into-vol.
-(declaim (ftype (function (double-float double-float double-float double-float)
-			  (values vec vec &optional))
-		get-ray-behind-objective))
 (defun get-ray-behind-objective (x-mm y-mm bfp-ratio-x bfp-ratio-y)
+  "Take a point on the back focal plane and a point in the sample and
+ calculate the ray direction ro that leaves the objective. So its the
+ same calculation that is used for draw-ray-into-vol."
+  (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
+	   (values vec vec &optional))
   (let* ((f (lens:focal-length-from-magnification 63d0))
 	 (na 1.38d0)
 	 (ri 1.515d0)
@@ -510,11 +504,10 @@ numbers x+i y."
 #+nil
 (sample-circle (complex 1d0 1d0) 1d0 :right)
 
-(defun illuminate-ray 
-    (spheres-c-r illuminated-sphere-index
-     sample-position
-     bfp-center-x bfp-center-y 
-     bfp-radius bfp-position)
+(defun illuminate-ray (spheres-c-r illuminated-sphere-index
+		       sample-position
+		       bfp-center-x bfp-center-y 
+		       bfp-radius bfp-position)
   "Trace a ray from a point in the back focal plane through the disk
 that encompasses the nucleus with index
 ILLUMINATED-SPHERE-INDEX. SAMPLE-POSITION and BFP-POSITION can assume
@@ -587,8 +580,12 @@ which point on the periphery of the corresponding circle is meant."
 		      x y (merit-function
 			   (make-vec2 :x x :y y))))
 	 (terpri s)))))
+#+nil(
+gnuplot
+set size square;set palette color positive; set pm3d map; splot "/home/martin/tmp/scan.dat"; pause -1
+)
 
-(defvar *nucleus-index* 26)
+(defvar *nucleus-index* 23)
 (defvar *bfp-window-radius* .1d0)
 (defvar *spheres-c-r* nil)
 
@@ -597,7 +594,7 @@ which point on the periphery of the corresponding circle is meant."
 (defun merit-function (vec2)
   (declare (vec2 vec2)
 	   (values double-float &optional))
-  (let* ((border-value .08d0) ;; value to return when outside of bfp
+  (let* ((border-value .0d0) ;; value to return when outside of bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
 					    ;; border of the bfp
 					    ;; enforce bad merit
