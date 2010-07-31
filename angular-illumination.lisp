@@ -760,33 +760,14 @@ which point on the periphery of the corresponding circle is meant."
 
 #+nil
 (let ((start (make-array 2 :element-type 'double-float
-			 :initial-contents (list 100d0 100d0))))
+			 :initial-contents (list 0d0 0d0)))
+      (*nucleus-index* 50))
   (with-open-file (*standard-output* "/dev/shm/anneal.log"
 				     :direction :output
 				     :if-exists :supersede)
-    (simplex-anneal:anneal (simplex-anneal:make-simplex start 1d0)
+    (simplex-anneal:anneal (simplex-anneal:make-simplex start .2d0)
 			   #'merit-function
-			   :start-temperature 1d0)))
+			   :start-temperature 2d0)))
 
-;; scan over the full parameters space
-#+nil
-(progn
- (with-open-file (s "/dev/shm/o.dat" :direction :output :if-exists :supersede)
-   (let ((ntheta 60)
-	 (nphi 90))
-     (dotimes (theta ntheta)
-       (dotimes (phi  nphi)
-	 (let ((a (* 90 (/ theta ntheta)))
-	       (b (* 180 (/ phi nphi))))
-	  (format s "~f ~f ~f~%" a b
-		  (ray-spheres-intersection (v) (direction a b)))))
-      (terpri s))))
- (with-open-file (s "/dev/shm/p1.gp" :direction :output
-		    :if-exists :supersede)
-   (format s "set term posts; set outp \"/dev/shm/p~2,'0d.ps\";set hidden
-set title \"nucleus nr. ~d\"
-unset key
-splot \"/dev/shm/o.dat\" u 1:2:3 w l
-#pause -1
-" *central-sphere* *central-sphere*)))
+
 
