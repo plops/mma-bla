@@ -410,7 +410,7 @@ diameter of the bfp.
 |              	        |              	     	  k=k0*n
 \                       |  |-------|      	   /
 |                       |     2 rr                 |
-#||
+||#
 
 (defun angular-intensity-psf-minimal-extent (&key
 					     (x 64) (y x) (z 40)
