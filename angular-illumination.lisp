@@ -170,7 +170,7 @@
 ;;        	 | /---            \
 ;;      ---------+-----------------+-------
 ;;               | (0)             / (1) q_max=1/(2*pixel)
-;; 
+;;
 ;; The resolution of the image has to be big enough to fit the top
 ;; section of the k-sphere with radius |k|=2pi*q_max into the k space.
 ;; q_max (see (1)) is due to the nyquist theorem and corresponds to 1
@@ -280,18 +280,18 @@
 	 (dx (* dz (/ ri na)))
 	 (dx2 (* .5 dx))
 	 (dx3 (if pixel-size-x
-		  (progn 
+		  (progn
 		    #+nil (unless (< pixel-size-x dx2)
 		      (error "pixel-size-x is ~a but should be smaller than ~a"
 			     pixel-size-x dx2))
-		    pixel-size-x) 
+		    pixel-size-x)
 		  dx2))
 	 (dz3 (if pixel-size-z
-		  (progn 
+		  (progn
 		    #+nil(unless (< pixel-size-z dz2)
 		      (error "pixel-size-z is ~a but should be smaller than ~a"
 			     pixel-size-z dz2))
-		    pixel-size-z) 
+		    pixel-size-z)
 		  dz2)))
     (multiple-value-bind (e0 e1 e2)
 	(psf:electric-field-psf z y x (* z dz3) (* x dx3)
@@ -299,7 +299,7 @@
 				:immersion-index ri
 				:wavelength wavelength
 				:integrand-evaluations integrand-evaluations)
-      (when debug 
+      (when debug
 	(write-pgm "/home/martin/tmp/cut-0psf.pgm"
 		   (normalize2-cdf/ub8-abs (cross-section-xz e0))))
      (let ((k0 (fftshift3 (ft3 e0)))
@@ -314,7 +314,7 @@
 	      (cr2 (* cr cr))
 	      (window (make-array (list y x)
 				  :element-type 'double-float)))
-	 ;; 2d window 
+	 ;; 2d window
 	 (do-rectangle (j i 0 y 0 x)
 	   (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
 		  (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
@@ -344,10 +344,133 @@
 			  (normalize2-cdf/ub8-abs (cross-section-xz k)))))
 	   intens))))))
 
+
 #+nil
 (time (progn
 	(angular-psf :x 128 :z 64 :integrand-evaluations 280 :debug t)
 	nil))
+
+(defmacro debug-out (&rest rest)
+  `(format t "~a~%"
+	   (list ,@(mapcar #'(lambda (x) `(list ,(format nil "~a" x) ,x))
+			   rest))))
+
+
+#|| sketch of the cap kz(kx,ky) of the k-vectors that enter the back
+focal plane.  the small circle with the x in the center is a
+transparent window.  the distance from the center of the window to the
+center of the cap is rho.  we are interested in the cap height at
+points A and B along the vector rho. the point A will be the highest
+point of the cap and B the lowest. when the window encloses the center
+of the cap the highest point is k. when the window touches the
+periphery of the bfp, the lowest point is kz(R), where R=NA*k0 is the
+diameter of the bfp.
+
+   	       	   -----+-----
+ from top:     ---/     |     \---
+   	     -/         |         \-
+           -/           |           \-
+          /             |             \
+         /              |    -----     \
+        /      	        |   /     \     \
+       /                |  /       \     \
+       |                |  |   x   |     |
+      /        	        |  |       |      \
+      |                 |  |\     /|      |
+      |        	        o  | ----- |   	  |
+      |                 |  |       |      |
+      \        	        |  |       |      |
+       |                |  |       |     ||
+       \                |  |       |     /|
+        \      	        |  |       |    / |
+         \              |  |       |   /  |
+          \             |  |       |  /	  |
+           -\           |  |       |/-	  |
+	     -\         |  |      /+	  |
+	       ---\     |  |  /--- |	  |
+	       	   -----+--+--	   |	  |
+       	          ------+--+---	   |	  |
+ from side   ----/   kz |      \---v	  |
+          --/           |           \--	  |
+        -/              |              \- |
+      -/                |                \/
+    -/                  |               -/ \-
+   /                    |              /     \ kz(kx)
+  /                     |            -/       \
+ /                      |           /          \
+/              	        |      	  -/            \
+/             	        | alph  -/               \
+/      	                |      /                  \
+|                       |    -/                   |
+/                       |   /                  	   \
+|              	        | -/           	     	   |
+|                       |/             	     	   |
+|-----------------------+--o-------o------o--------+ kx
+|                       |  A       B   	  R 	   |
+|              	        |              	     	  k=k0*n
+\                       |  |-------|      	   /
+|                       |     2 rr                 |
+#||
+
+(defun angular-intensity-psf-minimal-extent (&key
+					     (x 64) (y x) (z 40)
+					     (window-radius .1d0)
+					     (window-x .5d0)
+					     (window-y 0d0)
+					     (wavelength .480d0)
+					     (numerical-aperture 1.38d0)
+					     (immersion-index 1.515d0)
+					     (integrand-evaluations 30)
+					     (debug nil))
+  "Calculate angular intensity PSF, ensure that the maximum sampling
+distance is chosen."
+  (declare ((double-float 0d0 1d0) window-radius)
+	   ((double-float -1d0 1d0) window-x window-y)
+	   (double-float wavelength numerical-aperture immersion-index)
+	   (fixnum integrand-evaluations x y z)
+	   (boolean debug)
+	   (values (simple-array (complex double-float) 3) &optional))
+  (let* ((k0 (/ (* 2d0 pi) wavelength))
+	 (k (* immersion-index k0))
+	 (R (* numerical-aperture k0))
+	 (rr (* R window-radius)))
+    (labels ((kz (kx)
+	       (sqrt (- (* k k) (* kx kx)))))
+      (let* ((rho (sqrt (+ (* window-x window-x)
+			   (* window-y window-y))))
+	     (kza (kz (- rho rr)))
+	     (kzb (kz (+ rho rr)))
+	     (top (if (< rho rr)
+		      (max k kza kzb)
+		      (max kza kzb)))
+	     (bot (if (< rho (- R r))
+		      (min (kz R) kza kzb)
+		      (min kza kzb)))
+	     (kzextent (* 2 (- top bot)))
+	     (kxextent (max (* 2 R) (* 4 rr)))
+	     (dx (/ pi kxextent))
+	     (dz (/ pi kzextent)))
+	(debug-out dx dz kxextent kzextent k rho)
+	(angular-psf :x x :y y :z z :window-radius window-radius
+		     :window-x window-x :window-y window-y
+		     :wavelength wavelength
+		     :numerical-aperture numerical-aperture
+		     :immersion-index immersion-index
+		     :integrand-evaluations integrand-evaluations
+		     :pixel-size-x dx
+		     :pixel-size-z dz
+		     :debug debug)))))
+
+#+nil
+(time
+ (progn
+   (angular-intensity-psf-minimal-extent :x 256 :z 128
+					 :window-radius .4d0
+					 :window-x .4d0
+					 :window-y 0d0 :integrand-evaluations 1000 :debug t)
+   nil))
+
+
 
 (defmacro defstuff ()
   `(progn
@@ -400,9 +523,9 @@
     (defparameter *centers* c)
     (defparameter *dims* dims)
     (sb-ext:gc :full t))
-  
+
   (defparameter *central-sphere* 22)
-  (defparameter *spheres-c-r* 
+  (defparameter *spheres-c-r*
     (create-sphere-array *dims* *centers*)))
 
 (time (init-model)) ;; 2.7 s
@@ -411,10 +534,10 @@
   ;; calculate angular intensity psf, make extend in z big enough to
   ;; span the full fluorophore concentration even when looking at the
   ;; bottom plane of it
-  
+
   ;; the size of the k space must be big enough: 2*bfp-diameter for
   ;; k_{x,y}, and 2*cap-height for k_z. then the full donut can be
-  ;; accomodated. 
+  ;; accomodated.
 
   ;; if only a small part of the cap is selected the dimensions can be
   ;; reduced accordingly. calculating the size requires to find the
@@ -425,10 +548,10 @@
 		  *dims*
 		(declare (ignore y x))
 		(let ((r 100))
-		  (angular-psf 
+		  (angular-psf
 		   :window-radius .4d0
 		   :window-x .6d0
-		   :z (* 8 z) :x (* 2 r) :y (* 2 r) 
+		   :z (* 8 z) :x (* 2 r) :y (* 2 r)
 		   :pixel-size-z (* .25d0 dz) :pixel-size-x (* .5d0 dx)
 		   :integrand-evaluations 400
 		   :debug t)))))
@@ -445,12 +568,12 @@
    (raytrace::ray-spheres-intersection (v) (v 0d0 0d0 -1d0) *sphere-c-r* i)))
 
 #+nil
-(progn 
+(progn
   (defun merit-function (vec)
     (declare (vec vec)
 	     (values double-float &optional))
-    (raytrace:ray-spheres-intersection 
-     (v 0d0 0d0 0d0) 
+    (raytrace:ray-spheres-intersection
+     (v 0d0 0d0 0d0)
      (normalize (direction (aref vec 0) (aref vec 1)))
      *sphere-c-r*))
   (let ((start (make-array 2 :element-type 'double-float
@@ -546,7 +669,7 @@ numbers x+i y."
 
 (defun illuminate-ray (spheres-c-r illuminated-sphere-index
 		       sample-position
-		       bfp-center-x bfp-center-y 
+		       bfp-center-x bfp-center-y
 		       bfp-radius bfp-position)
   "Trace a ray from a point in the back focal plane through the disk
 that encompasses the nucleus with index
@@ -571,12 +694,12 @@ which point on the periphery of the corresponding circle is meant."
 				    (imagpart sample-pos)
 				    (realpart bfp-pos)
 				    (imagpart bfp-pos))
-	(let* ((exposure 
+	(let* ((exposure
 		(ray-spheres-intersection
 		 ;; shift by nf so that sample is in origin
-		 (v+ s 
+		 (v+ s
 		     (v 0d0
-			0d0 
+			0d0
 			(* 1.515 (lens:focal-length-from-magnification 63d0))))
 		 (normalize ro)
 		 spheres-c-r
@@ -625,7 +748,7 @@ set size square;set palette color positive; set pm3d map; splot "/home/martin/tm
 )
 
 #+nil ;; store the scan for each nucleus in the bfp
-(time 
+(time
  (let* ((n 100)
 	(a (make-array (list n n) :element-type 'double-float))
 	(nn (length *spheres-c-r*))
