@@ -203,17 +203,19 @@ modified VEC-RESULT."
       (setf (aref result i) (* scalar (aref vec i))))
     result))
 
-(declaim (ftype (function ((simple-array double-float (* *))
-			   fixnum)
-			  (values (array double-float (*)) &optional))
-		displace))
 (defun displace (simplex i)
   "Extract the i-th i=0..n point from the simplex."
+  (declare ((simple-array double-float 2) simplex)
+	   (fixnum i)
+	   (values (simple-array double-float 1) &optional))
   (let ((n (array-dimension simplex 1))) ;; we want the small index
-    (make-array n 
-		:element-type 'double-float
-		:displaced-to simplex
-		:displaced-index-offset (* i n))))
+    ;; force copy into simple-array
+    (make-array n :element-type 'double-float
+		:initial-contents
+		(make-array n 
+			    :element-type 'double-float
+			    :displaced-to simplex
+			    :displaced-index-offset (* i n)))))
 
 (declaim (ftype (function ((array double-float (*))
 			   (array double-float (*))
@@ -374,11 +376,31 @@ the coordinates. Return the centroid."
 ;; run the following code to test the downhill simplex optimizer on a
 ;; 2d function:
 #+nil
-(time (let ((start (make-array 2 :element-type 'double-float
-			  :initial-contents (list 1.5d0 1.5d0))))
-   (anneal (make-simplex start 1d0)
-	   #'rosenbrock
-	   :ftol 1d-5)))
+(time
+ (progn
+   (defun sq (x)
+     (declare (double-float x)
+	      (values double-float &optional))
+     (* x x))
+   (defun rosenbrock (p)
+     (declare ((array double-float 1) p)
+	      (values double-float &optional))
+     (let* ((x (aref p 0))
+	    (y (aref p 1))
+	    (result (+ (sq (- 1 x))
+		       (* 100 (sq (- y (sq x)))))))
+       (format t "~a~%" (list 'rosenbrock p result))
+     result))
+   (let ((start (make-array 2 :element-type 'double-float
+			    :initial-contents (list 1.5d0 1.5d0))))
+     (anneal (make-simplex start 1d0)
+	     #'rosenbrock
+	     :ftol 1d-5))))
+
+#+nil
+(rosenbrock (make-array 2 :element-type 'double-float
+			:initial-contents (list 1.5d0 1.5d0)))
+
 
 (defun make-simplex (start step)
   (declare ((simple-array double-float 1) start)

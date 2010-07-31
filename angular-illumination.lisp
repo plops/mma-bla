@@ -1,26 +1,7 @@
 ;; load run.lisp before running this file
 (in-package :run)
 
-(declaim (ftype (function (double-float)
-			  (values double-float &optional))
-		sq))
-(defun sq (x)
-  (* x x))
 
-
-(declaim (ftype (function ((array double-float *))
-			  (values double-float &optional))
-		rosenbrock))
-(defun rosenbrock (p)
-  (let* ((x (aref p 0))
-	 (y (aref p 1))
-	 (result (+ (sq (- 1 x))
-		    (* 100 (sq (- y (sq x)))))))
-    (format t "~a~%" (list 'rosenbrock p result))
-    result))
-#+nil
-(rosenbrock (make-array 2 :element-type 'double-float
-			 :initial-contents (list 1.5d0 1.5d0)))
 ;; run the following code to test the downhill simplex optimizer on a
 ;; 2d function:
 
@@ -723,42 +704,6 @@ which point on the periphery of the corresponding circle is meant."
 		.1d0 .0d0
 		.01d0 :right)
 
-#+nil ;; scan the bfp
-(time
- (with-open-file (s "/home/martin/tmp/scan.dat"
-		    :direction :output
-		    :if-exists :supersede
-		    :if-does-not-exist :create)
-   (let ((bfp-window-radius .08d0)
-	 (nr 32))
-     (dotimes (ir nr)
-       (let ((np (ceiling (1+ (* ir ir)) 4)))
-	 (terpri s)
-	 (dotimes (ip np)
-	   (let* ((r (* ir (/ (- .99d0 bfp-window-radius) (1- nr))))
-		  (phi (* (/ (* 2d0 pi) np) ip))
-		 (z (* r (exp (complex 0d0 phi)))))
-	     (format s "~4,4f ~4,4f ~4,4f~%" (realpart z) (imagpart z)
-		     (merit-function
-		      (make-vec2 :x (realpart z)
-				 :y (imagpart z)))))))))))
-#+nil ;; for plotting with gnuplot
-(with-open-file (s "/home/martin/tmp/scan.dat"
-		    :direction :output
-		    :if-exists :supersede
-		    :if-does-not-exist :create)
-   (let ((dx .025d0))
-    (loop for x from -1d0 upto 1d0 by dx and i from 0 do
-	 (loop for y from -1d0 upto 1d0 by dx and j from 0 do
-	      (format s "~4,4f ~4,4f ~4,4f~%"
-		      x y (merit-function
-			   (make-vec2 :x x :y y))))
-	 (terpri s))))
-#+nil(
-gnuplot
-set size square;set palette color positive; set pm3d map; splot "/home/martin/tmp/scan.dat"; pause -1
-)
-
 #+nil ;; store the scan for each nucleus in the bfp
 (time
  (let* ((n 100)
@@ -789,13 +734,13 @@ set size square;set palette color positive; set pm3d map; splot "/home/martin/tm
 ;; the following global variable contain state for merit-function:
 ;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
 (defun merit-function (vec2)
-  (declare (vec2 vec2)
+  (declare ((simple-array double-float (2)) vec2)
 	   (values double-float &optional))
   (let* ((border-value .0d0) ;; value to return when outside of bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
-					    ;; border of the bfp
-					    ;; enforce bad merit
-					    ;; function
+	 ;; border of the bfp
+	 ;; enforce bad merit
+	 ;; function
 	 (sum 0d0)
 	 (radius (norm2 vec2)))
     (if (< radius (- .99d0 border-width))
