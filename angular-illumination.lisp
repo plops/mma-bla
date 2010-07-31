@@ -250,99 +250,111 @@
 ;; Jean-Yves used for the confocal stack. I have to introduce
 ;; sx=dx2/dx3 to scale cx and cy into the back focal plane.
 
-(defun angular-psf (&key (x 64) (y x) (z 40)
-		    (window-radius .2d0)
-		    (window-x (- 1d0 window-radius))
-		    (window-y 0d0)
-		    (pixel-size-x nil)
-		    (pixel-size-z nil)
-		    (wavelength .480d0)
-		    (numerical-aperture 1.38d0)
-		    (immersion-index 1.515d0)
-		    (integrand-evaluations 30)
-		    (debug nil))
-  (declare (fixnum x y z integrand-evaluations)
-	   (double-float window-radius window-x window-y
-			 wavelength numerical-aperture
-			 immersion-index)
-	   ((or null double-float) pixel-size-x pixel-size-z)
-	   (boolean debug)
-	   (values (simple-array (complex double-float) 3) &optional))
- ;; changing z,y,x without touching dx or dz leaves the area that is
- ;; shown in k space constant
-  (let* ((na numerical-aperture)
-	 (ri immersion-index)
-	 (lambd (/ wavelength ri))
-	 (dz (* .5d0 lambd))
-	 (dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
-					   (let ((sinphi (/ na ri)))
-					     (* sinphi sinphi))))))))
-	 (dx (* dz (/ ri na)))
-	 (dx2 (* .5 dx))
-	 (dx3 (if pixel-size-x
-		  (progn
-		    #+nil (unless (< pixel-size-x dx2)
-		      (error "pixel-size-x is ~a but should be smaller than ~a"
-			     pixel-size-x dx2))
-		    pixel-size-x)
-		  dx2))
-	 (dz3 (if pixel-size-z
-		  (progn
-		    #+nil(unless (< pixel-size-z dz2)
-		      (error "pixel-size-z is ~a but should be smaller than ~a"
-			     pixel-size-z dz2))
-		    pixel-size-z)
-		  dz2)))
-    (multiple-value-bind (e0 e1 e2)
-	(psf:electric-field-psf z y x (* z dz3) (* x dx3)
-				:numerical-aperture na
-				:immersion-index ri
-				:wavelength wavelength
-				:integrand-evaluations integrand-evaluations)
-      (when debug
-	(write-pgm "/home/martin/tmp/cut-0psf.pgm"
-		   (normalize2-cdf/ub8-abs (cross-section-xz e0))))
-     (let ((k0 (fftshift3 (ft3 e0)))
-	   (k1 (fftshift3 (ft3 e1)))
-	   (k2 (fftshift3 (ft3 e2))))
-       (when debug (write-pgm "/home/martin/tmp/cut-1psf-k.pgm"
-			      (normalize2-cdf/ub8-abs (cross-section-xz k0))))
-       (let* ((cr window-radius)
-	      (cx window-x)
-	      (cy window-y)
-	      (sx (/ dx2 dx3))
-	      (cr2 (* cr cr))
-	      (window (make-array (list y x)
-				  :element-type 'double-float)))
-	 ;; 2d window
-	 (do-rectangle (j i 0 y 0 x)
-	   (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
-		  (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
-		  (r2 (+ (* xx xx) (* yy yy))))
-	     (when (< r2 cr2)
-	       (setf (aref window j i) 1d0))))
-	 (do-box (k j i 0 z 0 y 0 x)
-	   (setf (aref k0 k j i) (* (aref k0 k j i) (aref window j i))
-		 (aref k1 k j i) (* (aref k1 k j i) (aref window j i))
-		 (aref k2 k j i) (* (aref k2 k j i) (aref window j i))))
-	 (when debug (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
-				(normalize2-cdf/ub8-abs (cross-section-xz k0))))
-	 (let* ((e0 (ift3 (fftshift3 k0)))
-		(e1 (ift3 (fftshift3 k1)))
-		(e2 (ift3 (fftshift3 k2)))
-		(intens k0)) ;; instead of allocating a new array we store into k0
-	   (do-box (k j i 0 z 0 y 0 x)
-	     (setf (aref intens k j i)
-		   (+ (* (aref e0 k j i) (conjugate (aref e0 k j i)))
-		      (* (aref e1 k j i) (conjugate (aref e1 k j i)))
-		      (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
-	   (when debug
-	     (write-pgm "/home/martin/tmp/cut-3psf-intens.pgm"
-			(normalize-ub8 (cross-section-xz intens)))
-	     (let ((k (fftshift3 (ft3 intens))))
-	       (write-pgm "/home/martin/tmp/cut-4psf-intk.pgm"
-			  (normalize2-cdf/ub8-abs (cross-section-xz k)))))
-	   intens))))))
+
+(let ((k0 nil)
+      (k1 nil)
+      (k2 nil))
+ (defun angular-psf (&key (x 64) (y x) (z 40)
+		     (window-radius .2d0)
+		     (window-x (- 1d0 window-radius))
+		     (window-y 0d0)
+		     (pixel-size-x nil)
+		     (pixel-size-z nil)
+		     (wavelength .480d0)
+		     (numerical-aperture 1.38d0)
+		     (immersion-index 1.515d0)
+		     (integrand-evaluations 30)
+		     (debug nil)
+		     (initialize nil))
+   (declare (fixnum x y z integrand-evaluations)
+	    (double-float window-radius window-x window-y
+			  wavelength numerical-aperture
+			  immersion-index)
+	    ((or null double-float) pixel-size-x pixel-size-z)
+	    (boolean debug initialize)
+	    (values (simple-array (complex double-float) 3) &optional))
+   ;; changing z,y,x without touching dx or dz leaves the area that is
+   ;; shown in k space constant
+   (let* ((na numerical-aperture)
+	  (ri immersion-index)
+	  (lambd (/ wavelength ri))
+	  (dz (* .5d0 lambd))
+	  (dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
+					    (let ((sinphi (/ na ri)))
+					      (* sinphi sinphi))))))))
+	  (dx (* dz (/ ri na)))
+	  (dx2 (* .5 dx))
+	  (dx3 (if pixel-size-x
+		   (progn
+		     #+nil (unless (< pixel-size-x dx2)
+			     (error "pixel-size-x is ~a but should be smaller than ~a"
+				    pixel-size-x dx2))
+		     pixel-size-x)
+		   dx2))
+	  (dz3 (if pixel-size-z
+		   (progn
+		     #+nil(unless (< pixel-size-z dz2)
+			    (error "pixel-size-z is ~a but should be smaller than ~a"
+				   pixel-size-z dz2))
+		     pixel-size-z)
+		   dz2)))
+     
+     ;; electric field caps are only calculated upon first call FIXME: or
+     ;; when parameters change (implemented via reinitialize argument)
+     (when (or (null k0) (null k1) (null k2) initialize)
+       (multiple-value-bind (e0 e1 e2)
+	   (psf:electric-field-psf z y x (* z dz3) (* x dx3)
+				   :numerical-aperture na
+				   :immersion-index ri
+				   :wavelength wavelength
+				   :integrand-evaluations integrand-evaluations)
+	 (when debug
+	   (write-pgm "/home/martin/tmp/cut-0psf.pgm"
+		      (normalize2-cdf/ub8-abs (cross-section-xz e0))))
+	 (setf k0 (fftshift3 (ft3 e0))
+	       k1 (fftshift3 (ft3 e1))
+	       k2 (fftshift3 (ft3 e2)))
+	 (when debug (write-pgm "/home/martin/tmp/cut-1psf-k.pgm"
+				(normalize2-cdf/ub8-abs (cross-section-xz k0))))))
+     (let* ((cr window-radius)
+	    (cx window-x)
+	    (cy window-y)
+	    (sx (/ dx2 dx3))
+		  (cr2 (* cr cr))
+		  (window (make-array (list y x)
+				      :element-type 'double-float))
+	    (kk0 (make-array (array-dimensions k0) :element-type '(complex double-float)))
+	    (kk1 (make-array (array-dimensions k1) :element-type '(complex double-float)))
+	    (kk2 (make-array (array-dimensions k2) :element-type '(complex double-float))))
+	     ;; 2d window
+	     (do-rectangle (j i 0 y 0 x)
+	       (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
+		      (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
+		      (r2 (+ (* xx xx) (* yy yy))))
+		 (when (< r2 cr2)
+		   (setf (aref window j i) 1d0))))
+	     (do-box (k j i 0 z 0 y 0 x)
+	       (setf (aref kk0 k j i) (* (aref k0 k j i) (aref window j i))
+		     (aref kk1 k j i) (* (aref k1 k j i) (aref window j i))
+		     (aref kk2 k j i) (* (aref k2 k j i) (aref window j i))))
+	     (when debug (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
+				    (normalize2-cdf/ub8-abs (cross-section-xz k0))))
+	     (let* ((e0 (ift3 (fftshift3 kk0)))
+		    (e1 (ift3 (fftshift3 kk1)))
+		    (e2 (ift3 (fftshift3 kk2)))
+		    (intens k0)) ;; instead of allocating a new array we store into k0
+	       (do-box (k j i 0 z 0 y 0 x)
+		 (setf (aref intens k j i)
+		       (+ (* (aref e0 k j i) (conjugate (aref e0 k j i)))
+			  (* (aref e1 k j i) (conjugate (aref e1 k j i)))
+			  (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
+	       (when debug
+		 (write-pgm "/home/martin/tmp/cut-3psf-intens.pgm"
+			    (normalize-ub8 (cross-section-xz intens)))
+		 (let ((k (fftshift3 (ft3 intens))))
+		   (write-pgm "/home/martin/tmp/cut-4psf-intk.pgm"
+			      (normalize2-cdf/ub8-abs (cross-section-xz k)))))
+	       intens)))))
 
 
 #+nil
