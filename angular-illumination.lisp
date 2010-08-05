@@ -740,7 +740,8 @@ which point on the periphery of the corresponding circle is meant."
 (defun merit-function (vec2)
   (declare ((simple-array double-float (2)) vec2)
 	   (values double-float &optional))
-  (let* ((border-value .9d0) ;; value to return when outside of bfp
+  (let* ((border-value 100d0) ;; value to return when outside of bfp
+	 ;; this has to be considerably bigger than the maxima on the bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
 	 ;; border of the bfp
 	 ;; enforce bad merit
@@ -764,16 +765,41 @@ which point on the periphery of the corresponding circle is meant."
 
 #+nil
 (time
- (let* ((*nucleus-index* 50))
+ (let* ((n 100)
+	(a (make-array (list n n) :element-type '(unsigned-byte 8)))
+	(nn (length *spheres-c-r*))
+	(mosaicx (ceiling (sqrt nn)))
+	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
+			    :element-type '(unsigned-byte 8))))
    (with-open-file (*standard-output* "/dev/shm/a"
 				      :direction :output
 				      :if-exists :supersede)
-     (simplex-anneal:anneal (simplex-anneal:make-simplex (make-vec2 :x 0d0 :y 0d0) .3d0)
-			    #'merit-function
-			    :start-temperature 1.2d0
-			    :eps/m .01d0
-			    :itmax 30
-			    :ftol .002d0))))
+     (let ((*nucleus-index* 50));; dotimes (*nucleus-index* nn)
+       (dotimes (i 1)
+	 (tagbody again
+	    (multiple-value-bind (min point)
+		(simplex-anneal:anneal (simplex-anneal:make-simplex
+					(make-vec2 :x -1d0 :y -1d0) 1d0)
+				       #'merit-function
+				       ;; set temperature bigger than the
+				       ;; maxima in the bfp but smaller
+				       ;; than border-value
+				       :start-temperature 2.4d0 
+				       :eps/m .02d0
+				       :itmax 1000
+				       :simplex-min-size .1d0
+				       :ftol 1d-3)
+	      (unless (<= min 100d0)
+		(go again))
+	      (let* ((x (aref point 0))
+		     (y (aref point 1))
+		     (ix (floor (* n (+ x 1)) 2))
+		     (iy (floor (* n (+ y 1)) 2))
+		     (mx (mod *nucleus-index* mosaicx))
+		     (my (floor *nucleus-index* mosaicx)))
+		(incf (aref mosaic (+ (* n my) iy) (+ (* n mx) ix)))
+		(format t "min ~a~%" (list min ix iy))))))))
+   (write-pgm "/home/martin/tmp/scan-mosaic-max.pgm" mosaic)))
 
 
 

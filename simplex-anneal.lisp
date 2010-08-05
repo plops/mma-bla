@@ -256,12 +256,25 @@ the coordinates. Return the centroid."
 ;;      (dformat t "~a~%" (list 'centroid result))
       result)))
 
+;; 1/n! * det(v1-v0,v2-v0,...,vn-v0)
+;; only works for 2d coordinates A=((a b)(c d)), det A = ad-bc:
+;; a = v1_x - v0_x
+(defun simplex-volume (simplex)
+  (declare ((simple-array double-float (3 2)) simplex)
+	   (values double-float &optional))
+  (let ((a (- (aref simplex 1 0) (aref simplex 0 0)))
+	(c (- (aref simplex 1 1) (aref simplex 0 1)))
+	(b (- (aref simplex 2 0) (aref simplex 0 0)))
+	(d (- (aref simplex 2 1) (aref simplex 0 1))))
+    (- (* a d) (* b c))))
 
-(defun amoeba (simplex funk &key (itmax 500) (ftol 1d-5) (temperature 1000d0))
+
+(defun amoeba (simplex funk &key (itmax 500) (ftol 1d-5) (temperature 1000d0) 
+	       (simplex-min-size .1d0))
   (declare ((simple-array double-float 2) simplex)
 	   (function funk)
 	   (fixnum itmax)
-	   (double-float ftol temperature)
+	   (double-float ftol temperature simplex-min-size)
 	   (values double-float 
 		   (simple-array double-float 1)
 		   double-float
@@ -275,6 +288,7 @@ the coordinates. Return the centroid."
 	  (gamma .5d0) ;; contraction ratio
 	  (sigma .5d0) ;; shrink ratio
 	  (iteration 0)
+	  (min-volume (* simplex-min-size simplex-min-size simplex-min-size))
 	  (best-ever (make-array n :element-type 'double-float))
 	  (best-ever-value 1d100)
 	  (vals (make-array nr-points :element-type 'double-float)))
@@ -296,13 +310,15 @@ the coordinates. Return the centroid."
 	    (setf best-ever-value best-value))
 ;;	  (dformat t "~a~%" (list 'best-ever best-ever best-ever-value))
 	  ;;      rtol=2 |h-l| / ( |h| + |l| + TINY) 
+	  ;; fractional range from highest to lowest and return if satisfied
 	  (let ((rtol (* 2d0 (/ (abs (- best-value worst-value))
 				(+ (abs best-value)
 				   (abs worst-value)
 				   1d-20)))))
+	    (format t "volum ~f~%" (abs (simplex-volume simplex)))
 	    (when (or (< rtol ftol)
+		      (< (abs (simplex-volume simplex)) min-volume)
 		      (< itmax iteration))
-	      (format t "amoeba ~a~%" (list simplex best  best-value))
 	      (return-from amoeba (values best-value
 					  (displace simplex best)
 					  rtol
@@ -363,11 +379,11 @@ the coordinates. Return the centroid."
 	      (go label1))))))))
 
 (defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0)
-	       (eps/m .02d0))
+	       (eps/m .02d0) (simplex-min-size .1d0))
   (declare ((simple-array double-float 2) simplex)
 	   (function funk)
 	   (fixnum itmax)
-	   (double-float ftol start-temperature eps/m)
+	   (double-float ftol start-temperature eps/m simplex-min-size)
 	   (values double-float (simple-array double-float 1) &optional))
   (let* ((m 30)
 	 (eps (* eps/m m))
@@ -376,7 +392,7 @@ the coordinates. Return the centroid."
 	(())
       (multiple-value-bind (value point rtol best-ever-value best-ever)
 	  (amoeba simplex funk :itmax m :ftol ftol 
-		  :temperature temp)
+		  :temperature temp :simplex-min-size simplex-min-size)
 	(declare (ignore best-ever-value
 			 best-ever))
 	(when (or (< itmax count)
@@ -411,8 +427,8 @@ the coordinates. Return the centroid."
       (anneal (make-simplex start 1d0)
 	      #'rosenbrock
 	      :start-temperature 100d0
-	      :itmax 100000
-	      :ftol 1d-9
+	      :itmax 100
+	      :ftol 1d-3
 	      :eps/m .01d0)))))
 
 #+nil
