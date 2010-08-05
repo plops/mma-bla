@@ -109,12 +109,13 @@
 		      (hlist (list h+z h-z h+y h-y h+x h-x))
 		      ;; throw away points that are nil or that contain
 		      ;; coordinates outside of the array dimensions
-		      (filtered-hlist (remove-if-not #'(lambda (v)
-							 (if v
-							     (and (< -1 (vec-i-x v) x)
-								  (< -1 (vec-i-y v) y)
-								  (< -1 (vec-i-z v) z))
-							     nil)) hlist))
+		      (filtered-hlist 
+		       (remove-if-not #'(lambda (v)
+					  (if v
+					      (and (< -1 (vec-i-x v) x)
+						   (< -1 (vec-i-y v) y)
+						   (< -1 (vec-i-z v) z))
+					      nil)) hlist))
 		      ;; sort best points by x
 		      (choice (sort filtered-hlist #'< :key (lambda (v) (vec-i-x v)))))
 		 (format t "~a~%" (list 'choice choice))
@@ -362,9 +363,9 @@ diameter of the bfp.
    	       	   -----+-----
  from top:     ---/     |     \---
    	     -/         |         \-
-           -/           |           \-
-          /             |             \
-         /              |    -----     \
+           -/           |           \-  /  kx
+          /             |             \/
+         /              |    -----   / \
         /      	        |   /     \     \
        /                |  /       \     \
        |                |  |   x   |     |
@@ -521,6 +522,7 @@ distance is chosen."
   (defparameter *spheres-c-r*
     (create-sphere-array *dims* *centers*)))
 
+#+nil
 (time (init-model)) ;; 2.7 s
 
 (defun init-psf ()
@@ -553,6 +555,7 @@ distance is chosen."
 	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
     (sb-ext:gc :full t)))
 
+#+nil
 (time (init-psf)) ;; 62.2 s
 
 #+nil
@@ -760,14 +763,16 @@ which point on the periphery of the corresponding circle is meant."
 
 #+nil
 (let ((start (make-array 2 :element-type 'double-float
-			 :initial-contents (list 0d0 0d0)))
+			 :initial-contents (list .3d0 .4d0)))
       (*nucleus-index* 50))
-  (with-open-file (*standard-output* "/dev/shm/anneal.log"
+  (with-open-file (*standard-output* "/dev/shm/a"
 				     :direction :output
 				     :if-exists :supersede)
-    (simplex-anneal:anneal (simplex-anneal:make-simplex start .2d0)
+    (simplex-anneal:anneal (simplex-anneal:make-simplex start .04d0)
 			   #'merit-function
-			   :start-temperature 2d0)))
+			   :start-temperature 12d0
+			   :itmax 120
+			   :ftol 1d-1)))
 
 
 

@@ -149,7 +149,7 @@ function values."
 	  (when (< second-worstv v)
 	    (setf second-worstv v
 		  second-worst i)))))
-    (dformat t "~a~%" (list 
+#+nil    (dformat t "~a~%" (list 
 		       'best best bestv 
 		       'second-worst second-worst second-worstv
 		       'worst worst worstv))
@@ -242,22 +242,21 @@ the coordinates. Return the centroid."
 	  (v-inc result (displace simplex i))))
       (dotimes (j n)
 	(setf (aref result j) (/ (aref result j) n)))
-      (dformat t "~a~%" (list 'centroid result))
+;;      (dformat t "~a~%" (list 'centroid result))
       result)))
 
 
-(declaim (ftype (function ((simple-array double-float (* *))
-			   function 
-			   &key (:itmax fixnum)
-			   (:ftol double-float)
-			   (:temperature double-float))
-			  (values double-float 
+(defun amoeba (simplex funk &key (itmax 500) (ftol 1d-5) (temperature 1000d0))
+  (declare ((simple-array double-float 2) simplex)
+	   (function funk)
+	   (fixnum itmax)
+	   (double-float ftol temperature)
+	   (values double-float 
 				  (simple-array double-float *)
 				  double-float
 				  double-float 
 				  (simple-array double-float *)
-				  &optional))))
-(defun amoeba (simplex funk &key (itmax 500) (ftol 1d-5) (temperature 1000d0))
+				  &optional))
   (destructuring-bind (nr-points n)
       (array-dimensions simplex)
    (let* ((alpha 1d0) ;; reflected size
@@ -280,10 +279,11 @@ the coordinates. Return the centroid."
 				   worst worst-value)
 	    (find-extrema values temperature)
 	  (declare (ignore second-worst))
+	  (format t "~f~%" best-value)
 	  (when (< best-value best-ever-value) ;; store the best value 
 	    (v-set best-ever (displace simplex best))
 	    (setf best-ever-value best-value))
-	  (dformat t "~a~%" (list 'best-ever best-ever best-ever-value))
+;;	  (dformat t "~a~%" (list 'best-ever best-ever best-ever-value))
 	  ;;      rtol=2 |h-l| / ( |h| + |l| + TINY) 
 	  (let ((rtol (* 2d0 (/ (abs (- best-value worst-value))
 				(+ (abs best-value)
@@ -306,14 +306,14 @@ the coordinates. Return the centroid."
 		   (reflected (v-extrapolate centroid (displace simplex worst) alpha))
 		   (reflected-value (funcall funk reflected))
 		   (reflected-heat (heat (- temperature) reflected-value)))
-	      (dformat t "~a~%" (list 'reflected reflected reflected-value))
+	;;      (dformat t "~a~%" (list 'reflected reflected reflected-value))
 	      ;; if new point better than current best, expand the simplex
 	      (when (< reflected-heat best-value)
 		(let* ((expanded (v+ (v* reflected rho)
 				     (v* centroid (- 1 rho))))
 		       (expanded-value (funcall funk expanded))
 		       (expanded-heat (heat (- temperature) expanded-value)))
-		  (dformat t "~a~%" (list 'expanded expanded expanded-value))
+		;;  (dformat t "~a~%" (list 'expanded expanded expanded-value))
 		  ;; keep whichever is best
 		  (if (< expanded-heat reflected-value)
 		      (replace-worst expanded expanded-value)
@@ -321,7 +321,7 @@ the coordinates. Return the centroid."
 		  (go label1)))
 	      ;; new point lies between others, keep:
 	      (when (< reflected-heat second-worst-value)
-		(dformat t "keep~%")
+	;;	(dformat t "keep~%")
 		(replace-worst reflected reflected-value)
 		(go label1))
 	      ;; new point is better than the worst one we had, contract:
@@ -331,7 +331,7 @@ the coordinates. Return the centroid."
 						  gamma))
 		       (contracted-value (funcall funk contracted))
 		       (contracted-heat (heat (- temperature) contracted-value)))
-		  (dformat t "~a~%" (list 'contracted
+		#+nil  (dformat t "~a~%" (list 'contracted
 					 contracted contracted-value))
 		  ;; use it if it helped
 		  (when (< contracted-heat reflected-value)
@@ -389,13 +389,17 @@ the coordinates. Return the centroid."
 	    (y (aref p 1))
 	    (result (+ (sq (- 1 x))
 		       (* 100 (sq (- y (sq x)))))))
-       (format t "~a~%" (list 'rosenbrock p result))
+#+nil       (format t "~a~%" (list 'rosenbrock p result))
      result))
-   (let ((start (make-array 2 :element-type 'double-float
-			    :initial-contents (list 1.5d0 1.5d0))))
-     (anneal (make-simplex start 1d0)
-	     #'rosenbrock
-	     :ftol 1d-5))))
+   (with-open-file (*standard-output* "/dev/shm/a" :if-exists :supersede
+				      :if-does-not-exist :create
+				      :direction :output)
+    (let ((start (make-array 2 :element-type 'double-float
+			     :initial-contents (list 1.5d0 1.5d0))))
+      (anneal (make-simplex start 1d0)
+	      #'rosenbrock
+	      :itmax 60
+	      :ftol 1d-1)))))
 
 #+nil
 (rosenbrock (make-array 2 :element-type 'double-float
@@ -415,23 +419,3 @@ the coordinates. Return the centroid."
     (dotimes (j n)
       (incf (aref result j j) step))
     result))
-
-;; (declaim (ftype (function (double-float)
-;; 			  (values double-float &optional))
-;; 		sq))
-;; (defun sq (x)
-;;   (* x x))
-
-;; (declaim (ftype (function ((array double-float *))
-;; 			  (values double-float &optional))
-;; 		rosenbrock))
-;; (defun rosenbrock (p)
-;;   (let* ((x (aref p 0))
-;; 	 (y (aref p 1))
-;; 	 (result (+ (sq (- 1 x))
-;; 		    (* 100 (sq (- y (sq x)))))))
-;;     (dformat t "~a~%" (list 'rosenbrock p result))
-;;     result))
-;; #+nil
-;; (rosenbrock (make-array 2 :element-type 'double-float
-;; 			 :initial-contents (list 1.5d0 1.5d0)))
