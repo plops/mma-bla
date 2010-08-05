@@ -549,7 +549,8 @@ distance is chosen."
 		   :z (* 8 z) :x (* 2 r) :y (* 2 r)
 		   :pixel-size-z (* .25d0 dz) :pixel-size-x (* .5d0 dx)
 		   :integrand-evaluations 400
-		   :debug t)))))
+		   :debug t
+		   :initialize t)))))
     (defparameter *psf* psf)
     (write-pgm "/home/martin/tmp/psf.pgm"
 	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
@@ -770,7 +771,7 @@ which point on the periphery of the corresponding circle is meant."
 				     :if-exists :supersede)
     (simplex-anneal:anneal (simplex-anneal:make-simplex start .04d0)
 			   #'merit-function
-			   :start-temperature 12d0
+			   :start-temperature 1d0
 			   :itmax 120
 			   :ftol 1d-1)))
 

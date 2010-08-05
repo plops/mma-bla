@@ -350,15 +350,13 @@ the coordinates. Return the centroid."
 		  (setf (aref values i) (funcall funk (displace simplex i)))))
 	      (go label1))))))))
 
-(declaim (ftype (function ((simple-array double-float (* *))
-			   function 
-			   &key (:itmax fixnum) (:ftol double-float)
-			   (:start-temperature double-float))
-			  (values double-float 
-				  (simple-array double-float *) &optional))))
-(defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0))
+(defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0)
+	       (eps/m .02d0))
+  (declare ((simple-array double-float 2) simplex)
+	   (function funk)
+	   (fixnum itmax)
+	   (double-float ftol start-temperature eps/m))
   (let* ((m 30)
-	 (eps/m .02d0)
 	 (eps (* eps/m m))
 	 (temp start-temperature))
     (do ((count 0 (incf count)))
@@ -389,7 +387,7 @@ the coordinates. Return the centroid."
 	    (y (aref p 1))
 	    (result (+ (sq (- 1 x))
 		       (* 100 (sq (- y (sq x)))))))
-#+nil       (format t "~a~%" (list 'rosenbrock p result))
+       #+nil (format t "~a~%" (list 'rosenbrock p result))
      result))
    (with-open-file (*standard-output* "/dev/shm/a" :if-exists :supersede
 				      :if-does-not-exist :create
