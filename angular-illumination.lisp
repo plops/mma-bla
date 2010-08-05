@@ -569,53 +569,6 @@ distance is chosen."
 #+nil
 (time (init-angular-psf)) ;; 62.2 s
 
-;; from onlisp fig 18-1
-(defmacro dbind (pat seq &body body)
-       (let ((gseq (gensym)))
-        `(let ((,gseq ,seq))
-           ,(dbind-ex (destruc pat gseq #'atom) body))))
-
-(defun destruc (pat seq &optional (atom? #'atom) (n 0))
-       (if (null pat)
-          nil
-          (let ((rest (cond ((funcall atom? pat) pat)
-                                ((eq (car pat) '&rest) (cadr pat))
-                                ((eq (car pat) '&body) (cadr pat))
-                                (t nil))))
-           (if rest
-                 `((,rest (subseq ,seq ,n)))
-                 (let ((p (car pat))
-                         (rec (destruc (cdr pat) seq atom? (1+ n))))
-                  (if (funcall atom? p)
-                         (cons `(,p (elt ,seq ,n))
-                               rec)
-                         (let ((var (gensym)))
-                           (cons (cons `(,var (elt ,seq ,n))
-                                         (destruc p var atom?))
-                                 rec))))))))
-
-(defun dbind-ex (binds body)
-       (if (null binds)
-          `(progn ,@body)
-          `(let , (mapcar #'(lambda (b)
-			      (if (consp (car b))
-                                       (car b)
-                                       b))
-                            binds)
-            , (dbind-ex (mapcan #'(lambda (b)
-                                         (if (consp (car b))
-                                              (cdr b)))
-                                    binds)
-                           body))))
-#+nil
-(destructuring-bind (z y x)
-    (array-dimensions *index-spheres*)
- (dbind (i j k)
-     (aref *centers* 50)
-   (* z y x (aref *index-spheres* k j i))))
-#+nil
-(array-dimensions *index-spheres*)
-
 (defun get-visible-nuclei (k)
   "Find all the nuclei in slice K."
   (declare (fixnum k)
@@ -641,9 +594,10 @@ distance is chosen."
 	 collect
 	 (1- i)))))
 #+nil
-(loop for i below (array-dimension *index-spheres* 0) 
-   collect
-     (get-visible-nuclei i))
+(time
+ (loop for i below (array-dimension *index-spheres* 0) 
+    collect
+    (get-visible-nuclei i)))
 
 #+nil
 (dotimes (i (length *centers*))
