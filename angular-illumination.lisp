@@ -740,7 +740,7 @@ which point on the periphery of the corresponding circle is meant."
 (defun merit-function (vec2)
   (declare ((simple-array double-float (2)) vec2)
 	   (values double-float &optional))
-  (let* ((border-value .0d0) ;; value to return when outside of bfp
+  (let* ((border-value .9d0) ;; value to return when outside of bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
 	 ;; border of the bfp
 	 ;; enforce bad merit
@@ -763,17 +763,17 @@ which point on the periphery of the corresponding circle is meant."
     sum))
 
 #+nil
-(let ((start (make-array 2 :element-type 'double-float
-			 :initial-contents (list .3d0 .4d0)))
-      (*nucleus-index* 50))
-  (with-open-file (*standard-output* "/dev/shm/a"
-				     :direction :output
-				     :if-exists :supersede)
-    (simplex-anneal:anneal (simplex-anneal:make-simplex start .04d0)
-			   #'merit-function
-			   :start-temperature 1d0
-			   :itmax 120
-			   :ftol 1d-1)))
+(time
+ (let* ((*nucleus-index* 50))
+   (with-open-file (*standard-output* "/dev/shm/a"
+				      :direction :output
+				      :if-exists :supersede)
+     (simplex-anneal:anneal (simplex-anneal:make-simplex (make-vec2 :x 0d0 :y 0d0) .3d0)
+			    #'merit-function
+			    :start-temperature 1.2d0
+			    :eps/m .01d0
+			    :itmax 30
+			    :ftol .002d0))))
 
 
 

@@ -203,6 +203,18 @@ modified VEC-RESULT."
       (setf (aref result i) (* scalar (aref vec i))))
     result))
 
+(defun displace-reference (simplex i)
+  "Extract the i-th i=0..n point from the simplex. Changing the result
+will modify the simplex as well."
+  (declare ((simple-array double-float 2) simplex)
+	   (fixnum i)
+	   (values (array double-float 1) &optional))
+  (let ((n (array-dimension simplex 1))) ;; we want the small index
+    (make-array n 
+		:element-type 'double-float
+		:displaced-to simplex
+		:displaced-index-offset (* i n))))
+
 (defun displace (simplex i)
   "Extract the i-th i=0..n point from the simplex."
   (declare ((simple-array double-float 2) simplex)
@@ -212,10 +224,9 @@ modified VEC-RESULT."
     ;; force copy into simple-array
     (make-array n :element-type 'double-float
 		:initial-contents
-		(make-array n 
-			    :element-type 'double-float
-			    :displaced-to simplex
-			    :displaced-index-offset (* i n)))))
+		(displace-reference simplex i))))
+
+
 
 (declaim (ftype (function ((array double-float (*))
 			   (array double-float (*))
@@ -252,11 +263,11 @@ the coordinates. Return the centroid."
 	   (fixnum itmax)
 	   (double-float ftol temperature)
 	   (values double-float 
-				  (simple-array double-float *)
-				  double-float
-				  double-float 
-				  (simple-array double-float *)
-				  &optional))
+		   (simple-array double-float 1)
+		   double-float
+		   double-float 
+		   (simple-array double-float 1)
+		   &optional))
   (destructuring-bind (nr-points n)
       (array-dimensions simplex)
    (let* ((alpha 1d0) ;; reflected size
@@ -266,10 +277,10 @@ the coordinates. Return the centroid."
 	  (iteration 0)
 	  (best-ever (make-array n :element-type 'double-float))
 	  (best-ever-value 1d100)
-	  (values (make-array nr-points :element-type 'double-float)))
+	  (vals (make-array nr-points :element-type 'double-float)))
      ;; evaluate function on all vertices
      (dotimes (i nr-points)
-       (setf (aref values i)
+       (setf (aref vals i)
 	     (funcall funk (displace simplex i))))
      (tagbody
       label1
@@ -277,11 +288,11 @@ the coordinates. Return the centroid."
 	(multiple-value-bind (best best-value
 				   second-worst second-worst-value
 				   worst worst-value)
-	    (find-extrema values temperature)
+	    (find-extrema vals temperature)
 	  (declare (ignore second-worst))
 	  (format t "~f~%" best-value)
 	  (when (< best-value best-ever-value) ;; store the best value 
-	    (v-set best-ever (displace simplex best))
+	    (v-set best-ever (displace-reference simplex best))
 	    (setf best-ever-value best-value))
 ;;	  (dformat t "~a~%" (list 'best-ever best-ever best-ever-value))
 	  ;;      rtol=2 |h-l| / ( |h| + |l| + TINY) 
@@ -291,6 +302,7 @@ the coordinates. Return the centroid."
 				   1d-20)))))
 	    (when (or (< rtol ftol)
 		      (< itmax iteration))
+	      (format t "amoeba ~a~%" (list simplex best  best-value))
 	      (return-from amoeba (values best-value
 					  (displace simplex best)
 					  rtol
@@ -299,8 +311,8 @@ the coordinates. Return the centroid."
 	  
 	  (macrolet ((replace-worst (new-point new-value)
 		       `(progn
-			  (v-set (displace simplex worst) ,new-point)
-			  (setf (aref values worst) ,new-value))))
+			  (v-set (displace-reference simplex worst) ,new-point)
+			  (setf (aref vals worst) ,new-value))))
 	    (let* ((centroid (calc-centroid simplex worst))
 		   ;; reflect worst point around centroid
 		   (reflected (v-extrapolate centroid (displace simplex worst) alpha))
@@ -342,12 +354,12 @@ the coordinates. Return the centroid."
 	      ;; simplex around the best point
 	      (dotimes (i nr-points)
 		(unless (eq i best)
-		  (v-set (displace simplex i)
+		  (v-set (displace-reference simplex i)
 			 (v+ (displace simplex best)
 			     (v* (v- (displace simplex i)
 				     (displace simplex best))
 				 sigma)))
-		  (setf (aref values i) (funcall funk (displace simplex i)))))
+		  (setf (aref vals i) (funcall funk (displace simplex i)))))
 	      (go label1))))))))
 
 (defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0)
@@ -355,7 +367,8 @@ the coordinates. Return the centroid."
   (declare ((simple-array double-float 2) simplex)
 	   (function funk)
 	   (fixnum itmax)
-	   (double-float ftol start-temperature eps/m))
+	   (double-float ftol start-temperature eps/m)
+	   (values double-float (simple-array double-float 1) &optional))
   (let* ((m 30)
 	 (eps (* eps/m m))
 	 (temp start-temperature))
@@ -389,15 +402,18 @@ the coordinates. Return the centroid."
 		       (* 100 (sq (- y (sq x)))))))
        #+nil (format t "~a~%" (list 'rosenbrock p result))
      result))
-   (with-open-file (*standard-output* "/dev/shm/a" :if-exists :supersede
+   (with-open-file (*standard-output* "/dev/shm/a"
+				      :if-exists :supersede
 				      :if-does-not-exist :create
 				      :direction :output)
     (let ((start (make-array 2 :element-type 'double-float
 			     :initial-contents (list 1.5d0 1.5d0))))
       (anneal (make-simplex start 1d0)
 	      #'rosenbrock
-	      :itmax 60
-	      :ftol 1d-1)))))
+	      :start-temperature 100d0
+	      :itmax 100000
+	      :ftol 1d-9
+	      :eps/m .01d0)))))
 
 #+nil
 (rosenbrock (make-array 2 :element-type 'double-float
@@ -411,7 +427,7 @@ the coordinates. Return the centroid."
   (let* ((n (array-dimension start 0))
 	 (result (make-array (list (1+ n) n) :element-type 'double-float)))
     (dotimes (j (1+ n))
-      (v-set (displace result j) start))
+      (v-set (displace-reference result j) start))
     ;; change the first n points by step
     ;; the last point in result stays unaltered
     (dotimes (j n)
