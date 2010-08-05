@@ -472,6 +472,7 @@ distance is chosen."
 				  ;; pixels and slices
 			*centers* ;; integral center coordinates of
 				  ;; the nuclei (0 .. dim-x) ...
+			*index-spheres* ;; each nuclei is drawn with its index
 			*sphere-c-r* ;; scaled (isotropic axis, in
 				     ;; micrometeres) and shifted (so
 				     ;; that origin in center of
@@ -509,7 +510,7 @@ distance is chosen."
        (make-array (length result-l) :element-type 'sphere
 		   :initial-contents result-l)))))
 
-(defun init-model ()
+(defun init-angular-model ()
   ;; find the centers of the nuclei and store into *centers*
   (multiple-value-bind (c ch dims)
       (find-centers)
@@ -518,14 +519,23 @@ distance is chosen."
     (defparameter *dims* dims)
     (sb-ext:gc :full t))
 
-  (defparameter *central-sphere* 22)
   (defparameter *spheres-c-r*
-    (create-sphere-array *dims* *centers*)))
+    (create-sphere-array *dims* *centers*))
+   (let ((spheres
+	 (destructuring-bind (z y x)
+	     *dims*
+	   (draw-indexed-ovals 12d0 *centers* z y x))))
+    (setf *index-spheres* spheres)
+    (write-pgm "/home/martin/tmp/angular-indexed-spheres-cut.pgm"
+	       (normalize2-cdf/ub8-realpart
+		(cross-section-xz *index-spheres* 
+				  (vec-i-y (elt *centers* 31)))))
+    (sb-ext:gc :full t)))
 
 #+nil
-(time (init-model)) ;; 2.7 s
+(time (init-angular-model)) 
 
-(defun init-psf ()
+(defun init-angular-psf ()
   ;; calculate angular intensity psf, make extend in z big enough to
   ;; span the full fluorophore concentration even when looking at the
   ;; bottom plane of it
@@ -557,7 +567,83 @@ distance is chosen."
     (sb-ext:gc :full t)))
 
 #+nil
-(time (init-psf)) ;; 62.2 s
+(time (init-angular-psf)) ;; 62.2 s
+
+;; from onlisp fig 18-1
+(defmacro dbind (pat seq &body body)
+       (let ((gseq (gensym)))
+        `(let ((,gseq ,seq))
+           ,(dbind-ex (destruc pat gseq #'atom) body))))
+
+(defun destruc (pat seq &optional (atom? #'atom) (n 0))
+       (if (null pat)
+          nil
+          (let ((rest (cond ((funcall atom? pat) pat)
+                                ((eq (car pat) '&rest) (cadr pat))
+                                ((eq (car pat) '&body) (cadr pat))
+                                (t nil))))
+           (if rest
+                 `((,rest (subseq ,seq ,n)))
+                 (let ((p (car pat))
+                         (rec (destruc (cdr pat) seq atom? (1+ n))))
+                  (if (funcall atom? p)
+                         (cons `(,p (elt ,seq ,n))
+                               rec)
+                         (let ((var (gensym)))
+                           (cons (cons `(,var (elt ,seq ,n))
+                                         (destruc p var atom?))
+                                 rec))))))))
+
+(defun dbind-ex (binds body)
+       (if (null binds)
+          `(progn ,@body)
+          `(let , (mapcar #'(lambda (b)
+			      (if (consp (car b))
+                                       (car b)
+                                       b))
+                            binds)
+            , (dbind-ex (mapcan #'(lambda (b)
+                                         (if (consp (car b))
+                                              (cdr b)))
+                                    binds)
+                           body))))
+#+nil
+(destructuring-bind (z y x)
+    (array-dimensions *index-spheres*)
+ (dbind (i j k)
+     (aref *centers* 50)
+   (* z y x (aref *index-spheres* k j i))))
+#+nil
+(array-dimensions *index-spheres*)
+
+(defun get-visible-nuclei (k)
+  "Find all the nuclei in slice K."
+  (declare (fixnum k)
+	   (values list &optional))
+  (destructuring-bind (z y x)
+      (array-dimensions *index-spheres*)
+    (unless (< k z)
+      (error "slice k isn't contained in array *index-spheres*."))
+    ;; use bit-vector to store which nuclei are contained
+    (let* ((n (length *centers*))
+	   (big (destructuring-bind (z y x)
+		    (array-dimensions *index-spheres*)
+		  (* x y z)))
+	   (result (make-array n
+			       :element-type 'boolean
+			       :initial-element nil)))
+      (do-rectangle (j i 0 y 0 x)
+	(let ((v (round (* big (realpart (aref *index-spheres* k j i))))))
+	  (when (< 0 v n)
+	   (setf (aref result v) t))))
+      (loop for i from 1 below n
+	 when (aref result i)
+	 collect
+	 (1- i)))))
+#+nil
+(loop for i below (array-dimension *index-spheres* 0) 
+   collect
+     (get-visible-nuclei i))
 
 #+nil
 (dotimes (i (length *centers*))
@@ -774,8 +860,8 @@ which point on the periphery of the corresponding circle is meant."
    (with-open-file (*standard-output* "/dev/shm/a"
 				      :direction :output
 				      :if-exists :supersede)
-     (let ((*nucleus-index* 50));; dotimes (*nucleus-index* nn)
-       (dotimes (i 1)
+     (dotimes (*nucleus-index* nn)
+       (dotimes (i 10)
 	 (tagbody again
 	    (multiple-value-bind (min point)
 		(simplex-anneal:anneal (simplex-anneal:make-simplex
@@ -787,7 +873,6 @@ which point on the periphery of the corresponding circle is meant."
 				       :start-temperature 2.4d0 
 				       :eps/m .02d0
 				       :itmax 1000
-				       :simplex-min-size .1d0
 				       :ftol 1d-3)
 	      (unless (<= min 100d0)
 		(go again))

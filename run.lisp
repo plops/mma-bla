@@ -388,6 +388,22 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
     (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
 				       (draw-oval-ub8 radius z y x))))))
 
+(defun draw-indexed-ovals (radius centers z y x)
+  "The first oval contains the value 1 the second 2, ..."
+  (let* ((dims (list z y x))
+	 (points (make-array dims
+			     :element-type '(complex double-float)))
+	 (n (length centers)))
+    (dotimes (i n)
+      (let ((c (aref centers i)))
+	(setf (aref points
+		    (vec-i-z c)
+		    (vec-i-y c)
+		    (vec-i-x c))
+	      (complex (+ 1d0 i) 0d0))))
+    (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
+				       (draw-oval-ub8 radius z y x))))))
+
 
 
 #+nil

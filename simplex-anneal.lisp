@@ -315,9 +315,9 @@ the coordinates. Return the centroid."
 				(+ (abs best-value)
 				   (abs worst-value)
 				   1d-20)))))
-	    (format t "volum ~f~%" (abs (simplex-volume simplex)))
 	    (when (or (< rtol ftol)
-		      (< (abs (simplex-volume simplex)) min-volume)
+		      ;; should only be checked for low temperatures
+		      ;;(< (abs (simplex-volume simplex)) min-volume)
 		      (< itmax iteration))
 	      (return-from amoeba (values best-value
 					  (displace simplex best)
