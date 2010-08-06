@@ -473,7 +473,7 @@ distance is chosen."
 			*centers* ;; integral center coordinates of
 				  ;; the nuclei (0 .. dim-x) ...
 			*index-spheres* ;; each nuclei is drawn with its index
-			*sphere-c-r* ;; scaled (isotropic axis, in
+			*spheres-c-r* ;; scaled (isotropic axis, in
 				     ;; micrometeres) and shifted (so
 				     ;; that origin in center of
 				     ;; volume) coordinates
@@ -521,12 +521,22 @@ distance is chosen."
 
   (defparameter *spheres-c-r*
     (create-sphere-array *dims* *centers*))
-   (let ((spheres
+  (let ((spheres
 	 (destructuring-bind (z y x)
 	     *dims*
 	   (draw-indexed-ovals 12d0 *centers* z y x))))
     (setf *index-spheres* spheres)
     (write-pgm "/home/martin/tmp/angular-indexed-spheres-cut.pgm"
+	       (normalize2-cdf/ub8-realpart
+		(cross-section-xz *index-spheres* 
+				  (vec-i-y (elt *centers* 31)))))
+    (sb-ext:gc :full t))
+  (let ((spheres
+	 (destructuring-bind (z y x)
+	     *dims*
+	   (draw-ovals 12d0 *centers* z y x))))
+    (setf *spheres* spheres)
+    (write-pgm "/home/martin/tmp/angular-spheres-cut.pgm"
 	       (normalize2-cdf/ub8-realpart
 		(cross-section-xz *index-spheres* 
 				  (vec-i-y (elt *centers* 31)))))
@@ -598,6 +608,54 @@ distance is chosen."
  (loop for i below (array-dimension *index-spheres* 0) 
     collect
     (get-visible-nuclei i)))
+
+
+;; create a volume containing just the current slice
+(defun get-lcos-volume (k)
+  (declare (fixnum k)
+	   (values (simple-array (complex double-float) 3) &optional))
+  (destructuring-bind (z y x)
+      (array-dimensions *index-spheres*)
+    (unless (< 0 k z)
+      (error "slice index k out of range."))
+    (let ((vol (make-array (list z y x)
+			   :element-type '(complex double-float))))
+      (do-rectangle (j i 0 y 0 x)
+	(setf (aref vol k j i) (aref *spheres* k j i)))
+      vol)))
+
+#+nil
+(write-pgm "/home/martin/tmp/angular-0lcos-cut.pgm"
+	   (normalize2-cdf/ub8-realpart
+	    (cross-section-xz (get-lcos-volume 21))))
+
+(defun write-section (fn vol)
+  (declare (simple-string fn)
+	   ((simple-array (complex double-float) 3) vol)
+	   (values null &optional))
+  (write-pgm fn (normalize2-cdf/ub8-realpart (cross-section-xz vol))))
+
+;; calculate the light field for one nucleus
+(defun calc-light-field (k nucleus)
+  (declare (fixnum k nucleus))
+  (let ((lcos (get-lcos-volume k))
+	(psf (let ((dx .2d0)
+		   (dz 1d0)
+		   (r 100)
+		   (z (array-dimension *spheres* 0))) 
+	       (angular-psf :x r :y r :z (* 2 z) :pixel-size-x dx :pixel-size-z dz
+			    :integrand-evaluations 400))))
+    (write-section "/home/martin/tmp/angular-1expsf-cut.pgm" psf)
+    (multiple-value-bind (conv conv-start)
+	(convolve3-nocrop lcos psf)
+      (defparameter *angular-light-field* conv)
+      (defparameter *angular-light-field-start* conv-start)
+      (write-section "/home/martin/tmp/angular-2light-cut.pgm" conv))))
+
+#+nil ;; 75s
+(time (let ((k 22))
+	(calc-light-field k
+			  (first (get-visible-nuclei k)))))
 
 #+nil
 (dotimes (i (length *centers*))
