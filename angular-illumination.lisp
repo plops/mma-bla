@@ -589,14 +589,11 @@ distance is chosen."
       (error "slice k isn't contained in array *index-spheres*."))
     ;; use bit-vector to store which nuclei are contained
     (let* ((n (length *centers*))
-	   (big (destructuring-bind (z y x)
-		    (array-dimensions *index-spheres*)
-		  (* x y z)))
 	   (result (make-array n
 			       :element-type 'boolean
 			       :initial-element nil)))
       (do-rectangle (j i 0 y 0 x)
-	(let ((v (round (* big (realpart (aref *index-spheres* k j i))))))
+	(let ((v (round (realpart (aref *index-spheres* k j i)))))
 	  (when (< 0 v n)
 	   (setf (aref result v) t))))
       (loop for i from 1 below n
@@ -607,11 +604,11 @@ distance is chosen."
 (time
  (loop for i below (array-dimension *index-spheres* 0) 
     collect
-    (get-visible-nuclei i)))
+    (list i (get-visible-nuclei i))))
 
 
 ;; create a volume containing just the current slice
-(defun get-lcos-volume (k)
+(defun get-lcos-volume (k nucleus)
   (declare (fixnum k)
 	   (values (simple-array (complex double-float) 3) &optional))
   (destructuring-bind (z y x)
@@ -620,42 +617,150 @@ distance is chosen."
       (error "slice index k out of range."))
     (let ((vol (make-array (list z y x)
 			   :element-type '(complex double-float))))
+      ;; only the current nucleus will be illuminated
+      ;; note that nucleus 0 has value 1 in index-spheres 
       (do-rectangle (j i 0 y 0 x)
-	(setf (aref vol k j i) (aref *spheres* k j i)))
+	(if (< (abs (- nucleus (1- (aref *index-spheres* k j i)))) .5d0)
+	    (setf (aref vol k j i) (aref *spheres* k j i))))
       vol)))
 
-#+nil
-(write-pgm "/home/martin/tmp/angular-0lcos-cut.pgm"
-	   (normalize2-cdf/ub8-realpart
-	    (cross-section-xz (get-lcos-volume 21))))
+#+ni
+(let* ((k 25)
+       (nuc (first (get-visible-nuclei k)))
+       (vol (get-lcos-volume k nuc)))
+  (format t "~a~%" `(nuc ,nuc))
+  (write-section "/home/martin/tmp/angular-0lcos-cut.pgm" vol)
+  (save-stack-ub8 "/home/martin/tmp/angular-0lcos" (normalize3-cdf/ub8-realpart vol)))
 
-(defun write-section (fn vol)
+
+(defun write-section (fn vol &optional (y (floor (array-dimension vol 1) 2)))
   (declare (simple-string fn)
 	   ((simple-array (complex double-float) 3) vol)
 	   (values null &optional))
-  (write-pgm fn (normalize2-cdf/ub8-realpart (cross-section-xz vol))))
+  (write-pgm fn (normalize2-cdf/ub8-realpart (cross-section-xz vol y))))
 
-;; calculate the light field for one nucleus
+(defvar *nucleus-index* 50)
+(defvar *bfp-window-radius* .2d0)
+
+;; the following global variable contain state for merit-function:
+;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
+(defun merit-function (vec2)
+  (declare ((simple-array double-float (2)) vec2)
+	   (values double-float &optional))
+  (let* ((border-value 100d0) ;; value to return when outside of bfp
+	 ;; this has to be considerably bigger than the maxima on the bfp
+	 (border-width *bfp-window-radius*) ;; in this range to the
+	 ;; border of the bfp
+	 ;; enforce bad merit
+	 ;; function
+	 (sum 0d0)
+	 (radius (norm2 vec2)))
+    (if (< radius (- .99d0 border-width))
+	;; inside
+	(loop for dirs in '((:right :left)
+			    (:top :bottom)) do
+	     (loop for dir in dirs do
+		  (loop for bfp-dir in dirs do
+		       (incf sum
+			     (illuminate-ray *spheres-c-r* *nucleus-index* dir
+					     (vec2-x vec2) (vec2-y vec2)
+					     *bfp-window-radius*
+					     bfp-dir)))))
+	;; in the border-width or outside of bfp
+	(incf sum border-value))
+    sum))
+
+(defun find-optimal-bfp-window-center (nucleus)
+  (declare (fixnum nucleus)
+	   (values vec2 &optional))
+  (let ((*nucleus-index* nucleus))
+    (loop
+       (multiple-value-bind (min point)
+	   (simplex-anneal:anneal (simplex-anneal:make-simplex
+				   (make-vec2 :x -1d0 :y -1d0) 1d0)
+				  #'merit-function
+				  ;; set temperature bigger than the
+				  ;; maxima in the bfp but smaller
+				  ;; than border-value
+				  :start-temperature 2.4d0 
+				  :eps/m .02d0
+				  :itmax 1000
+				  :ftol 1d-3)
+	 (when (< min 100d0)
+	   (return-from find-optimal-bfp-window-center point))))))
+
+#+nil
+(find-optimal-bfp-window-center 50)
+;; FIXME: are these coordinates in mm or relative positions for a bfp-radius of 1?
+;; I think the latter, but I'm not sure.
+
+
+
+;; calculate the excitation one nucleus
 (defun calc-light-field (k nucleus)
   (declare (fixnum k nucleus))
-  (let ((lcos (get-lcos-volume k))
-	(psf (let ((dx .2d0)
-		   (dz 1d0)
-		   (r 100)
-		   (z (array-dimension *spheres* 0))) 
-	       (angular-psf :x r :y r :z (* 2 z) :pixel-size-x dx :pixel-size-z dz
-			    :integrand-evaluations 400))))
-    (write-section "/home/martin/tmp/angular-1expsf-cut.pgm" psf)
+  (let* ((lcos (get-lcos-volume k nucleus))
+	 (bfp-pos (find-optimal-bfp-window-center nucleus))
+	 (psf (let ((dx .2d0)
+		    (dz 1d0)
+		    (r 100)
+		    (z (array-dimension *spheres* 0))) 
+		(angular-psf :x r :y r :z (* 2 z) 
+			     :pixel-size-x dx :pixel-size-z dz
+			     :window-radius *bfp-window-radius*
+			     :window-x (vec2-x bfp-pos)
+			     :window-y (vec2-y bfp-pos)
+			     :initialize t
+			     ;;     :debug t
+			     :integrand-evaluations 400))))
+    (format t "~a~%" `(bfp-pos ,bfp-pos))
+    (write-section (format nil "/home/martin/tmp/angular-1expsf-cut-~3,'0d.pgm" nucleus) psf)
+
     (multiple-value-bind (conv conv-start)
 	(convolve3-nocrop lcos psf)
-      (defparameter *angular-light-field* conv)
-      (defparameter *angular-light-field-start* conv-start)
-      (write-section "/home/martin/tmp/angular-2light-cut.pgm" conv))))
+      ;; light distribution in sample
+      ;(defparameter *angular-light-field* conv)
+      ;(defparameter *angular-light-field-start* conv-start)
+      (write-section (format nil "/home/martin/tmp/angular-2light-cut-~3,'0d.pgm" nucleus) 
+		     conv
+		     (vec-i-y (aref *centers* nucleus)))
+      ;; multiply fluorophore concentration with light distribution
+      (let ((excite (.* conv *spheres* conv-start)))
+	(write-section (format nil "/home/martin/tmp/angular-3excite-cut-~3,'0d.pgm" nucleus)
+		       excite
+		       (vec-i-y (aref *centers* nucleus)))
+	(save-stack-ub8 (format nil "/home/martin/tmp/angular-light-field-~3,'0d/" nucleus)
+			(normalize3-cdf/ub8-realpart excite)))))))
 
-#+nil ;; 75s
-(time (let ((k 22))
-	(calc-light-field k
-			  (first (get-visible-nuclei k)))))
+(defun group (source n)
+  "Split list into sublists of length n"
+  (when (zerop n)
+    (error "zero length"))
+  (labels ((rec (source acc)
+	     (let ((rest (nthcdr n source)))
+	       (if (consp rest)
+		   (rec rest (cons (subseq source 0 n) acc))
+		   (nreverse (cons source acc))))))
+    (if source
+	(rec source nil)
+	nil)))
+
+#+nil (group '(a b c d e f g h i j k) 4)
+
+#+nil ;; the parallel thing will not run, there are too many global variables everywhere
+(time
+ (let* ((k 22)
+	(processors 4)
+	(process-groups (group (get-visible-nuclei k) processors)))
+   ;; let as many tasks run in parallel as there are processors
+   (loop for nucs in process-groups do
+	(loop for nuc in nucs do
+	     (sb-thread:make-thread #'(lambda () (calc-light-field k nuc))
+				    :name (format nil "~d" nuc)))
+      ;; wait for the 4 threads to finish
+	(loop for nuc in nucs do
+	     (sb-thread:join-thread (format nil "~d" nuc)))
+	(sb-ext:gc :full t))))
 
 #+nil
 (dotimes (i (length *centers*))
@@ -829,37 +934,6 @@ which point on the periphery of the corresponding circle is meant."
 	       (aref a j i)))))
    (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-ub8 mosaic))))
 
-(defvar *nucleus-index* 23)
-(defvar *bfp-window-radius* .1d0)
-(defvar *spheres-c-r* nil)
-
-;; the following global variable contain state for merit-function:
-;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
-(defun merit-function (vec2)
-  (declare ((simple-array double-float (2)) vec2)
-	   (values double-float &optional))
-  (let* ((border-value 100d0) ;; value to return when outside of bfp
-	 ;; this has to be considerably bigger than the maxima on the bfp
-	 (border-width *bfp-window-radius*) ;; in this range to the
-	 ;; border of the bfp
-	 ;; enforce bad merit
-	 ;; function
-	 (sum 0d0)
-	 (radius (norm2 vec2)))
-    (if (< radius (- .99d0 border-width))
-	;; inside
-	(loop for dirs in '((:right :left)
-			    (:top :bottom)) do
-	     (loop for dir in dirs do
-		  (loop for bfp-dir in dirs do
-		       (incf sum
-			     (illuminate-ray *spheres-c-r* *nucleus-index* dir
-					     (vec2-x vec2) (vec2-y vec2)
-					     *bfp-window-radius*
-					     bfp-dir)))))
-	;; in the border-width or outside of bfp
-	(incf sum border-value))
-    sum))
 
 #+nil
 (time

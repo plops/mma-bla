@@ -288,7 +288,7 @@ the coordinates. Return the centroid."
 	  (gamma .5d0) ;; contraction ratio
 	  (sigma .5d0) ;; shrink ratio
 	  (iteration 0)
-	  (min-volume (* simplex-min-size simplex-min-size simplex-min-size))
+	;;  (min-volume (* simplex-min-size simplex-min-size simplex-min-size))
 	  (best-ever (make-array n :element-type 'double-float))
 	  (best-ever-value 1d100)
 	  (vals (make-array nr-points :element-type 'double-float)))
@@ -304,7 +304,7 @@ the coordinates. Return the centroid."
 				   worst worst-value)
 	    (find-extrema vals temperature)
 	  (declare (ignore second-worst))
-	  (format t "~f~%" best-value)
+	  ;;(format t "~f~%" best-value)
 	  (when (< best-value best-ever-value) ;; store the best value 
 	    (v-set best-ever (displace-reference simplex best))
 	    (setf best-ever-value best-value))

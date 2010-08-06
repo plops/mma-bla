@@ -729,7 +729,7 @@ be floating point values. If they point outside of IMG 0 is returned."
   "Elementwise multiplication of VOLA and VOLB. Both volumes must have
 the same dimensions or VOLB must be smaller in all dimensions. In the
 latter case a vec-i has to be supplied in VOLB-START to define the
-relative position of VOLA inside VOLB."
+relative position of VOLB inside VOLA."
   (declare ((simple-array (complex double-float) 3) vola volb)
 	   ((or null vec-i) volb-start)
 	   (values (simple-array (complex double-float) 3) &optional))
@@ -740,18 +740,20 @@ relative position of VOLA inside VOLB."
      (destructuring-bind (zz yy xx)
 	 (array-dimensions volb)
        (if volb-start
+	   ;; fill the result with volb multiplied by the
+	   ;; corresponding values from the bigger vola
 	   (let ((sx (vec-i-x volb-start))
 		 (sy (vec-i-y volb-start))
 		 (sz (vec-i-z volb-start)))
 	     (unless (and (<= zz (+ z sz))
 			  (<= yy (+ y sy))
 			  (<= xx (+ x sx)))
-	       (error "VOLA isn't contained in VOLB when shifted by VOLB-START. ~a" 
+	       (error "VOLB isn't contained in VOLA when shifted by VOLB-START. ~a" 
 		      (list zz (+ z sz))))
 	     (do-box (k j i 0 zz 0 yy 0 xx)
 	       (setf (aref result k j i)
 		     (* (aref volb k j i)
-			(aref vola (- k sz) (- j sy) (- i sx))))))
+			(aref vola (+ k sz) (+ j sy) (+ i sx))))))
 	   (progn 
 	     (unless (and (= z zz) (= y yy) (= x xx))
 	       (error "volumes don't have the same size, maybe you can supply a start vector."))
