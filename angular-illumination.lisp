@@ -695,18 +695,19 @@ distance is chosen."
 ;; I think the latter, but I'm not sure.
 #+nil
 (time
- (let ((dx .2d0)
-       (dz 1d0)
+ (let*((dx .1d0)
+       (dz .25d0)
        (r 100)
-       (z (array-dimension *spheres* 0))) 
-   (angular-psf :x r :y r :z (* 2 z) 
+       (z (array-dimension *spheres* 0))
+       (psf (angular-psf :x r :y r :z (* 2 z) 
 		:pixel-size-x dx :pixel-size-z dz
 		:window-radius *bfp-window-radius*
-		:window-x -.031d0
-		:window-y -.425d0
+		:window-x -.714d0
+		:window-y .16d0
 		:initialize t
 		:debug t
-		:integrand-evaluations 400)
+		:integrand-evaluations 400))) 
+   (save-stack-ub8 "/home/martin/tmp/psf" (normalize3-cdf/ub8-realpart psf))
    nil))
 
 
@@ -714,7 +715,7 @@ distance is chosen."
 (defun calc-light-field (k nucleus)
   (declare (fixnum k nucleus))
   (let* ((lcos (get-lcos-volume k nucleus))
-	 (bfp-pos (v2* (find-optimal-bfp-window-center nucleus) -1d0))
+	 (bfp-pos (find-optimal-bfp-window-center nucleus))
 	 (psf (let ((dx .2d0)
 		    (dz 1d0)
 		    (r 100)
