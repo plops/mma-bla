@@ -302,9 +302,9 @@
 	    (cx window-x)
 	    (cy window-y)
 	    (sx (/ dx2 dx3))
-		  (cr2 (* cr cr))
-		  (window (make-array (list y x)
-				      :element-type 'double-float))
+	    (cr2 (* cr cr))
+	    (window (make-array (list y x)
+				:element-type 'double-float))
 	    (kk0 (make-array (array-dimensions k0) :element-type '(complex double-float)))
 	    (kk1 (make-array (array-dimensions k1) :element-type '(complex double-float)))
 	    (kk2 (make-array (array-dimensions k2) :element-type '(complex double-float))))
@@ -693,7 +693,21 @@ distance is chosen."
 (find-optimal-bfp-window-center 50)
 ;; FIXME: are these coordinates in mm or relative positions for a bfp-radius of 1?
 ;; I think the latter, but I'm not sure.
-
+#+nil
+(time
+ (let ((dx .2d0)
+       (dz 1d0)
+       (r 100)
+       (z (array-dimension *spheres* 0))) 
+   (angular-psf :x r :y r :z (* 2 z) 
+		:pixel-size-x dx :pixel-size-z dz
+		:window-radius *bfp-window-radius*
+		:window-x -.031d0
+		:window-y -.425d0
+		:initialize t
+		:debug t
+		:integrand-evaluations 400)
+   nil))
 
 
 ;; calculate the excitation one nucleus
@@ -711,7 +725,7 @@ distance is chosen."
 			     :window-x (vec2-x bfp-pos)
 			     :window-y (vec2-y bfp-pos)
 			     :initialize t
-			     ;;     :debug t
+			     :debug t
 			     :integrand-evaluations 400))))
     (format t "~a~%" `(bfp-pos ,bfp-pos))
     (write-section (format nil "/home/martin/tmp/angular-1expsf-cut-~3,'0d.pgm" nucleus) psf)
@@ -719,48 +733,37 @@ distance is chosen."
     (multiple-value-bind (conv conv-start)
 	(convolve3-nocrop lcos psf)
       ;; light distribution in sample
-      ;(defparameter *angular-light-field* conv)
-      ;(defparameter *angular-light-field-start* conv-start)
+      (defparameter *angular-light-field* conv)
+      (defparameter *angular-light-field-start* conv-start)
       (write-section (format nil "/home/martin/tmp/angular-2light-cut-~3,'0d.pgm" nucleus) 
 		     conv
 		     (vec-i-y (aref *centers* nucleus)))
+      (save-stack-ub8 (format nil "/home/martin/tmp/angular-2light-~3,'0d/" nucleus)
+		      (normalize3-cdf/ub8-realpart conv))
       ;; multiply fluorophore concentration with light distribution
       (let ((excite (.* conv *spheres* conv-start)))
+	(defparameter *excite* excite)
 	(write-section (format nil "/home/martin/tmp/angular-3excite-cut-~3,'0d.pgm" nucleus)
 		       excite
 		       (vec-i-y (aref *centers* nucleus)))
-	(save-stack-ub8 (format nil "/home/martin/tmp/angular-light-field-~3,'0d/" nucleus)
-			(normalize3-cdf/ub8-realpart excite)))))))
-
-(defun group (source n)
-  "Split list into sublists of length n"
-  (when (zerop n)
-    (error "zero length"))
-  (labels ((rec (source acc)
-	     (let ((rest (nthcdr n source)))
-	       (if (consp rest)
-		   (rec rest (cons (subseq source 0 n) acc))
-		   (nreverse (cons source acc))))))
-    (if source
-	(rec source nil)
-	nil)))
-
-#+nil (group '(a b c d e f g h i j k) 4)
-
-#+nil ;; the parallel thing will not run, there are too many global variables everywhere
+	(save-stack-ub8 (format nil "/home/martin/tmp/angular-3excite-~3,'0d/" nucleus)
+			(normalize3-cdf/ub8-realpart excite))))))
+#+nil 
 (time
- (let* ((k 22)
-	(processors 4)
-	(process-groups (group (get-visible-nuclei k) processors)))
-   ;; let as many tasks run in parallel as there are processors
-   (loop for nucs in process-groups do
-	(loop for nuc in nucs do
-	     (sb-thread:make-thread #'(lambda () (calc-light-field k nuc))
-				    :name (format nil "~d" nuc)))
-      ;; wait for the 4 threads to finish
-	(loop for nuc in nucs do
-	     (sb-thread:join-thread (format nil "~d" nuc)))
-	(sb-ext:gc :full t))))
+ (let* ((k 25)
+	(nucs (get-visible-nuclei k)))
+   (loop for nuc in (list (first nucs)) do
+	(calc-light-field k nuc))))
+
+#+nil ;; overlay lightfield and spheres
+(time
+ (save-stack-ub8 "/home/martin/tmp/sphere-and-excite/"
+		 (normalize3-cdf/ub8-realpart 
+		  (labels ((con (vol)
+			     (convert3-ub8/cdf-complex (normalize3-cdf/ub8-realpart vol))))
+		    (.+ (con *angular-light-field*)
+			(s* .2d0 (con *spheres*)) 
+			*angular-light-field-start*)))))
 
 #+nil
 (dotimes (i (length *centers*))
