@@ -640,7 +640,7 @@ distance is chosen."
   (write-pgm fn (normalize2-cdf/ub8-realpart (cross-section-xz vol y))))
 
 (defvar *nucleus-index* 50)
-(defvar *bfp-window-radius* .15d0)
+(defvar *bfp-window-radius* .08d0)
 
 ;; the following global variable contain state for merit-function:
 ;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
@@ -695,8 +695,8 @@ distance is chosen."
 ;; I think the latter, but I'm not sure.
 #+nil
 (time
- (let*((dx .1d0)
-       (dz .25d0)
+ (let*((dx .2d0)
+       (dz 1d0)
        (r 100)
        (z (array-dimension *spheres* 0))
        (psf (angular-psf :x r :y r :z (* 2 z) 
