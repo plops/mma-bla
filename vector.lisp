@@ -1,7 +1,7 @@
 (defpackage :vector
   (:use :cl)
   (:export 
-   #:vec2 #:make-vec2 #:vec2-x #:vec2-y
+   #:vec2 #:make-vec2 #:vec2-x #:vec2-y :v2. :v2*
    #:norm2 #:x #:y #:z
    #:vec #:make-vec #:v #:vec-x #:vec-y #:vec-z
    #:v. #:v+ #:v- #:v* #:norm #:normalize
@@ -25,6 +25,27 @@
   (let ((x (vec2-x vec2))
 	(y (vec2-y vec2)))
     (sqrt (+ (* x x) (* y y)))))
+
+(defun v2. (a b)
+  "Dot product between two vectors."
+  (declare (vec2 a b)
+	   (values double-float &optional))
+  (let ((sum 0d0))
+    (declare (double-float sum))
+    (dotimes (i 2)
+      (incf sum (* (aref a i)
+		   (aref b i))))
+    sum))
+
+(defun  v2* (a scalar)
+  "Multiply vector with scalar."
+  (declare (double-float scalar)
+	   (vec2 a)
+	   (values vec2 &optional))
+  (let* ((result (make-vec2)))
+    (dotimes (i 2)
+      (setf (aref result i) (* scalar (aref a i))))
+    result))
 
 ;;;; double-float 3 vector
 

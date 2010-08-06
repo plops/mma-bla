@@ -640,7 +640,7 @@ distance is chosen."
   (write-pgm fn (normalize2-cdf/ub8-realpart (cross-section-xz vol y))))
 
 (defvar *nucleus-index* 50)
-(defvar *bfp-window-radius* .2d0)
+(defvar *bfp-window-radius* .15d0)
 
 ;; the following global variable contain state for merit-function:
 ;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
@@ -714,7 +714,7 @@ distance is chosen."
 (defun calc-light-field (k nucleus)
   (declare (fixnum k nucleus))
   (let* ((lcos (get-lcos-volume k nucleus))
-	 (bfp-pos (find-optimal-bfp-window-center nucleus))
+	 (bfp-pos (v2* (find-optimal-bfp-window-center nucleus) -1d0))
 	 (psf (let ((dx .2d0)
 		    (dz 1d0)
 		    (r 100)
@@ -762,7 +762,7 @@ distance is chosen."
 		  (labels ((con (vol)
 			     (convert3-ub8/cdf-complex (normalize3-cdf/ub8-realpart vol))))
 		    (.+ (con *angular-light-field*)
-			(s* .2d0 (con *spheres*)) 
+			(s* .7d0 (con *spheres*)) 
 			*angular-light-field-start*)))))
 
 #+nil
