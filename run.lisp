@@ -186,59 +186,6 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ||#
 
 
-(defun draw-sphere-ub8 (radius z y x)
-  (declare (double-float radius)
-	   (fixnum z y x)
-	   (values (simple-array (unsigned-byte 8) 3)
-		   &optional))
-  (let ((sphere (make-array (list z y x)
-			    :element-type '(unsigned-byte 8))))
-    (let ((xh (floor x 2))
-	  (yh (floor y 2))
-	  (zh (floor z 2))
-	  (radius2 (* radius radius)))
-     (do-box (k j i 0 z 0 y 0 x)
-       (let ((r2 (+ (expt (* 1d0 (- i xh)) 2)
-		    (expt (* 1d0 (- j yh)) 2)
-		    (expt (* 1d0 (- k zh)) 2))))
-	 (setf (aref sphere k j i)
-	       (if (< r2 radius2)
-		   1 0)))))
-    sphere))
-#+nil
-(count-non-zero-ub8 (draw-sphere-ub8 1d0 41 58 70))
-#+nil
-(let ((a (draw-sphere-ub8 1d0
-			  4 4 4
-			  ;;3 3 3
-			  ;;41 58 70
-			  ))
-      (res ()))
- (destructuring-bind (z y x)
-     (array-dimensions a)
-   (do-box (k j i 0 z 0 y 0 x)
-     (when (eq 1 (aref a k j i))
-       (setf res (list k j i))))
-   res))
-
-(defun draw-oval-ub8 (radius z y x)
-  (declare (double-float radius)
-	   (fixnum z y x)
-	   (values (simple-array (unsigned-byte 8) 3)
-		   &optional))
-  (let ((sphere (make-array (list z y x)
-			    :element-type '(unsigned-byte 8)))
-	(scale-z 5d0))
-    (do-box (k j i 0 z 0 y 0 x)
-      (let ((r (sqrt (+ (square (- i (* .5d0 x)))
-			(square (- j (* .5d0 y)))
-			(square (* scale-z (- k (* .5d0 z))))))))
-	(setf (aref sphere k j i)
-	      (if (< r radius)
-		  1
-		  0))))
-    sphere))
-
 (declaim (ftype (function ()
 			  (values (simple-array vec-i 1)
 				  (simple-array double-float 1)

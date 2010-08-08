@@ -105,7 +105,9 @@
     #:normalize->ub8
     #:draw-disk
     #:draw-unit-intensity-disk-precise
-    #:draw-unit-energy-disk-precise))
+    #:draw-unit-energy-disk-precise
+    #:draw-sphere-ub8
+    #:draw-oval-ub8))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -758,7 +760,9 @@ be floating point values. If they point outside of IMG 0 is returned."
 					(interpolate3-cdf vol xx yy zz))))))))
 	     result)))))))
 #+nil
-(let ((d (draw-unit-intensity-disk-precise 4d0))))
+(let* ((s0 ())
+       (d1 (resample)))
+  (write-pgm "/home/martin/tmp/disk0.pgm" (normalize2-cdf/ub8-realpart d0)))
 
 (declaim (ftype (function (string (simple-array (complex double-float) 3)
 				  &key (:function function))
@@ -1571,3 +1575,57 @@ coordinates relative to A, replace the contents of A with B."
 #+NIL
 (write-pgm "/home/martin/tmp/disk.pgm"
 	   (normalize2-cdf/ub8-realpart (draw-unit-energy-disk-precise 12.3d0 300 300)))
+
+
+(defun draw-sphere-ub8 (radius z y x)
+  (declare (double-float radius)
+	   (fixnum z y x)
+	   (values (simple-array (unsigned-byte 8) 3)
+		   &optional))
+  (let ((sphere (make-array (list z y x)
+			    :element-type '(unsigned-byte 8))))
+    (let ((xh (floor x 2))
+	  (yh (floor y 2))
+	  (zh (floor z 2))
+	  (radius2 (* radius radius)))
+     (do-box (k j i 0 z 0 y 0 x)
+       (let ((r2 (+ (expt (* 1d0 (- i xh)) 2)
+		    (expt (* 1d0 (- j yh)) 2)
+		    (expt (* 1d0 (- k zh)) 2))))
+	 (setf (aref sphere k j i)
+	       (if (< r2 radius2)
+		   1 0)))))
+    sphere))
+#+nil
+(count-non-zero-ub8 (draw-sphere-ub8 1d0 41 58 70))
+#+nil
+(let ((a (draw-sphere-ub8 1d0
+			  4 4 4
+			  ;;3 3 3
+			  ;;41 58 70
+			  ))
+      (res ()))
+ (destructuring-bind (z y x)
+     (array-dimensions a)
+   (do-box (k j i 0 z 0 y 0 x)
+     (when (eq 1 (aref a k j i))
+       (setf res (list k j i))))
+   res))
+
+(defun draw-oval-ub8 (radius z y x)
+  (declare (double-float radius)
+	   (fixnum z y x)
+	   (values (simple-array (unsigned-byte 8) 3)
+		   &optional))
+  (let ((sphere (make-array (list z y x)
+			    :element-type '(unsigned-byte 8)))
+	(scale-z 5d0))
+    (do-box (k j i 0 z 0 y 0 x)
+      (let ((r (sqrt (+ (square (- i (* .5d0 x)))
+			(square (- j (* .5d0 y)))
+			(square (* scale-z (- k (* .5d0 z))))))))
+	(setf (aref sphere k j i)
+	      (if (< r radius)
+		  1
+		  0))))
+    sphere))
