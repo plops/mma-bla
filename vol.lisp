@@ -659,6 +659,103 @@ be floating point values. If they point outside of IMG 0 is returned."
 		     :initial-contents '((1 2) (2 3)))))
   (interpolate2 a .5d0 .2d0)) 
 
+;; pbourke linearly interpolating points within a box
+(defun interpolate3-cdf (vol xx yy zz)
+  "Trilinear interpolation of a value from a volumetric stack."
+  (declare (inline) 
+   ((simple-array (complex double-float) 3) vol)
+	   (double-float xx yy zz)
+	   (values (complex double-float) &optional))
+  (multiple-value-bind (i x)
+      (floor xx)
+    (multiple-value-bind (j y)
+	(floor yy)
+      (multiple-value-bind (k z)
+	  (floor zz)
+	(let ((ooo (aref vol k j i))
+	      (ioo (aref vol k j (1+ i)))
+	      (oio (aref vol k (1+ j) i))
+	      (ooi (aref vol (1+ k) j i))
+	      (iio (aref vol k (1+ j) (1+ i)))
+	      (ioi (aref vol (1+ k) j (1+ i)))
+	      (oii (aref vol (1+ k) (1+ j) i))
+	      (iii (aref vol (1+ k) (1+ j) (1+ i)))
+	      (a (- 1d0 x))
+	      (b (- 1d0 y))
+	      (c (- 1d0 z)))
+	  (+ (* ooo a b c)
+	     (* ioo x b c)
+	     (* oio a y c)
+	     (* ooi a b z)
+	     (* iio x y c)
+	     (* ioi x b z)
+	     (* oii a y z)
+	     (* iii x y z)))))))
+#+nil
+(let* ((n 3)
+       (a (make-array (list n n n) 
+		      :element-type '(complex double-float)))
+       (a1 (sb-ext:array-storage-vector a)))
+  (dotimes (i (length a1))
+    (setf (aref a1 i) (complex (* 1d0 i))))
+  (interpolate3-cdf a 1.2d0 1.3d0 1.2d0))
+
+;; The following function is meant to resample an angular PSF that has
+;; been calculated with too much resolution. The important thing is
+;; that the central sample stays central. Consider a 1D array with n
+;; elements and stepsize dx: The length of the array will be
+;; X=n*dx. There are c=center(n) samples right of the center and b
+;; samples (with b+c=n) left of the center. The new step size dx'
+;; suggests that c'=(floor c*dx dx') samples are needed right of the
+;; center and analogously b' samples left of the center. The size of
+;; the new array is n'=b'+c'. The float coordinate x' for the new
+;; sample is (i+b')*dx' where i runs from -b' below c'. The central
+;; sample is i=0. This following function implements this scheme for 3
+;; dimensions.
+(defun resample3-cdf (vol dx dy dz dx^ dy^ dz^)
+  "Resample a volume by trilinear interpolation. Ensure that the
+  former center stays in the center."
+  (declare ((simple-array (complex double-float) 3) vol)
+	   (double-float dx dy dz dx^ dy^ dz^)
+	   (values (simple-array (complex double-float) 3) &optional))
+  (labels ((center (n) ;; give the index of the central sample
+	     (declare (fixnum n)
+		      (values fixnum &optional))
+	     (let ((c (if (evenp n)
+			  (ceiling n 2)
+			  (floor n 2))))
+	       c))
+	   (dims (n d d^) ;; calculate new array size from old one and deltas
+	     (declare (fixnum n)
+		      (double-float d d^)
+		      (values fixnum fixnum fixnum &optional))
+	     (let* ((c (center n))
+		    (b (- n c))
+		    (c^ (floor (* c d) d^))
+		    (b^ (floor (* b d) d^))
+		    (n^ (+ c^ b^)))
+	       (values b^ c^ n^))))
+    (destructuring-bind (z y x)
+	(array-dimensions vol)
+      (multiple-value-bind (bx cx nx)
+	  (dims x dx dx^)
+	(multiple-value-bind (by cy ny)
+	    (dims y dy dy^)
+	  (multiple-value-bind (bz cz nz)
+	      (dims z dz dz^)
+	    (let ((result (make-array (list nz ny nx)
+				      :element-type '(complex double-float))))
+	     (loop for k from (- bz) below cz do
+		  (let ((zz (* dz^ (+ k bz))))
+		    (loop for j from (- by) below cy do
+			 (let ((yy (* dy^ (+ j by))))
+			   (loop for i from (- bx) below cx do
+				(let ((xx (* dx^ (+ i bx))))
+				  (setf (aref result k j i)
+					(interpolate3-cdf vol xx yy zz))))))))
+	     result)))))))
+
+
 (declaim (ftype (function (string (simple-array (complex double-float) 3)
 				  &key (:function function))
 			  (values null &optional))
