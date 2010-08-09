@@ -320,7 +320,7 @@
 		     (aref kk1 k j i) (* (aref k1 k j i) (aref window j i))
 		     (aref kk2 k j i) (* (aref k2 k j i) (aref window j i))))
 	     (when debug (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
-				    (normalize2-cdf/ub8-abs (cross-section-xz k0))))
+				    (normalize2-cdf/ub8-abs (cross-section-xz kk0))))
 	     (let* ((e0 (ift3 (fftshift3 kk0)))
 		    (e1 (ift3 (fftshift3 kk1)))
 		    (e2 (ift3 (fftshift3 kk2)))
@@ -406,24 +406,33 @@ diameter of the bfp.
 |                       |     2 rr                 |
 ||#
 
-(defun angular-intensity-psf-minimal-extent (&key
-					     (x 64) (y x) (z 40)
-					     (window-radius .1d0)
-					     (window-x .5d0)
-					     (window-y 0d0)
-					     (wavelength .480d0)
-					     (numerical-aperture 1.38d0)
-					     (immersion-index 1.515d0)
-					     (integrand-evaluations 30)
-					     (debug nil))
+(defun angular-intensity-psf-minimal-resolution (&key
+						 (x-um 50d0) (y-um x-um) (z-um 40d0)
+						 (window-radius .1d0)
+						 (window-x .5d0)
+						 (window-y 0d0)
+						 (wavelength .480d0)
+						 (numerical-aperture 1.38d0)
+						 (immersion-index 1.515d0)
+						 (integrand-evaluations 30)
+						 (debug nil)
+						 (initialize t)
+						 (store-cap nil)
+						 (big-window nil))
   "Calculate angular intensity PSF, ensure that the maximum sampling
-distance is chosen."
+distance is chosen. Set INITIALIZE to nil if the e-field can be reused
+from a previous calculation. In that case you may need to set
+STORE-CAP to true for all evaluations and use a lot more memory. Only
+if the window diameter is going to be bigger than the radius of the
+back focal plane set BIG-WINDOW to true."
   (declare ((double-float 0d0 1d0) window-radius)
 	   ((double-float -1d0 1d0) window-x window-y)
-	   (double-float wavelength numerical-aperture immersion-index)
-	   (fixnum integrand-evaluations x y z)
-	   (boolean debug)
-	   (values (simple-array (complex double-float) 3) &optional))
+	   (double-float wavelength numerical-aperture immersion-index
+			 x-um y-um z-um)
+	   (fixnum integrand-evaluations)
+	   (boolean debug initialize store-cap big-window)
+	   (values (simple-array (complex double-float) 3)
+		   double-float double-float &optional))
   (let* ((k0 (/ (* 2d0 pi) wavelength))
 	 (k (* immersion-index k0))
 	 (R (* numerical-aperture k0))
@@ -437,32 +446,54 @@ distance is chosen."
 	     (top (if (< rho rr)
 		      (max k kza kzb)
 		      (max kza kzb)))
-	     (bot (if (< rho (- R r))
+	     (bot (if (< rho (- R r)) ;; window is in center of bfp
 		      (min (kz R) kza kzb)
 		      (min kza kzb)))
-	     (kzextent (* 2 (- top bot)))
-	     (kxextent (max (* 2 R) (* 4 rr)))
+	     (kzextent (if store-cap
+			   ;; store the full cap without wrapping,
+			   ;; this way one can reuse the efields
+			   (- k (kz R)) 
+			   ;; just leave enough space to accommodate
+			   ;; the final donut, this improves
+			   ;; performance a lot for small windows
+			   (* 16 (- top bot))))
+	     (kxextent (if big-window
+			   ;; for window diameter bigger than
+			   ;; bfp-diam/2 transversally the bfp has to
+			   ;; fit in twice, to accommodate the full
+			   ;; donut
+			   (* 2 R)
+			   R)) 
 	     (dx (/ pi kxextent))
 	     (dz (/ pi kzextent)))
-	(debug-out dx dz kxextent kzextent k rho)
-	(angular-psf :x x :y y :z z :window-radius window-radius
-		     :window-x window-x :window-y window-y
-		     :wavelength wavelength
-		     :numerical-aperture numerical-aperture
-		     :immersion-index immersion-index
-		     :integrand-evaluations integrand-evaluations
-		     :pixel-size-x dx
-		     :pixel-size-z dz
-		     :debug debug)))))
+	(debug-out dx dz kxextent R rr kzextent k rho)
+	(values
+	 (angular-psf :x (floor x-um dx) :y (floor y-um dx) :z (floor z-um dz)
+		      :window-radius window-radius
+		      :window-x window-x :window-y window-y
+		      :wavelength wavelength
+		      :numerical-aperture numerical-aperture
+		      :immersion-index immersion-index
+		      :integrand-evaluations integrand-evaluations
+		      :pixel-size-x dx
+		      :pixel-size-z dz
+		      :debug debug
+		      :initialize initialize)
+	 dx dz)))))
 
 #+nil
 (time
- (progn
-   (angular-intensity-psf-minimal-extent :x 256 :z 128
-					 :window-radius .4d0
-					 :window-x .4d0
-					 :window-y 0d0 :integrand-evaluations 1000 :debug t)
-   nil))
+ (multiple-value-bind (a dx dz)
+     (angular-intensity-psf-minimal-resolution :x-um 20d0 :z-um 40d0
+					       :window-radius .14d0
+					       :window-x .73d0
+					       :window-y 0d0 
+					       :integrand-evaluations 1000 
+					       :debug t)
+   (write-pgm "/home/martin/tmp/cut5-resampled.pgm"
+	      (normalize2-cdf/ub8-realpart
+	       (cross-section-xz 
+		(resample3-cdf a dx dx dz .2d0 .2d0 .2d0))))))
 
 
 
@@ -720,14 +751,16 @@ distance is chosen."
 		    (dz 1d0)
 		    (r 100)
 		    (z (array-dimension *spheres* 0))) 
-		(angular-psf :x r :y r :z (* 2 z) 
-			     :pixel-size-x dx :pixel-size-z dz
-			     :window-radius *bfp-window-radius*
-			     :window-x (vec2-x bfp-pos)
-			     :window-y (vec2-y bfp-pos)
-			     :initialize t
-			     :debug t
-			     :integrand-evaluations 400))))
+		(multiple-value-bind (h ddx ddz)
+		    (angular-intensity-psf-minimal-resolution
+				 :x-um (* r dx) :y-um (* r dx) :z-um (* 2 z dz) 
+				 :window-radius *bfp-window-radius*
+				 :window-x (vec2-x bfp-pos)
+				 :window-y (vec2-y bfp-pos)
+				 :initialize t
+				 :debug t
+				 :integrand-evaluations 1000)
+		  (resample3-cdf h ddx ddx ddz dx dx dz)))))
     (format t "~a~%" `(bfp-pos ,bfp-pos))
     (write-section (format nil "/home/martin/tmp/angular-1expsf-cut-~3,'0d.pgm" nucleus) psf)
 
@@ -748,12 +781,25 @@ distance is chosen."
 		       excite
 		       (vec-i-y (aref *centers* nucleus)))
 	(save-stack-ub8 (format nil "/home/martin/tmp/angular-3excite-~3,'0d/" nucleus)
-			(normalize3-cdf/ub8-realpart excite))))))
+			(normalize3-cdf/ub8-realpart excite))
+	(destructuring-bind (z y x)
+	    (array-dimensions excite)
+	  (let* ((in-focus (extract-bbox3-cdf excite
+					      (make-bbox :start (v 0d0 0d0 (* 1d0 k))
+							 :end (v (* 1d0 (1- x))
+								 (* 1d0 (1- y))
+								 (* 1d0 k))))))
+	    (save-stack-ub8 "/home/martin/tmp/angular-4in-focus/"
+			    (normalize3-cdf/ub8-realpart in-focus))
+	    (let*((mplane (mean-realpart in-focus))
+		  (mvol (mean-realpart excite))
+		  (gamma (/ mplane mvol)))
+	     (debug-out mplane mvol gamma))))))))
 #+nil 
 (time
  (let* ((k 25)
 	(nucs (get-visible-nuclei k)))
-   (loop for nuc in (list (first nucs)) do
+   (loop for nuc in nucs do
 	(calc-light-field k nuc))))
 
 #+nil ;; overlay lightfield and spheres
