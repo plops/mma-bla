@@ -107,7 +107,10 @@
     #:draw-unit-intensity-disk-precise
     #:draw-unit-energy-disk-precise
     #:draw-sphere-ub8
-    #:draw-oval-ub8))
+    #:draw-oval-ub8
+    #:resample3-cdf
+    #:interpolate3-cdf
+    #:.-))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -677,25 +680,32 @@ be floating point values. If they point outside of IMG 0 is returned."
 	(floor yy)
       (multiple-value-bind (k z)
 	  (floor zz)
-	(let ((ooo (aref vol k j i))
-	      (ioo (aref vol k j (1+ i)))
-	      (oio (aref vol k (1+ j) i))
-	      (ooi (aref vol (1+ k) j i))
-	      (iio (aref vol k (1+ j) (1+ i)))
-	      (ioi (aref vol (1+ k) j (1+ i)))
-	      (oii (aref vol (1+ k) (1+ j) i))
-	      (iii (aref vol (1+ k) (1+ j) (1+ i)))
-	      (a (- 1d0 x))
-	      (b (- 1d0 y))
-	      (c (- 1d0 z)))
-	  (+ (* ooo a b c)
-	     (* ioo x b c)
-	     (* oio a y c)
-	     (* ooi a b z)
-	     (* iio x y c)
-	     (* ioi x b z)
-	     (* oii a y z)
-	     (* iii x y z)))))))
+	(labels ((ref (a b c)
+		   (let ((x (+ i a))
+			 (y (+ j b))
+			 (z (+ k c)))
+		     (if (array-in-bounds-p vol z y x)
+			 (aref vol z y x)
+			 (complex 0d0)))))
+	 (let ((ooo (ref 0 0 0))
+	       (ioo (ref 1 0 0))
+	       (oio (ref 0 1 0))
+	       (ooi (ref 0 0 1))
+	       (iio (ref 1 1 0))
+	       (ioi (ref 1 0 1))
+	       (oii (ref 0 1 1))
+	       (iii (ref 1 1 1))
+	       (a (- 1d0 x))
+	       (b (- 1d0 y))
+	       (c (- 1d0 z)))
+	   (+ (* ooo a b c)
+	      (* ioo x b c)
+	      (* oio a y c)
+	      (* ooi a b z)
+	      (* iio x y c)
+	      (* ioi x b z)
+	      (* oii a y z)
+	      (* iii x y z))))))))
 #+nil
 (let* ((n 3)
        (a (make-array (list n n n) 
@@ -750,19 +760,32 @@ be floating point values. If they point outside of IMG 0 is returned."
 	      (dims z dz dz^)
 	    (let ((result (make-array (list nz ny nx)
 				      :element-type '(complex double-float))))
-	     (loop for k from (- bz) below cz do
-		  (let ((zz (* dz^ (+ k bz))))
-		    (loop for j from (- by) below cy do
-			 (let ((yy (* dy^ (+ j by))))
-			   (loop for i from (- bx) below cx do
-				(let ((xx (* dx^ (+ i bx))))
-				  (setf (aref result k j i)
-					(interpolate3-cdf vol xx yy zz))))))))
+	      (macrolet ((coord (i dir) ;; convert index into float coordinate
+			   `(* (/ ,(intern (format nil "D~a^" dir))
+				  ,(intern (format nil "D~a" dir)))
+			       (+ ,i ,(intern (format nil "B~a" dir))))))
+	       (loop for k from (- bz) below cz do
+		    (let ((zz (coord k z)))
+		      (loop for j from (- by) below cy do
+			   (let ((yy (coord j y)))
+			     (loop for i from (- bx) below cx do
+				  (let ((xx (coord i x)))
+				    (setf (aref result (+ bz k) (+ by j) (+ bx i))
+					  (interpolate3-cdf vol xx yy zz)))))))))
 	     result)))))))
 #+nil
-(let* ((s0 ())
-       (d1 (resample)))
-  (write-pgm "/home/martin/tmp/disk0.pgm" (normalize2-cdf/ub8-realpart d0)))
+(time
+ (let* ((s0 (convert3-ub8/cdf-complex (draw-sphere-ub8 12d0 41 239 232)))
+	(dr 160d0)
+	(dz 300d0)
+	(ddr 200d0)
+	(ddz 1000d0)
+	(s1 (resample3-cdf s0 dr dr dz ddr ddr ddz))
+	(s2 (resample3-cdf s1 ddr ddr ddz dr dr dz)))
+   (save-stack-ub8 "/home/martin/tmp/s0/" (normalize3-cdf/ub8-realpart s0))
+   (save-stack-ub8 "/home/martin/tmp/s1/" (normalize3-cdf/ub8-realpart s1))
+   (save-stack-ub8 "/home/martin/tmp/s2/" (normalize3-cdf/ub8-realpart s2))
+   (save-stack-ub8 "/home/martin/tmp/s2-s0" (normalize3-cdf/ub8-realpart (.- s0 s2)))))
 
 (declaim (ftype (function (string (simple-array (complex double-float) 3)
 				  &key (:function function))
@@ -882,6 +905,23 @@ relative position of VOLB inside VOLA."
 	(do-box (k j i 0 z 0 y 0 x)
 	  (setf (aref result k j i)
 		(+ (aref vola (+ k sz) (+ j sy) (+ i sx))
+		   (aref volb k j i))))))
+    result))
+
+(defun .- (vola volb &optional (volb-start (make-vec-i)))
+  (declare ((simple-array (complex double-float) 3) vola volb)
+	   (vec-i volb-start)
+	   (values (simple-array (complex double-float) 3) &optional))
+  (let ((result (make-array (array-dimensions volb)
+			    :element-type '(complex double-float))))
+    (destructuring-bind (z y x)
+	(array-dimensions volb)
+      (let ((sx (vec-i-x volb-start))
+	    (sy (vec-i-y volb-start))
+	    (sz (vec-i-z volb-start)))
+	(do-box (k j i 0 z 0 y 0 x)
+	  (setf (aref result k j i)
+		(- (aref vola (+ k sz) (+ j sy) (+ i sx))
 		   (aref volb k j i))))))
     result))
 
