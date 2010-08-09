@@ -795,12 +795,17 @@ back focal plane set BIG-WINDOW to true."
 		  (mvol (mean-realpart excite))
 		  (gamma (/ mplane mvol)))
 	     (debug-out mplane mvol gamma))))))))
+(array-dimensions *spheres*)
 #+nil 
 (time
- (let* ((k 25)
-	(nucs (get-visible-nuclei k)))
-   (loop for nuc in nucs do
-	(calc-light-field k nuc))))
+ (with-open-file (*standard-output* "/home/martin/tmp/angular-stack.log"
+				    :direction :output
+				    :if-exists :supersede
+				    :if-does-not-exist :create)
+  (dotimes (k (array-dimension *spheres* 0))
+    (let* ((nucs (get-visible-nuclei k)))
+      (loop for nuc in nucs do
+	   (calc-light-field k nuc))))))
 
 #+nil ;; overlay lightfield and spheres
 (time
