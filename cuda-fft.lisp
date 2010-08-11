@@ -1,4 +1,7 @@
-
+#.(progn 
+    (require :alexandria)
+    (require :vector)
+    (require :vol))
 (defpackage :cuda-fft
    (:use :cl :sb-alien :sb-c-call))
 (in-package :cuda-fft)
@@ -80,27 +83,26 @@
   (count size-t)
   (kind cuda-memcpy-kind))
 
-
-
-
 #+nil
-(let* ((nx 32)
+(let* ((nx 120)
        (ny nx)
        (nz ny)
        (dims (list nz ny nx))
-       (a (make-array dims
-		      :element-type '(complex single-float)))
+       (a (vol:convert3-ub8/csf-complex
+	   (vol:draw-sphere-ub8 20d0 nz ny nx)))
        (a1 (sb-ext:array-storage-vector a))
        (device (cu-malloc-sf (length a1))))
   (cuda-memcpy (sb-sys:int-sap device) 
 	       (sb-sys:vector-sap a1)
 	       (* (length a1) 4 2) 'host->device)
   (let ((plan (cu-plan nx ny nz)))
-    (cufft-exec-c2c plan (sb-sys:int-sap device)
-		    (sb-sys:int-sap device) +cufft-forward+)
+    (time (cufft-exec-c2c plan (sb-sys:int-sap device)
+		     (sb-sys:int-sap device) +cufft-forward+))
     (cufft-destroy plan))
   (cuda-memcpy (sb-sys:vector-sap a1)
 	       (sb-sys:int-sap device) 
 	       (* (length a1) 4 2) 'device->host)
-  (cuda-free device)
-  a)
+  (vol:write-pgm "/home/martin/tmp/cufft.pgm" 
+		 (vol:normalize2-csf/ub8-abs
+		  (vol:cross-section-xz-csf a)))
+  (cuda-free device))

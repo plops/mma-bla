@@ -69,6 +69,10 @@
     #:convert3-cdf/ub8-realpart
     #:convert3-cdf/ub8-imagpart
 
+    #:convert3-ub8/csf-complex
+    #:convert2-ub8/csf-complex
+    #:convert1-ub8/csf-complex
+
     #:normalize2-cdf/ub8-phase
     #:normalize3-cdf/ub8-phase
     #:normalize2-cdf/ub8-realpart
@@ -81,6 +85,21 @@
     #:normalize3-cdf/ub8-imagpart
     #:normalize3-df/ub8-floor
     #:normalize-ub8
+
+    #:normalize2-csf/ub8-realpart
+    #:normalize2-sf/ub8-floor
+    #:normalize2-csf/ub8-imagpart
+    #:normalize3-sf/ub8-floor
+    #:normalize1-df/ub8-floor
+    #:normalize3-csf/ub8-abs
+    #:normalize3-csf/ub8-realpart
+    #:normalize3-csf/ub8-imagpart
+    #:normalize1-sf/ub8-floor
+    #:normalize3-csf/ub8-phase
+    #:normalize2-csf/ub8-abs
+    #:normalize2-csf/ub8-phase
+    #:normalize1-cdf/ub8-realpart
+    #:normalize1-csf/ub8-realpart
 
     #:count-non-zero-ub8
     #:decimate-xy-ub8
@@ -110,7 +129,8 @@
     #:draw-oval-ub8
     #:resample3-cdf
     #:interpolate3-cdf
-    #:.-))
+    #:.-
+    #:cross-section-xz-csf))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
@@ -1041,18 +1061,33 @@ VOLA in RESULT."
       small)))
 
 
-(declaim (ftype (function ((simple-array (complex double-float) 3)
-			   &optional fixnum)
-			  (values (simple-array (complex double-float) 2)
-				  &optional))
-		cross-section-xz))
 (defun cross-section-xz (a &optional (y (floor (array-dimension a 1) 2)))
+  (declare ((simple-array (complex double-float) 3) a)
+	   (fixnum y)
+	   (values (simple-array (complex double-float) 2)
+		   &optional))
   (destructuring-bind (z y-size x)
       (array-dimensions a)
     (unless (<= 0 y (1- y-size))
       (error "Y is out of bounds."))
     (let ((b (make-array (list z x)
 			 :element-type `(complex double-float))))
+      (do-rectangle (j i 0 z 0 x)
+	(setf (aref b j i)
+	      (aref a j y i)))
+      b)))
+
+(defun cross-section-xz-csf (a &optional (y (floor (array-dimension a 1) 2)))
+  (declare ((simple-array (complex single-float) 3) a)
+	   (fixnum y)
+	   (values (simple-array (complex single-float) 2)
+		   &optional))
+  (destructuring-bind (z y-size x)
+      (array-dimensions a)
+    (unless (<= 0 y (1- y-size))
+      (error "Y is out of bounds."))
+    (let ((b (make-array (list z x)
+			 :element-type `(complex single-float))))
       (do-rectangle (j i 0 z 0 x)
 	(setf (aref b j i)
 	      (aref a j y i)))
@@ -1067,7 +1102,9 @@ VOLA in RESULT."
      ,@(loop for dim from 1 upto 3 collect
 	   (let ((short-image-types
 		  '(((complex double-float) . cdf)
+		    ((complex single-float) . csf) 
 		    (double-float . df)
+		    (single-float . sf)
 		    ((unsigned-byte 8) . ub8))))
 	     (labels ((find-short-type-name (type)
 			(cdr (assoc type short-image-types :test #'equal)))
@@ -1095,6 +1132,8 @@ VOLA in RESULT."
 
 (def-convert (unsigned-byte 8) (complex double-float)
 		  #'(lambda (c) (complex (* 1d0 c))) complex)
+(def-convert (unsigned-byte 8) (complex single-float)
+		  #'(lambda (c) (complex (* 1s0 c))) complex)
 (def-convert double-float (complex double-float)
 	     #'(lambda (d) (complex d)) complex)
 (def-convert double-float (unsigned-byte 8) #'floor)
@@ -1102,6 +1141,12 @@ VOLA in RESULT."
 (def-convert (complex double-float) double-float #'imagpart)
 (def-convert (complex double-float) double-float #'abs)
 (def-convert (complex double-float) double-float #'phase)
+
+(def-convert (complex single-float) single-float #'realpart)
+(def-convert (complex single-float) single-float #'imagpart)
+(def-convert (complex single-float) single-float #'abs)
+(def-convert (complex single-float) single-float #'phase)
+
 (def-convert (complex double-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (realpart z)))
 	     realpart)
@@ -1146,10 +1191,38 @@ VOLA in RESULT."
 (def-normalize-cdf imagpart)
 (def-normalize-cdf phase)
 
+(defmacro def-normalize-csf (function)
+  `(progn
+    ,@(loop for dim from 2 upto 3 collect
+     `(defun ,(intern (format nil "NORMALIZE~d-CSF/UB8-~a" dim function)) (a)
+	(declare ((simple-array (complex single-float) ,dim) a)
+		 (values (simple-array (unsigned-byte 8) ,dim) &optional))
+	(let* ((res (make-array (array-dimensions a)
+				:element-type '(unsigned-byte 8)))
+	       (res1 (sb-ext:array-storage-vector res))
+	       (b (,(intern (format nil "CONVERT~d-CSF/SF-~a" dim function)) a))
+	       (b1 (sb-ext:array-storage-vector b))
+	       (ma (reduce #'max b1))
+	       (mi (reduce #'min b1))
+	       (s (if (< (abs (- mi ma)) 1s-10)
+		      0s0
+		      (/ 255s0 (- ma mi)))))
+	  (dotimes (i (length b1))
+	    (setf (aref res1 i)
+		  (floor (* s (- (aref b1 i) mi)))))
+	  res)))))
+
+(def-normalize-csf abs)
+(def-normalize-csf realpart)
+(def-normalize-csf imagpart)
+(def-normalize-csf phase)
+
 
 (defmacro def-general-normalize ()
   (let ((cases nil)
 	(types '((df double-float floor)
+		 (sf single-float floor)
+		 (csf (complex single-float) realpart)
 		 (cdf (complex double-float) realpart))))
     (loop for dim from 1 upto 3 collect
 	 (loop for q in types
@@ -1235,8 +1308,8 @@ VOLA in RESULT."
 		(push symbol res)
 		(return)))))
   (loop for s in (delete-if-not #'(lambda (x) 
-				    (let* ((pat #+nil "CONVERT" 
-					     "NORMALI"
+				    (let* ((pat "CONVERT" 
+					      #+nil "NORMALI"
 					     )
 					   (lpat (length pat)))
 				      (when (< lpat (length x))
