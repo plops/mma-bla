@@ -4,13 +4,9 @@
    (:use :cl :sb-alien :sb-c-call :vector)
    (:export
     #:fftshift2
-    #:ft2
-    #:ift2
     #:convolve2-circ
 
     #:fftshift3
-    #:ft3
-    #:ift3
     #:read-pgm
     #:write-pgm
     #:histogram
@@ -117,7 +113,6 @@
     #:extract-bbox3-df
     #:replace-bbox3-ub8
     
-    #:init-ft
     #:mean-realpart
     #:normalize2-df/df
     #:with-arrays
@@ -138,56 +133,6 @@
 
 #+nil (declaim (optimize (speed 3) (debug 1) (safety 1)))
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
- 
-(load-shared-object "/usr/lib/libfftw3.so")
-
-;; multithreading for fftw is just a matter of two initializing
-;; function calls, see:
-;; http://www.fftw.org/fftw3_doc/Usage-of-Multi_002dthreaded-FFTW.html#Usage-of-Multi_002dthreaded-FFTW
-#+nil
-(progn
-(load-shared-object "/usr/lib/libfftw3_threads.so")
-
-(define-alien-routine ("fftw_init_threads" init-threads)
-    int)
-(define-alien-routine ("fftw_plan_with_nthreads" plan-with-nthreads)
-    void
-  (nthreads int))
-
-(defun init-ft ()
-  (init-threads)
-  (plan-with-nthreads 8)))
-
-;; to clean up completely call void fftw_cleanup_threads(void)
-
-
-(define-alien-routine ("fftw_execute" execute)
-    void
-  (plan (* int)))
- 
-(defconstant +forward+ 1)
-(defconstant +backward+ -1)
-(defconstant +estimate+ (ash 1 6))
-
- 
-(define-alien-routine ("fftw_plan_dft_3d" plan-dft-3d)
-    (* int)
-  (n0 int)
-  (n1 int)
-  (n2 int)
-  (in (* double-float))
-  (out (* double-float))
-  (sign int)
-  (flags unsigned-int))
-
-(define-alien-routine ("fftw_plan_dft_2d" plan-dft-2d)
-    (* int)
-  (n0 int)
-  (n1 int)
-  (in (* double-float))
-  (out (* double-float))
-  (sign int)
-  (flags unsigned-int))
  
 ;; C-standard "row-major" order, so that the last dimension has the
 ;; fastest-varying index in the array.
@@ -252,33 +197,6 @@ point."
 		(aref in jj ii))))))
    out))
 
-(defun ft2 (in &key (forward t))
-  (declare ((simple-array (complex double-float) 2) in)
-	   (boolean forward)
-	   (values (simple-array (complex double-float) 2) &optional))
-  (let ((dims (array-dimensions in)))
-    (destructuring-bind (y x)
-	dims
-      (let* ((out (make-array dims :element-type '(complex double-float))))
-	(sb-sys:with-pinned-objects (in out)
-	  (let ((p (plan-dft-2d y x
-				(sb-sys:vector-sap 
-				 (sb-ext:array-storage-vector in))
-				(sb-sys:vector-sap 
-				 (sb-ext:array-storage-vector out))
-				(if forward
-				    +forward+
-				   +backward+)
-				+estimate+)))
-	    (execute p)))
-	(when forward ;; normalize if forward
-	  (let ((1/n (/ 1d0 (* x y))))
-	    (do-rectangle (j i 0 y 0 x)
-	      (setf (aref out j i) (* 1/n (aref out j i))))))
-	out))))
-
-(defmacro ift2 (in)
-  `(ft2 ,in :forward nil))
 
  
 ;; was originally fftshift3 /home/martin/usb/y2009/1123/1.lisp
@@ -300,38 +218,7 @@ point."
 	    (setf (aref out k j i)
 		  (aref in kk jj ii))))))
     out))
- 
- 
-(declaim (ftype (function ((simple-array (complex double-float) (* * *))
-			   &key (:forward boolean))
-			  (values (simple-array (complex double-float) (* * *))
-				  &optional))
-		ft3))
-(defun ft3 (in &key (forward t))
-  (let ((dims (array-dimensions in)))
-   (destructuring-bind (z y x)
-       dims
-     (let* ((out (make-array dims :element-type '(complex double-float))))
-       (sb-sys:with-pinned-objects (in out)
-	 (let ((p (plan-dft-3d z y x
-			       (sb-sys:vector-sap 
-				(sb-ext:array-storage-vector in))
-			       (sb-sys:vector-sap 
-				(sb-ext:array-storage-vector out))
-			       (if forward
-				   +forward+
-				   +backward+)
-			       +estimate+)))
-	   (execute p)))
-       (when forward ;; normalize if forward
-	 (let ((1/n (/ 1d0 (* x y z))))
-	  (do-box (k j i 0 z 0 y 0 x)
-	    (setf (aref out k j i) (* 1/n (aref out k j i))))))
-       out))))
-
-(defmacro ift3 (in)
-  `(ft3 ,in :forward nil))
-
+  
 (defun convolve2-circ (vola volb)
   (declare ((simple-array (complex double-float) 2) vola volb)
 	   (values (simple-array (complex double-float) 2) &optional))
@@ -342,13 +229,9 @@ point."
       (error "convolve3-circ expects both input arrays to have the same dimensions."))
     (ift2 (s*2 (* 1d0 (reduce #'* da)) (.*2 (ft2 vola) (ft2 volb))))))
  
-(declaim 
- (type (function 
-	(string) 
-	(values (simple-array (unsigned-byte 8) (* *))
-		&optional))
-       read-pgm))
 (defun read-pgm (filename)
+  (declare (string filename)
+	   (values (simple-array (unsigned-byte 8) 2) &optional))
   (with-open-file (s filename)
     (unless (equal (symbol-name (read s)) "P5")
       (error "no PGM file"))

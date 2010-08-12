@@ -1,11 +1,7 @@
-#.(progn 
-    (require :alexandria)
-    (require :vector)
-    (require :vol))
 (defpackage :cuda-fft
    (:use :cl :sb-alien :sb-c-call)
-   (:export #:ft3-csf-cuda
-	    #:ift3-csf-cuda))
+   (:export #:ft3-csf
+	    #:ift3-csf))
 (in-package :cuda-fft)
 
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
@@ -86,7 +82,7 @@
   (kind cuda-memcpy-kind))
 
 ;; same semantics as ft3 wrapper to fftw3, input array isn't modified 
-(defun ft3-csf-cuda (in &key (forward t))
+(defun ft3-csf (in &key (forward t))
   (declare ((simple-array (complex single-float) 3) in)
 	   (boolean forward)
 	   (values (simple-array (complex single-float) 3) &optional))
@@ -127,17 +123,22 @@
 	     (setf (aref out1 i) (* 1/n (aref out1 i))))))
 	in))))
 
-(defmacro ift3-csf-cuda (in)
+(defmacro ift3-csf (in)
   `(ft3-csf-cuda ,in :forward nil))
 
 
 #+nil
-(time
- (let* ((nx 256)
-	(ny nx)
-	(nz ny)
-	(a (vol:convert3-ub8/csf-complex
-	    (vol:draw-sphere-ub8 20d0 nz ny nx))))
-   (vol:write-pgm "/home/martin/tmp/cufft.pgm" 
-		  (vol:normalize2-csf/ub8-abs
-		   (vol:cross-section-xz-csf (ft3-csf-cuda a))))))
+(progn
+  (require :alexandria)
+  (require :vector)
+  (require :vol)
+  (time
+  (let* ((nx 256)
+	 (ny nx)
+	 (nz ny)
+	 (a (vol:convert3-ub8/csf-complex
+	     (vol:draw-sphere-ub8 20d0 nz ny nx))))
+    (vol:write-pgm "/home/martin/tmp/cufft.pgm" 
+		   (vol:normalize2-csf/ub8-abs
+		    (vol:cross-section-xz-csf (ft3-csf-cuda a)))))))
+
