@@ -114,3 +114,15 @@
 
 (defmacro ift2-cdf (in)
   `(ft2 ,in :forward nil))
+
+#+nil
+(progn
+  (time
+   (let* ((nx 256)
+	  (ny nx)
+	  (nz ny)
+	  (a (vol:convert3-ub8/cdf-complex
+	      (vol:draw-sphere-ub8 20d0 nz ny nx))))
+     (vol:write-pgm "/home/martin/tmp/fftwf.pgm" 
+		(vol:normalize2-cdf/ub8-abs
+		 (vol:cross-section-xz-cdf (ft3-cdf a)))))))

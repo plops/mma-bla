@@ -9,7 +9,13 @@
 (defpackage :cuda-fft
    (:use :cl :sb-alien :sb-c-call)
    (:export #:ft3-csf
-	    #:ift3-csf))
+	    #:ift3-csf
+	    #:ft2-csf
+	    #:ift2-csf
+	    #:ft3
+	    #:ft2
+	    #:ift2
+	    #:ift3))
 (in-package :cuda-fft)
 
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
@@ -71,12 +77,15 @@
     cufft-result
   (plan cufft-handle))
 
-(defun cu-plan (x y z)
+(defun cu-plan (x y &optional z)
   (multiple-value-bind (result plan)
-      (cufft-plan-3d x y z +cufft-c2c+)
+      (if z
+	  (cufft-plan-3d x y z +cufft-c2c+)
+	  (cufft-plan-2d x y +cufft-c2c+))
     (unless (eq 0 result)
       (error "cu-plan error: ~a" result))
     plan))
+
 
 (defun cu-malloc-csf (n)
   (declare (fixnum n))
@@ -99,50 +108,75 @@
   (kind cuda-memcpy-kind))
 
 ;; same semantics as ft3 wrapper to fftw3, input array isn't modified 
-;; ft{2,3}-{csf,cdf}
-(defun ft3-csf (in &key (forward t))
-  (declare ((simple-array (complex single-float) 3) in)
-	   (boolean forward)
-	   (values (simple-array (complex single-float) 3) &optional))
-  (let ((dims (array-dimensions in)))
-    (destructuring-bind (z y x)
-	dims
-      (let* ((out (make-array dims :element-type '(complex single-float)))
-	     (out1 (sb-ext:array-storage-vector out))
-	     (in1 (sb-ext:array-storage-vector in))
-	     (n (length in1))
-	     ;; allocate array on device
-	     (device (cu-malloc-csf (length in1)))
-	     (complex-single-float-size (* 4 2)))
-	;; copy data to device
-	(cuda-memcpy (sb-sys:int-sap device) 
-		     (sb-sys:vector-sap in1)
-		     (* n complex-single-float-size) 
-		     'host->device)
-	;; plan and execute in-place transform on device
-	(let ((plan (cu-plan x y z)))
-	  (cufft-exec-c2c plan 
-			  (sb-sys:int-sap device)
-			  (sb-sys:int-sap device)
-			  (if forward 
-			      +cufft-forward+
-			      +cufft-inverse+))
-	  (cufft-destroy plan))
-	;; copy result back
-	(cuda-memcpy (sb-sys:vector-sap in1)
-		     (sb-sys:int-sap device) 
-		(* n complex-single-float-size) 'device->host)
-	;; deallocate array on device
-	(cuda-free device)
-	;; normalize if forward
-	(when forward 
-	 (let* ((1/n (/ 1s0 n)))
-	   (dotimes (i n)
-	     (setf (aref out1 i) (* 1/n (aref out1 i))))))
-	in))))
+;; ft{2,3}-csf
+(defmacro def-ft?-csf (rank)
+  (let ((ift (intern (format nil "IFT~d-CSF" rank)))
+	(ft (intern (format nil "FT~d-CSF" rank))))
+    `(progn
+       (defun ,ft (in &key (forward t))
+	 (declare ((simple-array (complex single-float) ,rank) in)
+		  (boolean forward)
+		  (values (simple-array (complex single-float) ,rank) &optional))
+	 (let ((dims (array-dimensions in)))
+	   (let* ((out (make-array dims :element-type '(complex single-float)))
+		  (out1 (sb-ext:array-storage-vector out))
+		  (in1 (sb-ext:array-storage-vector in))
+		  (n (length in1))
+		  ;; allocate array on device
+		  (device (cu-malloc-csf (length in1)))
+		  (complex-single-float-size (* 4 2)))
+	     ;; copy data to device
+	     (cuda-memcpy (sb-sys:int-sap device) 
+			  (sb-sys:vector-sap in1)
+			  (* n complex-single-float-size) 
+			  'host->device)
+	     ;; plan and execute in-place transform on device
+	     (let ((plan ,(ecase rank
+				 (3 `(destructuring-bind (z y x)
+					 dims
+				       (cu-plan x y z)))
+				 (2 `(destructuring-bind (y x)
+					 dims
+				       (cu-plan x y))))))
+	       (cufft-exec-c2c plan 
+			       (sb-sys:int-sap device)
+			       (sb-sys:int-sap device)
+			       (if forward 
+				   +cufft-forward+
+				   +cufft-inverse+))
+	       (cufft-destroy plan))
+	     ;; copy result back
+	     (cuda-memcpy (sb-sys:vector-sap in1)
+			  (sb-sys:int-sap device) 
+			  (* n complex-single-float-size) 'device->host)
+	     ;; deallocate array on device
+	     (cuda-free device)
+	     ;; normalize if forward
+	     (when forward 
+	       (let* ((1/n (/ 1s0 n)))
+		 (dotimes (i n)
+		   (setf (aref out1 i) (* 1/n (aref out1 i))))))
+	     in)))
+       (defmacro ,ift (in)
+	 `(,',ft ,in :forward nil)))))
 
-(defmacro ift3-csf (in)
-  `(ft3-csf-cuda ,in :forward nil))
+
+(def-ft?-csf 2)
+(def-ft?-csf 3)
+
+(defmacro def-ft? (rank)
+  (let ((ift (intern (format nil "IFT~d" rank)))
+	(ft (intern (format nil "FT~d" rank)))
+	(ift-c (intern (format nil "IFT~d-CSF" rank)))
+	(ft-c (intern (format nil "FT~d-CSF" rank))))
+    `(progn
+       (defmacro ,ft (in &key (forward t))
+	 `(,',ft-c ,in :forward ,forward))
+      (defmacro ,ift (in)
+	`(,',ift-c ,in :forward nil)))))
+
+(def-ft? 2)
+(def-ft? 3)
 
 #+nil
 (progn
@@ -156,4 +190,5 @@
      (vol:write-pgm "cufft.pgm" 
 		(vol:normalize2-csf/ub8-abs
 		 (vol:cross-section-xz-csf (ft3-csf a)))))))
+
 

@@ -13,7 +13,8 @@
 ;; multithreading for fftw is just a matter of two initializing
 ;; function calls, see:
 ;; http://www.fftw.org/fftw3_doc/Usage-of-Multi_002dthreaded-FFTW.html#Usage-of-Multi_002dthreaded-FFTW
-;; but it didn't seem to get faster
+;; but it doesn't get significantly faster
+
 #+nil
 (progn
   (load-shared-object "/usr/lib/libfftw3f_threads.so")
@@ -79,7 +80,7 @@
 			       +estimate+)))
 	   (execute p)))
        (when forward ;; normalize if forward
-	 (let ((1/n (/ 1d0 (* x y z))))
+	 (let ((1/n (/ 1s0 (* x y z))))
 	  (vol:do-box (k j i 0 z 0 y 0 x)
 	    (setf (aref out k j i) (* 1/n (aref out k j i))))))
        out))))
@@ -107,10 +108,23 @@
 				+estimate+)))
 	    (execute p)))
 	(when forward ;; normalize if forward
-	  (let ((1/n (/ 1d0 (* x y))))
+	  (let ((1/n (/ 1s0 (* x y))))
 	    (vol:do-rectangle (j i 0 y 0 x)
 	      (setf (aref out j i) (* 1/n (aref out j i))))))
 	out))))
 
 (defmacro ift2-csf (in)
   `(ft2 ,in :forward nil))
+
+
+#+nil
+(progn
+  (time
+   (let* ((nx 256)
+	  (ny nx)
+	  (nz ny)
+	  (a (vol:convert3-ub8/csf-complex
+	      (vol:draw-sphere-ub8 20d0 nz ny nx))))
+     (vol:write-pgm "/home/martin/tmp/fftwf.pgm" 
+		(vol:normalize2-csf/ub8-abs
+		 (vol:cross-section-xz-csf (ft3-csf a)))))))
