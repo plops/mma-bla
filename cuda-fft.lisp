@@ -170,10 +170,10 @@
 	(ift-c (intern (format nil "IFT~d-CSF" rank)))
 	(ft-c (intern (format nil "FT~d-CSF" rank))))
     `(progn
-       (defmacro ,ft (in &key (forward t))
-	 `(,',ft-c ,in :forward ,forward))
-      (defmacro ,ift (in)
-	`(,',ift-c ,in :forward nil)))))
+       (defun ,ft (in &key (forward t))
+	 (,ft-c in :forward forward))
+       (defun ,ift (in)
+	(,ift-c in)))))
 
 (def-ft? 2)
 (def-ft? 3)
