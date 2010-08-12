@@ -134,8 +134,15 @@ fft(complex float*data,int nz,int ny,int nx)
   cudaMalloc((void**) &idata,n);
   cudaMemcpy(idata,data,n,cudaMemcpyHostToDevice);
   
+  printf("(idata %d)\n",idata);
+
   cudaMalloc((void**) &odata,n);
+
+  printf("(odata %d)\n",odata);
+
   cufftPlan3d(&plan,nx,ny,nz,CUFFT_C2C);
+  
+  printf("(plan %d)\n",plan);
 
   cufftExecC2C(plan,idata,odata,CUFFT_FORWARD);
 
