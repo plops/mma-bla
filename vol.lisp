@@ -1,10 +1,11 @@
 #.(require :alexandria)
 #.(require :vector)
+#.(require :cuda-fft)
 (defpackage :vol
-   (:use :cl :sb-alien :sb-c-call :vector)
-   (:export
-    #:fftshift2
-    #:convolve2-circ
+  (:use :cl :sb-alien :sb-c-call :vector :cuda-fft)
+  (:export
+   #:fftshift2
+   #:convolve2-circ
 
     #:fftshift3
     #:read-pgm
@@ -69,6 +70,10 @@
     #:convert2-ub8/csf-complex
     #:convert1-ub8/csf-complex
 
+    #:convert3-csf/cdf-coerce
+    #:convert2-csf/cdf-coerce
+    #:convert1-csf/cdf-coerce
+
     #:normalize2-cdf/ub8-phase
     #:normalize3-cdf/ub8-phase
     #:normalize2-cdf/ub8-realpart
@@ -125,11 +130,21 @@
     #:resample3-cdf
     #:interpolate3-cdf
     #:.-
-    #:cross-section-xz-csf))
+    #:cross-section-xz-csf
+    #:cross-section-xz-cdf))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
 
 (in-package :vol)
+
+(deftype my-float ()
+    'single-float)
+
+(defconstant zero (coerce .0d0 'my-float))
+(defconstant half (coerce .5d0 'my-float))
+(defconstant one (coerce 1d0 'my-float))
+(defconstant two (coerce 2d0 'my-float))
+(defconstant my-pi (coerce pi 'my-float))
 
 #+nil (declaim (optimize (speed 3) (debug 1) (safety 1)))
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
@@ -161,12 +176,12 @@ point."
 		  (progn ,@body)))))
  
 (defun fftshift1 (in)
-  (declare ((simple-array (complex double-float) 1) in)
-	   (values (simple-array (complex double-float) 1) &optional))
+  (declare ((simple-array (complex my-float) 1) in)
+	   (values (simple-array (complex my-float) 1) &optional))
   (let* ((n (length in))
 	 (nh (floor n 2))
 	 (out (make-array n
-			  :element-type '(complex double-float))))
+			  :element-type '(complex my-float))))
     (dotimes (i (length in))
       (let ((ii (mod (+ i nh) n)))
 	(setf (aref out ii) (aref in i))))
@@ -174,18 +189,18 @@ point."
 #+nil
 (let* ((ls '(1 2 3 4 5 6 7 8 9))
       (a (make-array (length ls)
-		     :element-type '(complex double-float)
+		     :element-type '(complex my-float)
 		     :initial-contents (mapcar
 					#'(lambda (z) (coerce z 
-							 '(complex double-float)))
+							 '(complex my-float)))
 					ls))))
   (fftshift1 a))
 
 (defun fftshift2 (in)
-  (declare ((simple-array (complex double-float) 2) in)
-	   (values (simple-array (complex double-float) 2) &optional))
+  (declare ((simple-array (complex my-float) 2) in)
+	   (values (simple-array (complex my-float) 2) &optional))
   (let ((out (make-array (array-dimensions in)
-			 :element-type '(complex double-float))))
+			 :element-type '(complex my-float))))
    (destructuring-bind (w1 w0)
        (array-dimensions in)
      (let ((wh0 (floor w0 2))
@@ -202,10 +217,10 @@ point."
 ;; was originally fftshift3 /home/martin/usb/y2009/1123/1.lisp
 ;; now it is better and work for odd dimensions
 (defun fftshift3 (in)
-  (declare ((simple-array (complex double-float) 3) in)
-	   (values (simple-array (complex double-float) 3) &optional))
+  (declare ((simple-array (complex my-float) 3) in)
+	   (values (simple-array (complex my-float) 3) &optional))
   (let ((out (make-array (array-dimensions in)
-			 :element-type '(complex double-float))))
+			 :element-type '(complex my-float))))
     (destructuring-bind (w2 w1 w0)
 	(array-dimensions in)
       (let ((wh0 (floor w0 2))
@@ -220,14 +235,14 @@ point."
     out))
   
 (defun convolve2-circ (vola volb)
-  (declare ((simple-array (complex double-float) 2) vola volb)
-	   (values (simple-array (complex double-float) 2) &optional))
+  (declare ((simple-array (complex my-float) 2) vola volb)
+	   (values (simple-array (complex my-float) 2) &optional))
   (let* ((da (array-dimensions vola))
 	 (db (array-dimensions volb))
 	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
     (when (some #'null compare-ab)
       (error "convolve3-circ expects both input arrays to have the same dimensions."))
-    (ift2 (s*2 (* 1d0 (reduce #'* da)) (.*2 (ft2 vola) (ft2 volb))))))
+    (ift2 (s*2 (* one (reduce #'* da)) (.*2 (ft2 vola) (ft2 volb))))))
  
 (defun read-pgm (filename)
   (declare (string filename)
@@ -356,25 +371,25 @@ point."
 				       :displaced-index-offset (* ,slice-nr ,x ,y))))
 	,@body))))
  
-(declaim (ftype (function (double-float) (values double-float &optional))
+(declaim (ftype (function (my-float) (values my-float &optional))
 		square))
 (defun square (x)
   (* x x))
  
-(declaim (ftype (function ((array double-float *)
+(declaim (ftype (function ((array my-float *)
 			   &optional
-			   (array double-float *))
-			  (values double-float double-float
-				  double-float double-float &optional))
+			   (array my-float *))
+			  (values my-float my-float
+				  my-float my-float &optional))
 		linear-regression))
 ;; chernov/book.pdf p. 20
 (defun linear-regression (y &optional
 			  (x (let* ((n (length y)))
 			       (make-array 
 				n
-				:element-type 'double-float
+				:element-type 'my-float
 				:initial-contents 
-				(loop for i below n collect (* 1d0 i))))))
+				(loop for i below n collect (* one i))))))
   "Linear regression of the values in Y with the function y=a*x+b. If
 X isn't supplied its assumed to be 0,1,2, ... . Returned are the
 fitting parameters A and B and their errors DELTA_A and DELTA_B."
@@ -397,9 +412,9 @@ fitting parameters A and B and their errors DELTA_A and DELTA_B."
     (values ahat bhat (sqrt vara) (sqrt varb))))
  
 #+nil
-(linear-regression (let* ((ll (list 1d0 2.01d0 3d0 4d0)))
+(linear-regression (let* ((ll (list one 2.0one 3d0 4d0)))
 		     (make-array (length ll)
-		      :element-type 'double-float
+		      :element-type 'my-float
 		      :initial-contents ll)))
  
 (declaim (ftype (function (integer)
@@ -424,30 +439,41 @@ the array bounds."
       (aref a j i)
       0))
 
-(declaim (ftype (function ((simple-array double-float 2)
+(declaim (ftype (function ((simple-array my-float 2)
 			   fixnum fixnum)
-			  (values double-float &optional))
+			  (values my-float &optional))
 		aref2-zero-df))
 (defun aref2-zero-df (a j i)
   "Like AREF but return zero if subscripts J and I point outside of
 the array bounds."
   (if (array-in-bounds-p a j i)
       (aref a j i)
-      0d0))
+      zero))
 
-(declaim (ftype (function ((simple-array (complex double-float) 2)
-			   fixnum fixnum)
-			  (values (complex double-float) &optional))
-		aref2-zero-cdf))
 (defun aref2-zero-cdf (a j i)
   "Like AREF but return zero if subscripts J and I point outside of
 the array bounds."
+  (declare ((simple-array (complex double-float) 2) a)
+	   (fixnum j i)
+	   (values (complex double-float) &optional))
   (if (array-in-bounds-p a j i)
       (aref a j i)
       (complex 0d0)))
 
+(defun aref2-zero-csf (a j i)
+  "Like AREF but return zero if subscripts J and I point outside of
+the array bounds."
+  (declare ((simple-array (complex single-float) 2) a)
+	   (fixnum j i)
+	   (values (complex single-float) &optional))
+  (if (array-in-bounds-p a j i)
+      (aref a j i)
+      (complex 0s0)))
+
 (defmacro def-interp1 ()
-  (let ((types '((ub8 (unsigned-byte 8) double-float)
+  (let ((types '((ub8 (unsigned-byte 8) my-float)
+		 (sf single-float single-float)
+		 (csf (complex single-float) (complex single-float))
 		 (df double-float double-float)
 		 (cdf (complex double-float) (complex double-float)))))
    `(progn
@@ -461,27 +487,29 @@ the array bounds."
 		    "Interpolate between values A and B. Returns A for
   xi=0 and B for xi=1."
 		    (declare (,long a b)
-			     (double-float xi)
+			     (my-float xi)
 			     (values ,retour &optional))
-		    (+ (* (- 1d0 xi) a) (* xi b))))))))))
+		    (+ (* (- one xi) a) (* xi b))))))))))
 
 (def-interp1)
 
 (declaim (inline interp1))
 (defun interp1 (a b xi)
   (declare ((or (unsigned-byte 8)
-		double-float
-		(complex double-float)) a b)
-	   (double-float xi)
-	   (values (or double-float (complex double-float)) &optional))
+		my-float
+		(complex my-float)) a b)
+	   (my-float xi)
+	   (values (or my-float (complex my-float)) &optional))
   (etypecase a
     ((unsigned-byte 8) (interp1-ub8 a b xi))
+    (single-float (interp1-sf a b xi))
     (double-float (interp1-df a b xi))
+    ((complex single-float) (interp1-csf a b xi))
     ((complex double-float) (interp1-cdf a b xi))))
 
 (declaim (ftype (function ((simple-array (unsigned-byte 8) 2)
-			   double-float double-float)
-			  (values double-float &optional))
+			   my-float my-float)
+			  (values my-float &optional))
 		interpolate2-ub8))
 (defun interpolate2-ub8 (img x y) 
   "Bilinear interpolation on an image IMG. The coordinates X and Y can
@@ -509,12 +537,12 @@ be floating point values. If they point outside of IMG 0 is returned."
 	      (f (interp1-ub8 b d jx)))
 	  ;; and now horizontal
 	  ;; e - g - f
-	  (let ((g (interp1-df e f ix)))
+	  (let ((g (interp1 e f ix)))
 	    g))))))
 
-(declaim (ftype (function ((simple-array double-float 2)
-			   double-float double-float)
-			  (values double-float &optional))
+(declaim (ftype (function ((simple-array my-float 2)
+			   my-float my-float)
+			  (values my-float &optional))
 		interpolate2-df))
 (defun interpolate2-df (img x y) 
   "Bilinear interpolation on an image IMG. The coordinates X and Y can
@@ -532,13 +560,12 @@ be floating point values. If they point outside of IMG 0 is returned."
 	  (let ((g (interp1-df e f ix)))
 	    g))))))
 
-(declaim (ftype (function ((simple-array (complex double-float) 2)
-			   double-float double-float)
-			  (values (complex double-float) &optional))
-		interpolate2-cdf))
 (defun interpolate2-cdf (img x y) 
   "Bilinear interpolation on an image IMG. The coordinates X and Y can
 be floating point values. If they point outside of IMG 0 is returned."
+  (declare ((simple-array (complex double-float) 2) img)
+	   (double-float x y)
+	   (values (complex double-float) &optional))
   (multiple-value-bind (i ix)
       (floor x)
     (multiple-value-bind (j jx)
@@ -553,7 +580,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 	    g))))))
 
 
-(declaim (ftype (function ((simple-array * 2) double-float double-float)
+(declaim (ftype (function ((simple-array * 2) my-float my-float)
 			  (values (or double-float
 				      (complex double-float)) &optional))
 		interpolate2))
@@ -562,21 +589,21 @@ be floating point values. If they point outside of IMG 0 is returned."
 be floating point values. If they point outside of IMG 0 is returned."
   (etypecase img
     ((simple-array (unsigned-byte 8) 2) (interpolate2-ub8 img x y))
-    ((simple-array double-float 2) (interpolate2-df img x y))
-    ((simple-array (complex double-float) 2) (interpolate2-cdf img x y))))
+    ((simple-array my-float 2) (interpolate2-df img x y))
+    ((simple-array (complex my-float) 2) (interpolate2-cdf img x y))))
 
 #+nil
 (let ((a (make-array (list 2 2) :element-type '(unsigned-byte 8)
 		     :initial-contents '((1 2) (2 3)))))
-  (interpolate2 a .5d0 .2d0)) 
+  (interpolate2 a half .2d0)) 
 
 ;; pbourke linearly interpolating points within a box
 (defun interpolate3-cdf (vol xx yy zz)
   "Trilinear interpolation of a value from a volumetric stack."
   (declare (inline) 
-   ((simple-array (complex double-float) 3) vol)
-	   (double-float xx yy zz)
-	   (values (complex double-float) &optional))
+   ((simple-array (complex my-float) 3) vol)
+	   (my-float xx yy zz)
+	   (values (complex my-float) &optional))
   (multiple-value-bind (i x)
       (floor xx)
     (multiple-value-bind (j y)
@@ -589,7 +616,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 			 (z (+ k c)))
 		     (if (array-in-bounds-p vol z y x)
 			 (aref vol z y x)
-			 (complex 0d0)))))
+			 (complex zero)))))
 	 (let ((ooo (ref 0 0 0))
 	       (ioo (ref 1 0 0))
 	       (oio (ref 0 1 0))
@@ -598,9 +625,9 @@ be floating point values. If they point outside of IMG 0 is returned."
 	       (ioi (ref 1 0 1))
 	       (oii (ref 0 1 1))
 	       (iii (ref 1 1 1))
-	       (a (- 1d0 x))
-	       (b (- 1d0 y))
-	       (c (- 1d0 z)))
+	       (a (- one x))
+	       (b (- one y))
+	       (c (- one z)))
 	   (+ (* ooo a b c)
 	      (* ioo x b c)
 	      (* oio a y c)
@@ -612,10 +639,10 @@ be floating point values. If they point outside of IMG 0 is returned."
 #+nil
 (let* ((n 3)
        (a (make-array (list n n n) 
-		      :element-type '(complex double-float)))
+		      :element-type '(complex my-float)))
        (a1 (sb-ext:array-storage-vector a)))
   (dotimes (i (length a1))
-    (setf (aref a1 i) (complex (* 1d0 i))))
+    (setf (aref a1 i) (complex (* one i))))
   (interpolate3-cdf a 1.2d0 1.3d0 1.2d0))
 
 ;; The following function is meant to resample an angular PSF that has
@@ -633,9 +660,9 @@ be floating point values. If they point outside of IMG 0 is returned."
 (defun resample3-cdf (vol dx dy dz dx^ dy^ dz^)
   "Resample a volume by trilinear interpolation. Ensure that the
   former center stays in the center."
-  (declare ((simple-array (complex double-float) 3) vol)
-	   (double-float dx dy dz dx^ dy^ dz^)
-	   (values (simple-array (complex double-float) 3) &optional))
+  (declare ((simple-array (complex my-float) 3) vol)
+	   (my-float dx dy dz dx^ dy^ dz^)
+	   (values (simple-array (complex my-float) 3) &optional))
   (labels ((center (n) ;; give the index of the central sample
 	     (declare (fixnum n)
 		      (values fixnum &optional))
@@ -645,7 +672,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 	       c))
 	   (dims (n d d^) ;; calculate new array size from old one and deltas
 	     (declare (fixnum n)
-		      (double-float d d^)
+		      (my-float d d^)
 		      (values fixnum fixnum fixnum &optional))
 	     (let* ((c (center n))
 		    (b (- n c))
@@ -662,7 +689,7 @@ be floating point values. If they point outside of IMG 0 is returned."
 	  (multiple-value-bind (bz cz nz)
 	      (dims z dz dz^)
 	    (let ((result (make-array (list nz ny nx)
-				      :element-type '(complex double-float))))
+				      :element-type '(complex my-float))))
 	      (macrolet ((coord (i dir) ;; convert index into float coordinate
 			   `(* (/ ,(intern (format nil "D~a^" dir))
 				  ,(intern (format nil "D~a" dir)))
@@ -690,7 +717,7 @@ be floating point values. If they point outside of IMG 0 is returned."
    (save-stack-ub8 "/home/martin/tmp/s2/" (normalize3-cdf/ub8-realpart s2))
    (save-stack-ub8 "/home/martin/tmp/s2-s0" (normalize3-cdf/ub8-realpart (.- s0 s2)))))
 
-(declaim (ftype (function (string (simple-array (complex double-float) 3)
+(declaim (ftype (function (string (simple-array (complex my-float) 3)
 				  &key (:function function))
 			  (values null &optional))
 		save-stack))
@@ -731,8 +758,8 @@ be floating point values. If they point outside of IMG 0 is returned."
   nil)
 
 (defun .*2 (vola volb)
-  (declare ((simple-array (complex double-float) 2) vola volb)
-	   (values (simple-array (complex double-float) 2) &optional))
+  (declare ((simple-array (complex my-float) 2) vola volb)
+	   (values (simple-array (complex my-float) 2) &optional))
   (let ((result (make-array (array-dimensions vola)
 			    :element-type (array-element-type vola))))
    (destructuring-bind (y x)
@@ -744,8 +771,8 @@ be floating point values. If they point outside of IMG 0 is returned."
    result))
 
 (defun .+2 (vola volb)
-  (declare ((simple-array (complex double-float) 2) vola volb)
-	   (values (simple-array (complex double-float) 2) &optional))
+  (declare ((simple-array (complex my-float) 2) vola volb)
+	   (values (simple-array (complex my-float) 2) &optional))
   (let ((result (make-array (array-dimensions vola)
 			    :element-type (array-element-type vola))))
    (destructuring-bind (y x)
@@ -761,11 +788,11 @@ be floating point values. If they point outside of IMG 0 is returned."
 the same dimensions or VOLB must be smaller in all dimensions. In the
 latter case a vec-i has to be supplied in VOLB-START to define the
 relative position of VOLB inside VOLA."
-  (declare ((simple-array (complex double-float) 3) vola volb)
+  (declare ((simple-array (complex my-float) 3) vola volb)
 	   ((or null vec-i) volb-start)
-	   (values (simple-array (complex double-float) 3) &optional))
+	   (values (simple-array (complex my-float) 3) &optional))
   (let ((result (make-array (array-dimensions volb)
-			    :element-type '(complex double-float))))
+			    :element-type '(complex my-float))))
    (destructuring-bind (z y x)
        (array-dimensions vola)
      (destructuring-bind (zz yy xx)
@@ -795,11 +822,11 @@ relative position of VOLB inside VOLA."
    result))
 
 (defun .+ (vola volb &optional (volb-start (make-vec-i)))
-  (declare ((simple-array (complex double-float) 3) vola volb)
+  (declare ((simple-array (complex my-float) 3) vola volb)
 	   (vec-i volb-start)
-	   (values (simple-array (complex double-float) 3) &optional))
+	   (values (simple-array (complex my-float) 3) &optional))
   (let ((result (make-array (array-dimensions volb)
-			    :element-type '(complex double-float))))
+			    :element-type '(complex my-float))))
     (destructuring-bind (z y x)
 	(array-dimensions volb)
       (let ((sx (vec-i-x volb-start))
@@ -812,11 +839,11 @@ relative position of VOLB inside VOLA."
     result))
 
 (defun .- (vola volb &optional (volb-start (make-vec-i)))
-  (declare ((simple-array (complex double-float) 3) vola volb)
+  (declare ((simple-array (complex my-float) 3) vola volb)
 	   (vec-i volb-start)
-	   (values (simple-array (complex double-float) 3) &optional))
+	   (values (simple-array (complex my-float) 3) &optional))
   (let ((result (make-array (array-dimensions volb)
-			    :element-type '(complex double-float))))
+			    :element-type '(complex my-float))))
     (destructuring-bind (z y x)
 	(array-dimensions volb)
       (let ((sx (vec-i-x volb-start))
@@ -828,8 +855,8 @@ relative position of VOLB inside VOLA."
 		   (aref volb k j i))))))
     result))
 
-(declaim (ftype (function (double-float (simple-array (complex double-float) 3))
-			  (values (simple-array (complex double-float) 3) &optional))
+(declaim (ftype (function (my-float (simple-array (complex my-float) 3))
+			  (values (simple-array (complex my-float) 3) &optional))
 		s*))
 (defun s* (s vol)
   (let* ((a (sb-ext:array-storage-vector vol))
@@ -839,9 +866,9 @@ relative position of VOLB inside VOLA."
   vol)
 
 (defun s*2 (s vol)
-  (declare (double-float s)
-	   ((simple-array (complex double-float) 2) vol)
-	   (values (simple-array (complex double-float) 2) &optional))
+  (declare (my-float s)
+	   ((simple-array (complex my-float) 2) vol)
+	   (values (simple-array (complex my-float) 2) &optional))
   (let* ((a (sb-ext:array-storage-vector vol))
 	 (n (length a)))
     (dotimes (i n)
@@ -849,8 +876,8 @@ relative position of VOLB inside VOLA."
   vol)
 
 (defun convolve3-circ (vola volb)
-  (declare ((simple-array (complex double-float) 3) vola volb)
-	   (values (simple-array (complex double-float) 3) &optional))
+  (declare ((simple-array (complex my-float) 3) vola volb)
+	   (values (simple-array (complex my-float) 3) &optional))
   (let* ((da (array-dimensions vola))
 	 (db (array-dimensions volb))
 	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
@@ -874,8 +901,8 @@ kernel. Returns (values result vec). RESULT is an arrays that is as
 big as necessary to accommodate the convolution and VEC contains the
 relative coordinates to find the original sample positions of array
 VOLA in RESULT."
-    (declare ((simple-array (complex double-float) 3) vola volb)
-	   (values (simple-array (complex double-float) 3) vec-i &optional))
+    (declare ((simple-array (complex my-float) 3) vola volb)
+	   (values (simple-array (complex my-float) 3) vec-i &optional))
   (destructuring-bind (za ya xa)
       (array-dimensions vola)
     (destructuring-bind (zb yb xb)
@@ -883,9 +910,9 @@ VOLA in RESULT."
       (let* ((biga (make-array (list (+ za zb)
 				     (+ ya yb)
 				     (+ xa xb))
-			       :element-type '(complex double-float)))
+			       :element-type '(complex my-float)))
 	     (bigb (make-array (array-dimensions biga)
-			       :element-type '(complex double-float)))
+			       :element-type '(complex my-float)))
 	     (fzb (front zb))
 	     (fyb (front yb))
 	     (fxb (front xb))
@@ -908,7 +935,7 @@ VOLA in RESULT."
     (multiple-value-bind (conv start)
 	(convolve3-nocrop vola volb)
       (let* ((result (make-array (array-dimensions vola)
-				 :element-type '(complex double-float)))
+				 :element-type '(complex my-float)))
 	     (oz (vec-i-z start))
 	     (oy (vec-i-y start))
 	     (ox (vec-i-x start)))
@@ -919,15 +946,15 @@ VOLA in RESULT."
 
 #+nil
 (let ((a (make-array (list 100 200 300)
-		     :element-type '(complex double-float)))
+		     :element-type '(complex my-float)))
       (b (make-array (list 10 200 30)
-		     :element-type '(complex double-float))))
+		     :element-type '(complex my-float))))
   (convolve3 a b)
   nil)
 
 
-(declaim (ftype (function ((simple-array (complex double-float) 3))
-			  (values (simple-array (complex double-float) 3) 
+(declaim (ftype (function ((simple-array (complex my-float) 3))
+			  (values (simple-array (complex my-float) 3) 
 				  &optional))
 		resample-half))
 (defun resample-half (vol)
@@ -937,24 +964,24 @@ VOLA in RESULT."
 	   (yy (floor y 2))
 	   (zz (floor z 2))
 	   (small (make-array (list zz yy xx)
-			      :element-type '(complex double-float))))
+			      :element-type '(complex my-float))))
       (do-box (k j i 0 zz 0 xx 0 xx)
        (setf (aref small k j i)
 	     (aref vol (* k 2) (* j 2) (* i 2))))
       small)))
 
 
-(defun cross-section-xz (a &optional (y (floor (array-dimension a 1) 2)))
-  (declare ((simple-array (complex double-float) 3) a)
+(defun cross-section-xz-cdf (a &optional (y (floor (array-dimension a 1) 2)))
+  (declare ((simple-array (complex my-float) 3) a)
 	   (fixnum y)
-	   (values (simple-array (complex double-float) 2)
+	   (values (simple-array (complex my-float) 2)
 		   &optional))
   (destructuring-bind (z y-size x)
       (array-dimensions a)
     (unless (<= 0 y (1- y-size))
       (error "Y is out of bounds."))
     (let ((b (make-array (list z x)
-			 :element-type `(complex double-float))))
+			 :element-type `(complex my-float))))
       (do-rectangle (j i 0 z 0 x)
 	(setf (aref b j i)
 	      (aref a j y i)))
@@ -976,6 +1003,15 @@ VOLA in RESULT."
 	      (aref a j y i)))
       b)))
 
+(defun cross-section-xz (a &optional (y (floor (array-dimension a 1) 2)))
+  (declare (fixnum y))
+  (typecase a
+    ((simple-array (complex single-float) 3) 
+     (cross-section-xz-csf a y))
+    ((simple-array (complex my-float) 3) 
+     (cross-section-xz-cdf a y))
+    (t (error "type not supported."))))
+
 ;; for writing several type conversion functions
 ;; will have a name like convert3-ub8/cdf-complex
 ;; the dimension is looped over 1, 2 and 3
@@ -986,7 +1022,7 @@ VOLA in RESULT."
 	   (let ((short-image-types
 		  '(((complex double-float) . cdf)
 		    ((complex single-float) . csf) 
-		    (double-float . df)
+		    (my-float . df)
 		    (single-float . sf)
 		    ((unsigned-byte 8) . ub8))))
 	     (labels ((find-short-type-name (type)
@@ -1013,39 +1049,47 @@ VOLA in RESULT."
 			    (funcall ,function (aref a1 i))))
 		    res)))))))
 
-(def-convert (unsigned-byte 8) (complex double-float)
-		  #'(lambda (c) (complex (* 1d0 c))) complex)
+(def-convert (unsigned-byte 8) (complex my-float)
+		  #'(lambda (c) (complex (* one c))) complex)
 (def-convert (unsigned-byte 8) (complex single-float)
 		  #'(lambda (c) (complex (* 1s0 c))) complex)
-(def-convert double-float (complex double-float)
+(def-convert my-float (complex my-float)
 	     #'(lambda (d) (complex d)) complex)
-(def-convert double-float (unsigned-byte 8) #'floor)
-(def-convert (complex double-float) double-float #'realpart)
-(def-convert (complex double-float) double-float #'imagpart)
-(def-convert (complex double-float) double-float #'abs)
-(def-convert (complex double-float) double-float #'phase)
+(def-convert my-float (unsigned-byte 8) #'floor)
+(def-convert (complex my-float) my-float #'realpart)
+(def-convert (complex my-float) my-float #'imagpart)
+(def-convert (complex my-float) my-float #'abs)
+(def-convert (complex my-float) my-float #'phase)
 
 (def-convert (complex single-float) single-float #'realpart)
 (def-convert (complex single-float) single-float #'imagpart)
 (def-convert (complex single-float) single-float #'abs)
 (def-convert (complex single-float) single-float #'phase)
 
-(def-convert (complex double-float) (unsigned-byte 8)
+(def-convert (complex my-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (realpart z)))
 	     realpart)
-(def-convert (complex double-float) (unsigned-byte 8)
+(def-convert (complex my-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (imagpart z)))
 	     imagpart)
-(def-convert (complex double-float) (unsigned-byte 8)
+(def-convert (complex my-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (phase z)))
 	     phase)
-(def-convert (complex double-float) (unsigned-byte 8)
+(def-convert (complex my-float) (unsigned-byte 8)
 	     #'(lambda (z) (floor (abs z)))
 	     abs)
 
+(def-convert (complex single-float) (complex my-float)
+  #'(lambda (z) (coerce z '(complex my-float)))
+  coerce)
+
 #+nil
 (convert3-cdf/ub8-realpart
- (make-array (list 3 3 3) :element-type '(complex double-float)))
+ (make-array (list 3 3 3) :element-type '(complex my-float)))
+
+#+nil
+(convert3-csf/cdf-coerce
+ (make-array (list 3 3 3) :element-type '(complex single-float)))
 
 ;; will have a name like normalize3-cdf/ub8-abs
 (defmacro def-normalize-cdf (function)
@@ -1062,7 +1106,7 @@ VOLA in RESULT."
 	       (ma (reduce #'max b1))
 	       (mi (reduce #'min b1))
 	       (s (if (< (abs (- mi ma)) 1d-12)
-		      0d0
+		      zero
 		      (/ 255d0 (- ma mi)))))
 	  (dotimes (i (length b1))
 	    (setf (aref res1 i)
@@ -1103,7 +1147,7 @@ VOLA in RESULT."
 
 (defmacro def-general-normalize ()
   (let ((cases nil)
-	(types '((df double-float floor)
+	(types '((df my-float floor)
 		 (sf single-float floor)
 		 (csf (complex single-float) realpart)
 		 (cdf (complex double-float) realpart))))
@@ -1121,16 +1165,17 @@ VOLA in RESULT."
       (declare ((simple-array * *) a)
 	       (values (simple-array (unsigned-byte 8) *) &optional))
       (typecase a
-	,@cases))))
+	,@cases
+	(t (error "normalize can't handle this type."))))))
 
 (def-general-normalize)
 
 #+nil
-(normalize->ub8 (make-array (list 12 23) :element-type '(complex double-float)))
+(normalize->ub8 (make-array (list 12 23) :element-type '(complex my-float)))
 
 (defmacro def-normalize-df (dim function)
   `(defun ,(intern (format nil "NORMALIZE~d-DF/UB8-~a" dim function)) (a)
-     (declare ((simple-array double-float ,dim) a)
+     (declare ((simple-array my-float ,dim) a)
 	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
      (let* ((res (make-array (array-dimensions a)
 			     :element-type '(unsigned-byte 8)))
@@ -1139,7 +1184,7 @@ VOLA in RESULT."
 	    (ma (reduce #'max b1))
 	    (mi (reduce #'min b1))
 	    (s (if (< (abs (- mi ma)) 1d-12) 
-		   0d0
+		   zero
 		   (/ 255d0 (- ma mi)))))
        (dotimes (i (length b1))
 	 (setf (aref res1 i)
@@ -1150,17 +1195,17 @@ VOLA in RESULT."
 (def-normalize-df 2 floor)
 
 (defun normalize2-df/df (a)
-  (declare ((simple-array double-float 2) a)
-	   (values (simple-array double-float 2) &optional))
+  (declare ((simple-array my-float 2) a)
+	   (values (simple-array my-float 2) &optional))
   (let* ((res (make-array (array-dimensions a)
-			  :element-type 'double-float))
+			  :element-type 'my-float))
 	 (res1 (sb-ext:array-storage-vector res))
 	 (a1 (sb-ext:array-storage-vector a))
 	 (ma (reduce #'max a1))
 	 (mi (reduce #'min a1))
 	 (s (if (eq mi ma)
-		0d0
-		(/ 1d0 (- ma mi)))))
+		zero
+		(/ one (- ma mi)))))
     (dotimes (i (length a1))
       (setf (aref res1 i)
 	    (* s (- (aref a1 i) mi))))
@@ -1170,15 +1215,15 @@ VOLA in RESULT."
   (declare ((simple-array * *) a)
 	   (values (simple-array (unsigned-byte 8) *) &optional))
   (etypecase a
-    ((simple-array (complex double-float) 2) (normalize2-cdf/ub8-realpart a))
-    ((simple-array (complex double-float) 3) (normalize3-cdf/ub8-realpart a))
-    ((simple-array double-float 2) (normalize2-df/ub8-floor a))
-    ((simple-array double-float 3) (normalize3-df/ub8-floor a))))
+    ((simple-array (complex my-float) 2) (normalize2-cdf/ub8-realpart a))
+    ((simple-array (complex my-float) 3) (normalize3-cdf/ub8-realpart a))
+    ((simple-array my-float 2) (normalize2-df/ub8-floor a))
+    ((simple-array my-float 3) (normalize3-df/ub8-floor a))))
 
 #+nil
 (let ((a (make-array (list 3 4 5)
-		     :element-type '(complex double-float))))
-  (setf (aref a 1 1 1) (complex 1d0 1d0))
+		     :element-type '(complex my-float))))
+  (setf (aref a 1 1 1) (complex one one))
   (normalize3-cdf/ub8 a))
 
 #+nil ;; find the names of all the functions that were defined by the
@@ -1269,7 +1314,7 @@ VOLA in RESULT."
        (error "bbox is bigger than array"))
      (let* ((sx (floor (vec-x start)))
 	    (sy (floor (vec-y start)))
-	    (widths (v+ (v- end start) (v 1d0 1d0)))
+	    (widths (v+ (v- end start) (v one one)))
 	    (res (make-array (list (floor (vec-y widths))
 				   (floor (vec-x widths)))
 			     :element-type '(unsigned-byte 8))))
@@ -1295,7 +1340,7 @@ coordinates relative to A, replace the contents of A with B."
 	(unless (and (< (vec-x end) x)
 		     (< (vec-y end) y))
 	  (error "bbox is bigger than array"))
-	(let ((widths (v+ (v- end start) (v 1d0 1d0))))
+	(let ((widths (v+ (v- end start) (v one one))))
 	  (unless (and (= (floor (vec-x widths)) xx)
 		       (= (floor (vec-y widths)) yy))
 	    (error "size of BBOX isn't the same as size of small array B"))
@@ -1340,8 +1385,8 @@ pixels are zero."
       (let ((l (left))
 	    (r (right)))
 	(when (<= l r) ;; otherwise all pixels are zero
-	 (make-bbox :start (v (* 1d0 l) (* 1d0 (top)))
-		    :end (v (* 1d0 r) (* 1d0 (bottom)))))))))
+	 (make-bbox :start (v (* one l) (* one (top)))
+		    :end (v (* one r) (* one (bottom)))))))))
 
 #+nil
 (let* ((a (make-array (list 5 5) 
@@ -1400,13 +1445,13 @@ pixels are zero."
       (let ((l (left))
 	    (r (right)))
 	(when (<= l r) ;; otherwise all pixels are zero
-	 (make-bbox :start (v (* 1d0 l) (* 1d0 (top)) (* 1d0 (front)))
-		    :end (v (* 1d0 r) (* 1d0 (bottom)) (* 1d0 (back)))))))))
+	 (make-bbox :start (v (* one l) (* one (top)) (* one (front)))
+		    :end (v (* one r) (* one (bottom)) (* one (back)))))))))
 
 (defmacro def-extract-bbox3 ()
   `(progn
-     ,@(loop for i in '((df double-float)
-			(cdf (complex double-float))
+     ,@(loop for i in '((df my-float)
+			(cdf (complex my-float))
 			(ub8 (unsigned-byte 8))) collect
 	    (destructuring-bind (short long)
 	       i
@@ -1425,7 +1470,7 @@ pixels are zero."
 		    (let* ((sx (floor (vec-x start)))
 			   (sy (floor (vec-y start)))
 			   (sz (floor (vec-z start)))
-			   (widths (v+ (v- end start) (v 1d0 1d0 1d0)))
+			   (widths (v+ (v- end start) (v one one one)))
 			   (res (make-array (list (floor (vec-z widths))
 						  (floor (vec-y widths))
 						  (floor (vec-x widths)))
@@ -1455,7 +1500,7 @@ coordinates relative to A, replace the contents of A with B."
 		     (< (vec-y end) y)
 		     (< (vec-z end) z))
 	  (error "bbox is bigger than array"))
-	(let ((widths (v+ (v- end start) (v 1d0 1d0 1d0))))
+	(let ((widths (v+ (v- end start) (v one one one))))
 	  (unless (and (= (floor (vec-x widths)) xx)
 		       (= (floor (vec-y widths)) yy)
 		       (= (floor (vec-z widths)) zz))
@@ -1495,10 +1540,10 @@ coordinates relative to A, replace the contents of A with B."
 
 (defun mean-realpart (a)
   "Calculate the average value over all the samples in volume A."
-  (declare ((simple-array (complex double-float) *) a)
-	   (values double-float &optional))
+  (declare ((simple-array (complex my-float) *) a)
+	   (values my-float &optional))
   (let* ((a1 (sb-ext:array-storage-vector a))
-	 (sum 0d0)
+	 (sum zero)
 	 (n (length a1)))
     (dotimes (i n)
       (incf sum (realpart (aref a1 i))))
@@ -1516,10 +1561,10 @@ coordinates relative to A, replace the contents of A with B."
 ;; for a 63x objective we get f=2.61, with n=1.515 
 
 (defun draw-disk (radius y x)
-  (declare (double-float radius)
+  (declare (my-float radius)
 	   (fixnum y x)
-	   (values (simple-array (complex double-float) 2) &optional))
-  (let ((result (make-array (list y x) :element-type '(complex double-float)))
+	   (values (simple-array (complex my-float) 2) &optional))
+  (let ((result (make-array (list y x) :element-type '(complex my-float)))
 	(xh (floor x 2))
 	(yh (floor y 2))
 	(r2 (* radius radius)))
@@ -1537,33 +1582,41 @@ coordinates relative to A, replace the contents of A with B."
 			(draw-disk 12d0 100 200)
 			(draw-disk 12d0 100 200)))))
 
-(sb-alien:define-alien-routine ("j1" bessel-j1)
+(sb-alien:define-alien-routine ("j1" bessel-j1-df)
     sb-alien:double
   (arg sb-alien:double))
 
+(sb-alien:define-alien-routine ("j1f" bessel-j1-sf)
+    sb-alien:float
+  (arg sb-alien:float))
+
 ;; isi.ssl.berkeley.edu/~tatebe/whitepapers/FT%20of%20Uniform%20Disk.pdf
 (defun draw-unit-intensity-disk-precise (radius y x)
-  (declare (double-float radius)
+  (declare (my-float radius)
 	   (fixnum y x)
-	   (values (simple-array (complex double-float) 2) &optional))
+	   (values (simple-array (complex my-float) 2) &optional))
   (let ((a (make-array (list y x)
-		       :element-type '(complex double-float)))
+		       :element-type '(complex my-float)))
 	(xh (floor x 2))
-	(yh (floor y 2)))
+	(yh (floor y 2))
+	(bessel-j1 (etypecase one
+		     (single-float #'bessel-j1-sf)
+		     (double-float #'bessel-j1-df)))
+	(tiny (coerce 1d-12 'my-float)))
     (do-rectangle (j i 0 y 0 x)
-      (let* ((xx (/ (* 1d0 (- i xh)) x))
-	     (yy (/ (* 1d0 (- j yh)) y))
+      (let* ((xx (/ (* one (- i xh)) x))
+	     (yy (/ (* one (- j yh)) y))
 	     (f (sqrt (+ (* xx xx) (* yy yy)))))
-	(setf (aref a j i) (if (< f 1d-12)
-			       (complex (* pi radius))
-			       (complex (/ (bessel-j1 (* 2d0 pi f radius))
+	(setf (aref a j i) (if (< f tiny)
+			       (complex (* my-pi radius))
+			       (complex (/ (bessel-j1 (* two my-pi f radius))
 					   f))))))
     (fftshift2 (ift2 (fftshift2 a)))))
 
 (defun draw-unit-energy-disk-precise (radius y x)
-  (declare (double-float radius)
+  (declare (my-float radius)
 	   (fixnum y x)
-	   (values (simple-array (complex double-float) 2) &optional))
+	   (values (simple-array (complex my-float) 2) &optional))
   (let* ((disk (draw-unit-intensity-disk-precise radius y x))
 	 (sum (reduce #'+ (sb-ext:array-storage-vector disk))))
     (s*2 (/ (realpart sum)) disk)))
@@ -1574,7 +1627,7 @@ coordinates relative to A, replace the contents of A with B."
 
 
 (defun draw-sphere-ub8 (radius z y x)
-  (declare (double-float radius)
+  (declare (my-float radius)
 	   (fixnum z y x)
 	   (values (simple-array (unsigned-byte 8) 3)
 		   &optional))
@@ -1585,17 +1638,17 @@ coordinates relative to A, replace the contents of A with B."
 	  (zh (floor z 2))
 	  (radius2 (* radius radius)))
      (do-box (k j i 0 z 0 y 0 x)
-       (let ((r2 (+ (expt (* 1d0 (- i xh)) 2)
-		    (expt (* 1d0 (- j yh)) 2)
-		    (expt (* 1d0 (- k zh)) 2))))
+       (let ((r2 (+ (expt (* one (- i xh)) 2)
+		    (expt (* one (- j yh)) 2)
+		    (expt (* one (- k zh)) 2))))
 	 (setf (aref sphere k j i)
 	       (if (< r2 radius2)
 		   1 0)))))
     sphere))
 #+nil
-(count-non-zero-ub8 (draw-sphere-ub8 1d0 41 58 70))
+(count-non-zero-ub8 (draw-sphere-ub8 one 41 58 70))
 #+nil
-(let ((a (draw-sphere-ub8 1d0
+(let ((a (draw-sphere-ub8 one
 			  4 4 4
 			  ;;3 3 3
 			  ;;41 58 70
@@ -1609,17 +1662,17 @@ coordinates relative to A, replace the contents of A with B."
    res))
 
 (defun draw-oval-ub8 (radius z y x)
-  (declare (double-float radius)
+  (declare (my-float radius)
 	   (fixnum z y x)
 	   (values (simple-array (unsigned-byte 8) 3)
 		   &optional))
   (let ((sphere (make-array (list z y x)
 			    :element-type '(unsigned-byte 8)))
-	(scale-z 5d0))
+	(scale-z (coerce 5d0 'my-float)))
     (do-box (k j i 0 z 0 y 0 x)
-      (let ((r (sqrt (+ (square (- i (* .5d0 x)))
-			(square (- j (* .5d0 y)))
-			(square (* scale-z (- k (* .5d0 z))))))))
+      (let ((r (sqrt (+ (square (- i (* half x)))
+			(square (- j (* half y)))
+			(square (* scale-z (- k (* half z))))))))
 	(setf (aref sphere k j i)
 	      (if (< r radius)
 		  1
