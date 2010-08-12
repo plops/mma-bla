@@ -3,7 +3,9 @@
     (require :vector)
     (require :vol))
 (defpackage :cuda-fft
-   (:use :cl :sb-alien :sb-c-call))
+   (:use :cl :sb-alien :sb-c-call)
+   (:export #:ft3-csf-cuda
+	    #:ift3-csf-cuda))
 (in-package :cuda-fft)
 
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
@@ -83,26 +85,59 @@
   (count size-t)
   (kind cuda-memcpy-kind))
 
+;; same semantics as ft3 wrapper to fftw3, input array isn't modified 
+(defun ft3-csf-cuda (in &key (forward t))
+  (declare ((simple-array (complex single-float) 3) in)
+	   (boolean forward)
+	   (values (simple-array (complex single-float) 3) &optional))
+  (let ((dims (array-dimensions in)))
+    (destructuring-bind (z y x)
+	dims
+      (let* ((out (make-array dims :element-type '(complex single-float)))
+	     (out1 (sb-ext:array-storage-vector out))
+	     (in1 (sb-ext:array-storage-vector in))
+	     (n (length in1))
+	     ;; allocate array on device
+	     (device (cu-malloc-sf (length in1)))
+	     (single-float-size (* 4 2)))
+	;; copy data to device
+	(cuda-memcpy (sb-sys:int-sap device) 
+		     (sb-sys:vector-sap in1)
+		     (* n single-float-size) 
+		     'host->device)
+	;; plan and execute in-place transform on device
+	(let ((plan (cu-plan x y z)))
+	  (cufft-exec-c2c plan 
+			  (sb-sys:int-sap device)
+			  (sb-sys:int-sap device)
+			  (if forward 
+			      +cufft-forward+
+			      +cufft-inverse+))
+	  (cufft-destroy plan))
+	;; copy result back
+	(cuda-memcpy (sb-sys:vector-sap in1)
+		     (sb-sys:int-sap device) 
+		(* n single-float-size) 'device->host)
+	;; deallocate array on device
+	(cuda-free device)
+	;; normalize if forward
+	(when forward 
+	 (let* ((1/n (/ 1s0 n)))
+	   (dotimes (i n)
+	     (setf (aref out1 i) (* 1/n (aref out1 i))))))
+	in))))
+
+(defmacro ift3-csf-cuda (in)
+  `(ft3-csf-cuda ,in :forward nil))
+
+
 #+nil
-(let* ((nx 120)
-       (ny nx)
-       (nz ny)
-       (dims (list nz ny nx))
-       (a (vol:convert3-ub8/csf-complex
-	   (vol:draw-sphere-ub8 20d0 nz ny nx)))
-       (a1 (sb-ext:array-storage-vector a))
-       (device (cu-malloc-sf (length a1))))
-  (cuda-memcpy (sb-sys:int-sap device) 
-	       (sb-sys:vector-sap a1)
-	       (* (length a1) 4 2) 'host->device)
-  (let ((plan (cu-plan nx ny nz)))
-    (time (cufft-exec-c2c plan (sb-sys:int-sap device)
-		     (sb-sys:int-sap device) +cufft-forward+))
-    (cufft-destroy plan))
-  (cuda-memcpy (sb-sys:vector-sap a1)
-	       (sb-sys:int-sap device) 
-	       (* (length a1) 4 2) 'device->host)
-  (vol:write-pgm "/home/martin/tmp/cufft.pgm" 
-		 (vol:normalize2-csf/ub8-abs
-		  (vol:cross-section-xz-csf a)))
-  (cuda-free device))
+(time
+ (let* ((nx 256)
+	(ny nx)
+	(nz ny)
+	(a (vol:convert3-ub8/csf-complex
+	    (vol:draw-sphere-ub8 20d0 nz ny nx))))
+   (vol:write-pgm "/home/martin/tmp/cufft.pgm" 
+		  (vol:normalize2-csf/ub8-abs
+		   (vol:cross-section-xz-csf (ft3-csf-cuda a))))))
