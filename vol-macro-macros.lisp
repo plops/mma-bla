@@ -35,14 +35,22 @@
 ;; exported symbols. if spec contains the symbol type, than a
 ;; long-type will be generated. the variable name should be used to
 ;; define the name of the function. here is an example: 
+
 ;; (def-generator (fftshift (rank type))
 ;;   `(defun ,name (in)
 ;;      (declare ((simple-array ,long-type ,rank) in))))
+
 ;; now we can interpolate into a function with the following call
+
 ;; (def-fftshift-rank-type 2 sf)
+
 ;; the new function looks like this:
+
 ;; (DEFUN DEF-FFTSHIFT-2-SF (IN)
 ;;   (DECLARE ((SIMPLE-ARRAY SINGLE-FLOAT 2) IN)))
+
+;; when a new macro is needed to generate a lot of functions (and
+;; maybe one dispatch function) it should be called def-...-functions.
 
 (defmacro def-generator ((name spec) &body body)
   (let ((macro-name (format-symbol "def-~a~{-~a~}" name spec))
