@@ -1,22 +1,5 @@
 (in-package :vol)
 
-(declaim (ftype (function ((simple-array * 2) my-float my-float)
-			  (values (or double-float
-				      (complex double-float)) &optional))
-		interpolate2))
-(defun interpolate2 (img x y)
-  "Bilinear interpolation on an image IMG. The coordinates X and Y can
-be floating point values. If they point outside of IMG 0 is returned."
-  (etypecase img
-    ((simple-array (unsigned-byte 8) 2) (interpolate2-ub8 img x y))
-    ((simple-array my-float 2) (interpolate2-df img x y))
-    ((simple-array (complex my-float) 2) (interpolate2-cdf img x y))))
-
-#+nil
-(let ((a (make-array (list 2 2) :element-type '(unsigned-byte 8)
-		     :initial-contents '((1 2) (2 3)))))
-  (interpolate2 a half .2d0)) 
-
 ;; pbourke linearly interpolating points within a box
 (def-generator (interpolate (rank type))
   (let ((params (ecase rank
@@ -105,12 +88,26 @@ be floating point values. If they point outside of IMG 0 is returned."
  (interpolate-1-sf a 1.5))
 
 (defmacro def-interpolate-functions (ranks types)
-  (let ((result nil))
+  (let ((functions nil)
+	(cases nil))
     (loop for rank in ranks do
 	 (loop for type in types do
 	      (push `(def-interpolate-rank-type ,rank ,type)
-		    result)))
-    `(progn ,@result)))
+		    functions)))
+    (loop for rank in ranks do
+		       (loop for type in types do
+			    (let ((long-type (get-long-type type)))
+			      (push `((simple-array ,long-type ,rank)
+				      (,(format-symbol 
+					 "interpolate-~a-~a" rank type)
+					a ,@(subseq '(x y z) 0 rank)))
+				    cases))))
+    `(progn ,@functions
+	    (defun interpolate (a x &optional y z)
+	      (declare ((or null single-float) x y z))
+	      (etypecase a
+		,@cases
+	 (t (error "type not supported.")))))))
 
 (def-interpolate-functions (1 2 3) (sf df csf cdf))
 
@@ -121,7 +118,8 @@ be floating point values. If they point outside of IMG 0 is returned."
        (a1 (sb-ext:array-storage-vector a)))
   (dotimes (i (length a1))
     (setf (aref a1 i) (* 1s0 i)))
-  (interpolate-3-sf a 1.2s0 1.3s0 1.2s0))
+  (interpolate-3-sf a 1.2s0 1.3s0 1.2s0)
+  (interpolate a 1.2s0 1.3s0 1.2s0))
 
 
 (def-generator (resample-half (rank type))
@@ -271,10 +269,21 @@ be floating point values. If they point outside of IMG 0 is returned."
 			       (setf (aref result (+ bz k) (+ by j) (+ bx i))
 				     (,(format-symbol "interpolate-~a-~a" rank type) vol xx yy zz))))
 			   result))))))))))))
+#+nil
 (def-resample-rank-type 1 sf)
-
+#+nil
 (let ((a (make-array 3 :element-type 'single-float :initial-contents '(1s0 2s0 3s0))))
  (resample-1-sf a 1.0 .5))
+
+(defmacro def-resample-functions (ranks types)
+  (let ((result nil))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (push `(def-resample-rank-type ,rank ,type)
+		    result)))
+    `(progn ,@result)))
+
+(def-resample-functions (1 2 3) (sf df csf cdf))
 
 #+nil
 (time
@@ -322,15 +331,18 @@ be floating point values. If they point outside of IMG 0 is returned."
      (store-new-function (format-symbol "cross-section-xz"))
      (defun cross-section-xz (a &optional (y (floor (array-dimension a 1) 2)))
        (declare (fixnum y))
-       (typecase a
+       (etypecase a
 	 ,@(loop for type in types collect
-		     (let ((long-type (get-long-type type)))
+		(let ((long-type (get-long-type type)))
 		       `((simple-array ,long-type 3) (,(format-symbol 
 							 "cross-section-xz-~a" type) a y))))
 	 (t (error "type not supported."))))))
 
 (def-cross-section-xz-functions (ub8 sf df csf cdf))
 
+#+nil
+(let ((a (make-array (list 2 2 2) :element-type 'single-float)))
+ (cross-section-xz a))
 
 (def-generator (decimate-xy (type))
  `(defun ,name (dx vol)
