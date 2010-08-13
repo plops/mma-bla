@@ -70,9 +70,6 @@
 		      (aref a j i))))))
 	result))))
 
-(declaim (ftype (function (string (simple-array (unsigned-byte 8) 3))
-			  (values null &optional))
-		save-stack-ub8))
 (defun save-stack-ub8 (fn vol)
   (declare (string fn)
 	   ((simple-array (unsigned-byte 8) 3) vol)
@@ -86,7 +83,7 @@
     (let ((b (make-array (list y x)
 			 :element-type '(unsigned-byte 8))))
       (dotimes (k z)
-	(do-rectangle (j i 0 y 0 x)
+	(do-region ((j i) (y x))
 	  (setf (aref b j i)
 		(aref vol k j i)))
 	(write-pgm (format nil "~a/~3,'0d.pgm" fn k) b))))

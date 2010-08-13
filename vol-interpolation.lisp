@@ -211,7 +211,7 @@
 		 c))
 	     (dims (n d d^) ;; calculate new array size from old one and deltas
 	       (declare (fixnum n)
-			(my-float d d^)
+			(single-float d d^)
 			(values fixnum fixnum fixnum &optional))
 	       (let* ((c (center n))
 		      (b (- n c))
@@ -359,14 +359,17 @@
 	    (ny (floor y dx))
 	    (result (make-array (list z ny nx)
 				:element-type (quote ,long-type))))
+       (declare (integer nx ny))
        (do-region ((k j i) (nx ny z))
-	 (let ((sum 0))
+	 (let ((sum (coerce 0 (quote ,long-type))))
 	   (do-region ((jj ii) (dx dx))
 	     (incf sum (aref vol
 			     k
 			     (+ (* dx j) jj)
 			     (+ (* dx i) ii))))
-	   (setf (aref result k j i) (floor sum dx2))))
+	   (setf (aref result k j i) ,(if (eq type 'ub8)
+					  `(floor sum dx2)
+					  `(/ sum dx2)))))
        result))))
 
 (defmacro def-decimate-xz-functions (types)
