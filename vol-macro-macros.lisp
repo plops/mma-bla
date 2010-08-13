@@ -7,7 +7,10 @@
 (let ((type-names '(((complex double-float) . cdf)
 		    ((complex single-float) . csf)
 		    (double-float . df)
-		    (single-float . sf))))
+		    (single-float . sf)
+		    ((signed-byte 16) . sb16)
+		    ((unsigned-byte 16) . ub16)
+		    ((unsigned-byte 8) . ub8))))
   (defun get-short-type (long-type)
     (cdr (assoc long-type type-names)))
   (defun get-long-type (short-type)
@@ -20,3 +23,45 @@
   `(intern (string-upcase (format nil ,fmt ,@rest))))
 
 (defparameter *macro-generated-functions* nil)
+(defun store-new-function (name)
+  (push name *macro-generated-functions*))
+
+;; macro that defines another macro that in turn will define functions
+;; handling different ranks and types. should be called like this:
+;; (def-generator (fftshift rank type) ... ). the name of the new
+;; macro will be def-fftshift-rank-type and when it is invoked the
+;; generated function name will be pushed into
+;; *macro-generated-functions*. this can be used to build the list of
+;; exported symbols. if spec contains the symbol type, than a
+;; long-type will be generated. the variable name should be used to
+;; define the name of the function. here is an example: 
+;; (def-generator (fftshift (rank type))
+;;   `(defun ,name (in)
+;;      (declare ((simple-array ,long-type ,rank) in))))
+;; now we can interpolate into a function with the following call
+;; (def-fftshift-rank-type 2 sf)
+;; the new function looks like this:
+;; (DEFUN DEF-FFTSHIFT-2-SF (IN)
+;;   (DECLARE ((SIMPLE-ARRAY SINGLE-FLOAT 2) IN)))
+
+(defmacro def-generator ((name spec) &body body)
+  (let ((macro-name (format-symbol "def-~a~{-~a~}" name spec))
+	(function-fmt (let ((result (format nil "~a" name)))
+			(dotimes (i (length spec)) 
+			  (setf result (concatenate 'string result (format nil "-~~a"))))
+			result)))
+    `(defmacro ,macro-name ,spec
+       (let ((name (format-symbol ,function-fmt ,@spec))
+	     ,(when (member 'type spec)
+		    `(long-type (get-long-type type))))
+	 (store-new-function name)
+	 ,@body))))
+
+#+nil
+(def-generator (fftshift (rank type))
+  `(defun ,name (in)
+     (declare ((simple-array ,long-type ,rank) in))))
+#+nil
+(def-fftshift-rank-type 2 sf)
+#+nil
+(fftshift-2-sf )

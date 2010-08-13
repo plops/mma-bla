@@ -310,49 +310,45 @@ be floating point values. If they point outside of IMG 0 is returned."
    (save-stack-ub8 "/home/martin/tmp/s2-s0" (normalize3-cdf/ub8-realpart (.- s0 s2)))))
 
 
+(def-generator (cross-section-xz (type))
+  `(defun ,name (a &optional (y (floor (array-dimension a 1) 2)))
+     (declare ((simple-array ,long-type 3) a)
+	      (fixnum y)
+	      (values (simple-array ,long-type 2)
+		      &optional))
+     (destructuring-bind (z y-size x)
+	 (array-dimensions a)
+       (unless (<= 0 y (1- y-size))
+	 (error "Y is out of bounds."))
+       (let ((b (make-array (list z x)
+			    :element-type (quote ,long-type))))
+	 (do-region ((j i) (z x))
+	   (setf (aref b j i)
+		 (aref a j y i)))
+	 b))))
 
-(defun cross-section-xz-cdf (a &optional (y (floor (array-dimension a 1) 2)))
-  (declare ((simple-array (complex my-float) 3) a)
-	   (fixnum y)
-	   (values (simple-array (complex my-float) 2)
-		   &optional))
-  (destructuring-bind (z y-size x)
-      (array-dimensions a)
-    (unless (<= 0 y (1- y-size))
-      (error "Y is out of bounds."))
-    (let ((b (make-array (list z x)
-			 :element-type `(complex my-float))))
-      (do-rectangle (j i 0 z 0 x)
-	(setf (aref b j i)
-	      (aref a j y i)))
-      b)))
+#+nil
+(def-cross-section-xz-type sf)
 
-(defun cross-section-xz-csf (a &optional (y (floor (array-dimension a 1) 2)))
-  (declare ((simple-array (complex single-float) 3) a)
-	   (fixnum y)
-	   (values (simple-array (complex single-float) 2)
-		   &optional))
-  (destructuring-bind (z y-size x)
-      (array-dimensions a)
-    (unless (<= 0 y (1- y-size))
-      (error "Y is out of bounds."))
-    (let ((b (make-array (list z x)
-			 :element-type `(complex single-float))))
-      (do-rectangle (j i 0 z 0 x)
-	(setf (aref b j i)
-	      (aref a j y i)))
-      b)))
+#+nil
+(let ((a (make-array (list 2 2 2) :element-type 'single-float)))
+ (cross-section-xz-sf a))
 
-(defun cross-section-xz (a &optional (y (floor (array-dimension a 1) 2)))
-  (declare (fixnum y))
-  (typecase a
-    ((simple-array (complex single-float) 3) 
-     (cross-section-xz-csf a y))
-    ((simple-array (complex my-float) 3) 
-     (cross-section-xz-cdf a y))
-    (t (error "type not supported."))))
+(defmacro def-cross-section-xz-functions (types)
+  `(progn
+     ,@(loop for type in types collect
+	    `(def-cross-section-xz-type ,type))
+     (store-new-function (format-symbol "cross-section-xz"))
+     (defun cross-section-xz (a &optional (y (floor (array-dimension a 1) 2)))
+       (declare (fixnum y))
+       (typecase a
+	 ,@(loop for type in types collect
+		     (let ((long-type (get-long-type type)))
+		       `((simple-array ,long-type 3) (,(format-symbol 
+							 "cross-section-xz-~a" type) a y))))
+	 (t (error "type not supported."))))))
 
-
+(def-cross-section-xz-functions (ub8 sf df csf cdf))
 
 (defun decimate-xy-ub8 (dx vol)
   "Increase transversal sampling distance by odd integer factor DX."
@@ -366,8 +362,8 @@ be floating point values. If they point outside of IMG 0 is returned."
     (let* ((dx2 (* dx dx))
 	   (nx (floor x dx))
 	   (ny (floor y dx))
-	   (result (make-array (list z ny nx)
-			       :element-type '(unsigned-byte 8))))
+	    (result (make-array (list z ny nx)
+				:element-type '(unsigned-byte 8))))
       (do-box (k j i 0 z 0 ny 0 nx)
 	(let ((sum 0))
 	  (do-rectangle (jj ii 0 dx 0 dx)
