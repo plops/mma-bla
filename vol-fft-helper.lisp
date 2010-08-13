@@ -1,44 +1,6 @@
-(let ((type-names '(((complex double-float) . cdf)
-		    ((complex single-float) . csf)
-		    (double-float . df)
-		    (single-float . sf))))
-  (defun get-short-type (long-type)
-    (cdr (assoc long-type type-names)))
-  (defun get-long-type (short-type)
-    (car (rassoc short-type type-names))))
+;; functions that are somehow related to the fouriertransform
 
-#+nil
-(get-long-type 'df)
-
-(defmacro do-region ((indices end &optional (start '(0 0 0))) &body body)
-  "Write intertwined loops to traverse a vector, an image or a volume."
-  (unless (and (= (length indices)
-		  (length end)))
-    (error "Number of indices and interval-ends are not equal."))
-  (labels ((rec (ind end start acc) ;; several loops
-             (if (null end)
-                 acc
-                 (rec (cdr ind) (cdr end) (cdr start)
-                      `((loop for ,(car ind) from ,(car start) 
-                           below ,(car end) do ,@acc))))))
-    (first (rec (reverse indices) ;; first index is outermost loop
-		(reverse end)
-		(reverse start) body))))
-#+nil
-(let ((sum 0))
-  (do-region ((k j i) (4 4 5))
-    (incf sum (+ k j i)))
-  sum)
-
-(defmacro format-symbol (fmt &rest rest)
-  `(intern (string-upcase (format nil ,fmt ,@rest))))
-
-(defmacro letn (vecs binds &body body)
-  `(symbol-macrolet ,vecs
-     (let ,binds
-       ,@body)))
-
-(defparameter *macro-generated-functions* nil)
+(in-package :vol)
 
 (defmacro def-fftshift-rk-type (rank short-type)
   (let ((name (format-symbol "fftshift~d-~a" rank short-type))
@@ -101,7 +63,6 @@
 							 '(complex single-float)))
 					 ls))))
   (fftshift1-csf a))
-
 
 #+nil
 (time 
