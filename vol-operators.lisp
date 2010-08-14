@@ -141,7 +141,7 @@
 		      (,(format-symbol  "mean-~a-~a" rank type) 
 			a))
 		    cases)))
-    (store-new-function "mean")
+    (store-new-function (format-symbol "mean"))
     `(progn ,@result
 	    (defun mean (a)
 	     (etypecase a

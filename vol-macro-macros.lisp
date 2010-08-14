@@ -83,9 +83,8 @@
   (let ((result nil))
     (loop for a in la do
 	 (loop for b in lb do
-	      (when (,predicate ,a ,b)
-	       (push `(,func ,a ,b)
-		     result))))
+	      (push `(,func ,a ,b)
+		    result)))
     (if return-sexpr
 	`(,return-sexpr ,@result)
 	`(,@result))))

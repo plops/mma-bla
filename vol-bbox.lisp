@@ -1,3 +1,6 @@
+(require :vol)
+(in-package :vol)
+
 ;; bbox contains float values but is also used to represent pixel
 ;; positions. In that case start is the first sample that is non-zero
 ;; and end is the last non-zero pixel.
@@ -5,29 +8,67 @@
   (start (v) :type vec)
   (end (alexandria:required-argument) :type vec))
 
-(defun extract-bbox2-ub8 (a bbox)
-  (declare ((simple-array (unsigned-byte 8) 2) a)
-	   (bbox bbox)
-	   (values (simple-array (unsigned-byte 8) 2) &optional))
-  (destructuring-bind (y x)
-      (array-dimensions a)
-    (with-slots (start end)
-	bbox
-     (unless (and (< (vec-x end) x)
-		  (< (vec-y end) y))
-       (error "bbox is bigger than array"))
-     (let* ((sx (floor (vec-x start)))
-	    (sy (floor (vec-y start)))
-	    (widths (v+ (v- end start) (v one one)))
-	    (res (make-array (list (floor (vec-y widths))
-				   (floor (vec-x widths)))
-			     :element-type '(unsigned-byte 8))))
-       (destructuring-bind (yy xx)
-	   (array-dimensions res)
-	(do-rectangle (j i 0 yy 0 xx)
-	  (setf (aref res j i)
-		(aref a (+ j sy) (+ i sx)))))
-       res))))
+(def-generator (extract-bbox (rank type))
+  `(defun ,name (a bbox)
+     (declare ((simple-array ',long-type ,rank) a)
+	      (bbox bbox)
+	      (values (simple-array ',long-type ,rank) &optional))
+     ,(ecase
+       rank 
+       (2 `(destructuring-bind (y x) (array-dimensions a)
+	     (with-slots (start end) bbox
+	       (unless (and (< (vec-x end) x) (< (vec-y end) y))
+		 (error "bbox is bigger than array"))
+	       (let* ((sx (floor (vec-x start)))
+		      (sy (floor (vec-y start)))
+		      (widths (v+ (v- end start) (v one one)))
+		       (res (make-array (list (floor (vec-y widths))
+					      (floor (vec-x widths)))
+					:element-type ',long-type)))
+		 (destructuring-bind (yy xx)
+		      (array-dimensions res)
+		   (do-region ((j i) (yy xx))
+		     (setf (aref res j i) (aref a (+ j sy) (+ i sx)))))
+		 res))))
+       (3 `(destructuring-bind (z y x) (array-dimensions a)
+	     (with-slots (start end) bbox
+	       (unless (and (< (vec-x end) x) (< (vec-y end) y) (< (vec-z end) z))
+		 (error "bbox is bigger than array"))
+	       (let* ((sx (floor (vec-x start)))
+		      (sy (floor (vec-y start)))
+		      (sz (floor (vec-z start)))
+		      (widths (v+ (v- end start) (v one one one)))
+		      (res (make-array (list (floor (vec-z widths))
+					     (floor (vec-y widths))
+					    (floor (vec-x widths)))
+				       :element-type ',long-type)))
+		 (destructuring-bind (zz yy xx)
+		     (array-dimensions res)
+		   (do-region ((k j i) (zz yy xx))
+		     (setf (aref res k j i)
+			  (aref a (+ k sz) (+ j sy) (+ i sx)))))
+		 res)))))))
+
+(defmacro def-extract-box-functions (ranks types)
+  (let ((specifics nil)
+	(cases nil)
+	(name (format-symbol "extract-bbox")))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (push `(def-extract-bbox-rank-type ,rank ,type)
+		    specifics)
+	      (push `((simple-array ,(get-long-type type) ,rank)
+		      (,(format-symbol "~a-~a-~a" name rank type) a bbox))
+		    cases)))
+    (store-new-function name)
+    `(progn ,@specifics
+	    (defun ,name (a bbox)
+	       (etypecase a
+		 ,@cases
+		 (t (error "The given type can't be handled with a generic ~a function." ,name)))))))
+
+(def-extract-box-functions (2 3) (ub8 sf df csf cdf))
+
 
 (defun replace-bbox2-ub8 (a b bbox)
   "A beeing a big array, and B a smaller one with BBOX giving its
