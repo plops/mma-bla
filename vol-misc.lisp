@@ -47,8 +47,8 @@
       (values result minval maxval binsm))))
 
 (defun square (x)
-  (declare (my-float x)
-	   (values my-float &optional))
+  (declare (double-float x)
+	   (values double-float &optional))
   (* x x))
  
 ;; chernov/book.pdf p. 20
@@ -56,14 +56,14 @@
 			  (x (let* ((n (length y)))
 			       (make-array 
 				n
-				:element-type 'my-float
+				:element-type 'double-float
 				:initial-contents 
-				(loop for i below n collect (* one i))))))
+				(loop for i below n collect (* 1d0 i))))))
   "Linear regression of the values in Y with the function y=a*x+b. If
 X isn't supplied its assumed to be 0,1,2, ... . Returned are the
 fitting parameters A and B and their errors DELTA_A and DELTA_B."
-  (declare ((array my-float 1) y x)
-	   (values my-float my-float my-float my-float &optional))
+  (declare ((array double-float 1) y x)
+	   (values double-float double-float double-float double-float &optional))
   (let* ((n (length y))
 	 (xmean (/ (loop for xi across x sum xi) n))
 	 (ymean (/ (loop for xi across y sum xi) n))
@@ -85,5 +85,5 @@ fitting parameters A and B and their errors DELTA_A and DELTA_B."
 #+nil
 (linear-regression (let* ((ll (list one 2.0one 3d0 4d0)))
 		     (make-array (length ll)
-		      :element-type 'my-float
+		      :element-type 'double-float
 		      :initial-contents ll))) 
