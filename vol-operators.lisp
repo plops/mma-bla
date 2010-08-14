@@ -1,4 +1,69 @@
+;; some operations that are defined between and on n-arrays,
+;; e.g. point-wise addition or averaging
 (in-package :vol)
+
+;; the functions .* .+ ./ .- will do a point-wise operation on an
+;; n-array. here I define specific functions like: .*-2-df. Both
+;; volumes A and B must have the same dimensions or B must be smaller
+;; in all dimensions. In the latter case a vec-i has to be supplied in
+;; B-START to define the relative position of B inside A.
+
+(def-generator (point-wise (op rank type))
+  (let ((name (format-symbol ".~a-~a-~a" op rank type)))
+    (store-new-function name)
+    `(defun ,name (a b &optional (b-start (make-vec-i)))
+       (declare ((simple-array ,long-type ,rank) a b)
+		(vec-i b-start)
+		(values (simple-array ,long-type ,rank) &optional))
+       (let ((result (make-array (array-dimensions b)
+				 :element-type ',long-type)))
+	 ,(ecase rank
+	    (1 `(destructuring-bind (x)
+		   (array-dimensions b)
+		 (let ((sx (vec-i-x b-start)))
+		   (do-region ((i) (x))
+		     (setf (aref result i)
+			   (+ (aref a (+ i sx))
+			      (aref b i)))))))
+	    (2 `(destructuring-bind (y x)
+		   (array-dimensions b)
+		 (let ((sx (vec-i-x b-start))
+		       (sy (vec-i-y b-start)))
+		   (do-region ((j i) (y x))
+		     (setf (aref result j i)
+			   (+ (aref a (+ j sy) (+ i sx))
+			      (aref b j i)))))))
+	    (3 `(destructuring-bind (z y x)
+		   (array-dimensions b)
+		 (let ((sx (vec-i-x b-start))
+		       (sy (vec-i-y b-start))
+		       (sz (vec-i-z b-start)))
+		   (do-region ((k j i) (z y x))
+		     (setf (aref result k j i)
+			 (+ (aref a (+ k sz) (+ j sy) (+ i sx))
+			    (aref b k j i))))))))
+	 result))))
+#+nil
+(def-point-wise-op-rank-type * 1 sf)
+#+nil
+(.*-1-sf
+ (make-array 3
+	     :element-type 'single-float
+	     :initial-contents '(1s0 2s0 3s0))
+ (make-array 3
+	     :element-type 'single-float
+	     :initial-contents '(2s0 2s0 3s0)))
+
+(defmacro def-point-wise-functions (ops ranks types)
+  (let ((result nil))
+    (loop for rank in ranks do
+	(loop for type in types do
+	     (loop for op in ops do
+		  (push `(def-point-wise-op ,op ,rank ,type)
+			result))))
+    `(progn ,@result)))
+
+(def-point-wise-functions (+ - * /) (1 2 3) (ub8 sf df csf cdf))
 
 (defun .*2 (vola volb)
   (declare ((simple-array (complex my-float) 2) vola volb)
