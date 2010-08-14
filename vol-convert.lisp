@@ -49,7 +49,7 @@
 		 #'(lambda (x)
 		     ,(ecase fun
 			     (:floor `(floor x))
-			     (:coerce `(coerce x ,(get-long-type out-type)))
+			     (:coerce `(coerce x ',(get-long-type out-type)))
 			     (t `(* ,(coerce 1 (get-long-type out-type)) x))))
 		 ,(ecase fun
 			 (:floor 'floor)
