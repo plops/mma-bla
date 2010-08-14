@@ -72,12 +72,14 @@
 			     (,(format-symbol  ".~a-~a-~a" op rank type) 
 			       a b b-start))
 			   cases)))
-	   (push `(defun .* (a b &optional (b-start (make-vec-i)))
-		    (etypecase a
-		      ,@cases
-		      (t (error "The given type can't be handled with a generic
+	   (let ((name (format-symbol ".~a" op)))
+	     (store-new-function name)
+	    (push `(defun ,name (a b &optional (b-start (make-vec-i)))
+		       (etypecase a
+			 ,@cases
+			 (t (error "The given type can't be handled with a generic
 		 point-wise function."))))  
-		 generic-funcs)))
+		  generic-funcs))))
     `(progn ,@specific-funcs
 	    ,@generic-funcs)))
 
@@ -89,36 +91,67 @@
     (make-array 3 :element-type 'single-float
 		:initial-contents '(2s0 2s0 3s0)))
 
-
-
-(declaim (ftype (function (my-float (simple-array (complex my-float) 3))
-			  (values (simple-array (complex my-float) 3) &optional))
-		s*))
+;; now I define multiplication and addition with a scalar. I can't
+;; remember that I needed those, therefore the slower non-generic
+;; implementation.
 (defun s* (s vol)
   (let* ((a (sb-ext:array-storage-vector vol))
 	 (n (length a)))
     (dotimes (i n)
       (setf (aref a i) (* s (aref a i)))))
   vol)
-
-(defun s*2 (s vol)
-  (declare (my-float s)
-	   ((simple-array (complex my-float) 2) vol)
-	   (values (simple-array (complex my-float) 2) &optional))
+(defun s+ (s vol)
   (let* ((a (sb-ext:array-storage-vector vol))
 	 (n (length a)))
     (dotimes (i n)
-      (setf (aref a i) (* s (aref a i)))))
+      (setf (aref a i) (+ s (aref a i)))))
   vol)
 
+(def-generator (mean (rank type))
+  `(defun ,name (a)
+     "Calculate the average value over all the samples in array A."
+     (declare ((simple-array ,long-type ,rank) a)
+	      (values ,long-type &optional))
+     (let* ((a1 (sb-ext:array-storage-vector a))
+	    (sum (coerce 0 ',long-type))
+	    (n (length a1)))
+       (declare (,(if (eq type 'ub8)
+		      'integer
+		      'long-type) sum))
+       (dotimes (i n)
+	 (incf sum (aref a1 i)))
+       (/ sum n))))
+#+nil
+(def-mean-rank-type 1 sf)
+#+nil
+(mean-1-sf
+ (make-array 3 :element-type 'single-float
+	     :initial-contents '(2s0 2s0 3s0)))
 
-(defun mean-realpart (a)
-  "Calculate the average value over all the samples in volume A."
-  (declare ((simple-array (complex my-float) *) a)
-	   (values my-float &optional))
-  (let* ((a1 (sb-ext:array-storage-vector a))
-	 (sum zero)
-	 (n (length a1)))
-    (dotimes (i n)
-      (incf sum (realpart (aref a1 i))))
-    (/ sum n)))
+(defmacro def-mean-functions (ranks types)
+  (let ((result nil)
+	(cases nil))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (push `(def-mean-rank-type ,rank ,type)
+		    result)))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (push `((simple-array ,(get-long-type type) ,rank)
+		      (,(format-symbol  "mean-~a-~a" rank type) 
+			a))
+		    cases)))
+    (store-new-function "mean")
+    `(progn ,@result
+	    (defun mean (a)
+	     (etypecase a
+	       ,@cases
+	       (t (error "The given type can't be handled with a generic
+		 averaging function mean.")))))))
+
+(def-mean-functions (1 2 3) (ub8 sf df csf cdf))
+
+#+nil
+(mean
+ (make-array 4 :element-type 'single-float
+	     :initial-contents '(2s0 2s0 3s0 3s0)))
