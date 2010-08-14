@@ -1,8 +1,13 @@
+;; define a bunch of functions to convert an {1,2,3}-dimensional array
+;; from one type into another type. 
 (in-package :vol)
 
-;; for writing several type conversion functions
-;; will have a name like convert3-ub8/cdf-complex
-;; the rank is looped over 1, 2 and 3
+;; for writing several type conversion functions will have a name like
+;; convert-3-ub8/cdf-mul the rank is looped over 1, 2 and 3. here the
+;; suffix mul indicates that type (up-)conversion is forced by a
+;; multiplication. other suffixes are floor for conversion into fixed
+;; type and coerce. coerce seemed to be quite slow last time i
+;; tried. thats why i prefer the multiplication for most conversions.
 
 (def-generator (convert (rank type out_type func short_func))
   (let ((long-out-type (get-long-type out_type))
@@ -115,6 +120,73 @@
 #+nil
 (convert-3-csf/cdf-mul
  (make-array (list 3 3 3) :element-type '(complex single-float)))
+
+
+;; converting complex into real with some function and converting into
+;; out_type, the name of the functions will be like:
+;; normalize-3-cdf/ub8-realpart. the function is evaluated into an
+;; intermediate real array (either double or float depending on the
+;; input type) and then normalized into the result. float results are
+;; in 0..1 and ub8 results in 0..255.
+(def-generator (normalize-complex (rank type out_type func short_func))
+  (let ((long-out-type (get-long-type out_type))
+	;; override the name that is constructed by def-generator
+	(name (format-symbol "normalize-~a-~a/~a-~a" 
+			     rank type out_type short_func))
+	(intermed-type (ecase type
+			 (cdf 'double-float)
+			 (csf 'single-float))))
+    (store-new-function name)
+    `(defun ,name (a)
+       (declare ((simple-array ,long-type ,rank) a)
+		(values (simple-array ,long-out-type ,rank) &optional))
+       (let* ((result (make-array (array-dimensions a)
+				  :element-type ',long-out-type))
+	      (result1 (sb-ext:array-storage-vector result))
+	      (a1 (sb-ext:array-storage-vector a))
+	      (n (length a1))
+	      (intermediate1
+	       (make-array n :element-type ',intermed-type)))
+	 (dotimes (i n)
+	   (setf (aref intermediate1 i) (funcall ,func (aref a1 i))))
+	 (let* ((ma (reduce #'max intermediate1))
+		(mi (reduce #'min intermediate1))
+		(s (if (= ma mi)
+		       (coerce 0 ',intermed-type)
+		       (/ (- ma mi)))))
+	   (dotimes (i n)
+	     (let ((v (* s (- (aref intermediate1 i) mi))))
+	      (setf (aref result1 i) ,(if (eq 'ub8 out_type)
+					  `(floor (* 255 v))
+					  `(* (coerce 1 ',long-out-type) v)))))
+	 result)))))
+
+#+nil
+(def-normalize-complex-rank-type-out_type-func-short_func
+    1 csf ub8 #'realpart realpart)
+
+(defmacro def-normalize-complex-functions (ranks out-types funcs)
+  (let ((result nil))
+    (loop for rank in ranks do
+	 (loop for type in '(csf cdf) do
+	      (loop for otype in out-types do
+		   (loop for func in funcs do
+			(push `(def-normalize-complex-rank-type-out_type-func-short_func ,rank ,type ,otype #',func ,func)
+			      result)))))
+    `(progn ,@result)))
+
+(def-normalize-complex-functions
+    (1 2 3) (ub8 sf df) (realpart imagpart phase abs))
+
+#+nil
+(normalize-1-csf/ub8-realpart 
+ (make-array 3 :element-type '(complex single-float)
+	     :initial-contents '(#C(1s0 0s0) #C(2s0 0s0) #C(3s0 0s0))))
+
+#+nil
+(normalize-1-csf/df-phase
+ (make-array 3 :element-type '(complex single-float)
+	     :initial-contents '(#C(1s0 .2s0) #C(2s0 1s0) #C(3s0 0s0))))
 
 ;; will have a name like normalize3-cdf/ub8-abs
 (defmacro def-normalize-cdf (function)
