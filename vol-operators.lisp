@@ -117,7 +117,7 @@
 	    (n (length a1)))
        (declare (,(if (eq type 'ub8)
 		      'integer
-		      'long-type) sum))
+		      long-type) sum))
        (dotimes (i n)
 	 (incf sum (aref a1 i)))
        (/ sum n))))
