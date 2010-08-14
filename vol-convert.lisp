@@ -188,143 +188,65 @@
  (make-array 3 :element-type '(complex single-float)
 	     :initial-contents '(#C(1s0 .2s0) #C(2s0 1s0) #C(3s0 0s0))))
 
-;; will have a name like normalize3-cdf/ub8-abs
-(defmacro def-normalize-cdf (function)
-  `(progn
-    ,@(loop for dim from 2 upto 3 collect
-     `(defun ,(intern (format nil "NORMALIZE~d-CDF/UB8-~a" dim function)) (a)
-	(declare ((simple-array (complex double-float) ,dim) a)
-		 (values (simple-array (unsigned-byte 8) ,dim) &optional))
-	(let* ((res (make-array (array-dimensions a)
-				:element-type '(unsigned-byte 8)))
-	       (res1 (sb-ext:array-storage-vector res))
-	       (b (,(intern (format nil "CONVERT~d-CDF/DF-~a" dim function)) a))
-	       (b1 (sb-ext:array-storage-vector b))
-	       (ma (reduce #'max b1))
-	       (mi (reduce #'min b1))
-	       (s (if (< (abs (- mi ma)) 1d-12)
-		      zero
-		      (/ 255d0 (- ma mi)))))
-	  (dotimes (i (length b1))
-	    (setf (aref res1 i)
-		  (floor (* s (- (aref b1 i) mi)))))
-	  res)))))
+;; normalize real arrays, name like: normalize-2-sf/ub8
+(def-generator (normalize (rank type out_type))
+  (let ((long-out-type (get-long-type out_type))
+	;; override the name that is constructed by def-generator
+	(name (format-symbol "normalize-~a-~a/~a" 
+			     rank type out_type)))
+    (store-new-function name)
+    `(defun ,name (a)
+       (declare ((simple-array ,long-type ,rank) a)
+		(values (simple-array ,long-out-type ,rank) &optional))
+       (let* ((result (make-array (array-dimensions a)
+				  :element-type ',long-out-type))
+	      (result1 (sb-ext:array-storage-vector result))
+	      (a1 (sb-ext:array-storage-vector a))
+	      (n (length a1))
+	      (ma (reduce #'max a1))
+	      (mi (reduce #'min a1))
+	      (s (if (= ma mi)
+		     (coerce 0 ',(get-long-type type))
+		     (/ (- ma mi)))))
+	 (dotimes (i n)
+	   (let ((v (* s (- (aref a1 i) mi))))
+	     (setf (aref result1 i) ,(if (eq 'ub8 out_type)
+					 `(floor (* 255 v))
+					 `(* (coerce 1 ',long-out-type) v)))))
+	 result))))
+#+nil
+(def-normalize-rank-type-out_type 1 df ub8)
+#+nil
+(normalize-1-df/ub8 (make-array 3 :element-type 'double-float
+				:initial-contents '(1d0 2d0 3d0)))
 
-(def-normalize-cdf abs)
-(def-normalize-cdf realpart)
-(def-normalize-cdf imagpart)
-(def-normalize-cdf phase)
+(defmacro def-normalize-functions (ranks in-types out-types)
+  (let ((result nil))
+    (loop for rank in ranks do
+	 (loop for type in in-types do
+	      (loop for otype in out-types do
+		   (push `(def-normalize-rank-type-out_type ,rank ,type ,otype)
+			 result))))
+    `(progn ,@result)))
 
-(defmacro def-normalize-csf (function)
-  `(progn
-    ,@(loop for dim from 2 upto 3 collect
-     `(defun ,(intern (format nil "NORMALIZE~d-CSF/UB8-~a" dim function)) (a)
-	(declare ((simple-array (complex single-float) ,dim) a)
-		 (values (simple-array (unsigned-byte 8) ,dim) &optional))
-	(let* ((res (make-array (array-dimensions a)
-				:element-type '(unsigned-byte 8)))
-	       (res1 (sb-ext:array-storage-vector res))
-	       (b (,(intern (format nil "CONVERT~d-CSF/SF-~a" dim function)) a))
-	       (b1 (sb-ext:array-storage-vector b))
-	       (ma (reduce #'max b1))
-	       (mi (reduce #'min b1))
-	       (s (if (< (abs (- mi ma)) 1s-10)
-		      0s0
-		      (/ 255s0 (- ma mi)))))
-	  (dotimes (i (length b1))
-	    (setf (aref res1 i)
-		  (floor (* s (- (aref b1 i) mi)))))
-	  res)))))
-
-(def-normalize-csf abs)
-(def-normalize-csf realpart)
-(def-normalize-csf imagpart)
-(def-normalize-csf phase)
-
-
-(defmacro def-general-normalize ()
-  (let ((cases nil)
-	(types '((df my-float floor)
-		 (sf single-float floor)
-		 (csf (complex single-float) realpart)
-		 (cdf (complex double-float) realpart))))
-    (loop for dim from 1 upto 3 collect
-	 (loop for q in types
-	    do
-	      (destructuring-bind (short long func)
-		  q
-		(let* ((norm (intern (format nil "NORMALIZE~D-~A/UB8-~A"
-					     dim short func))))
-		  (push `((simple-array ,long ,dim) (,norm a))
-			cases)))))
-   `(defun normalize->ub8 (a)
-      "Convert a 1d, 2d or 3d double or complex array into ub8."
-      (declare ((simple-array * *) a)
-	       (values (simple-array (unsigned-byte 8) *) &optional))
-      (typecase a
-	,@cases
-	(t (error "normalize can't handle this type."))))))
-
-(def-general-normalize)
+(def-normalize-functions (1 2 3) (ub8 sf df) (ub8 sf df))
 
 #+nil
-(normalize->ub8 (make-array (list 12 23) :element-type '(complex my-float)))
-
-(defmacro def-normalize-df (dim function)
-  `(defun ,(intern (format nil "NORMALIZE~d-DF/UB8-~a" dim function)) (a)
-     (declare ((simple-array my-float ,dim) a)
-	      (values (simple-array (unsigned-byte 8) ,dim) &optional))
-     (let* ((res (make-array (array-dimensions a)
-			     :element-type '(unsigned-byte 8)))
-	    (res1 (sb-ext:array-storage-vector res))
-	    (b1 (sb-ext:array-storage-vector a))
-	    (ma (reduce #'max b1))
-	    (mi (reduce #'min b1))
-	    (s (if (< (abs (- mi ma)) 1d-12) 
-		   zero
-		   (/ 255d0 (- ma mi)))))
-       (dotimes (i (length b1))
-	 (setf (aref res1 i)
-	       (floor (* s (- (aref b1 i) mi)))))
-       res)))
-
-(def-normalize-df 3 floor)
-(def-normalize-df 2 floor)
-
-(defun normalize2-df/df (a)
-  (declare ((simple-array my-float 2) a)
-	   (values (simple-array my-float 2) &optional))
-  (let* ((res (make-array (array-dimensions a)
-			  :element-type 'my-float))
-	 (res1 (sb-ext:array-storage-vector res))
-	 (a1 (sb-ext:array-storage-vector a))
-	 (ma (reduce #'max a1))
-	 (mi (reduce #'min a1))
-	 (s (if (eq mi ma)
-		zero
-		(/ one (- ma mi)))))
-    (dotimes (i (length a1))
-      (setf (aref res1 i)
-	    (* s (- (aref a1 i) mi))))
-    res))
-
-(defun normalize-ub8 (a)
-  (declare ((simple-array * *) a)
-	   (values (simple-array (unsigned-byte 8) *) &optional))
-  (etypecase a
-    ((simple-array (complex my-float) 2) (normalize2-cdf/ub8-realpart a))
-    ((simple-array (complex my-float) 3) (normalize3-cdf/ub8-realpart a))
-    ((simple-array my-float 2) (normalize2-df/ub8-floor a))
-    ((simple-array my-float 3) (normalize3-df/ub8-floor a))))
-
+(normalize-1-sf/sf (make-array 3 :element-type 'single-float
+				:initial-contents '(1s0 2s0 3s0)))
 #+nil
-(let ((a (make-array (list 3 4 5)
-		     :element-type '(complex my-float))))
-  (setf (aref a 1 1 1) (complex one one))
-  (normalize3-cdf/ub8 a))
+(normalize-1-sf/ub8 (make-array 3 :element-type 'single-float
+				:initial-contents '(1s0 2s0 3s0)))
+#+nil
+(normalize-1-ub8/sf (make-array 3 :element-type '(unsigned-byte 8)
+				:initial-contents '(1 2 3)))
+#+nil
+(normalize-1-ub8/ub8 (make-array 3 :element-type '(unsigned-byte 8)
+				:initial-contents '(1 2 3)))
 
 #+nil ;; find the names of all the functions that were defined by the
       ;; above macros, for exporting
+;; 2010-08-14 I don't think I need this anymore
 (let ((res ()))
   (with-package-iterator (next-symbol *package* :internal)
     (loop (multiple-value-bind (more? symbol)
