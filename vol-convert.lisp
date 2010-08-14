@@ -2,81 +2,118 @@
 
 ;; for writing several type conversion functions
 ;; will have a name like convert3-ub8/cdf-complex
-;; the dimension is looped over 1, 2 and 3
-(defmacro def-convert (in-type out-type &optional (function '#'identity)
-		       (short-function-name nil))
-  `(progn
-     ,@(loop for dim from 1 upto 3 collect
-	   (let ((short-image-types
-		  '(((complex double-float) . cdf)
-		    ((complex single-float) . csf) 
-		    (my-float . df)
-		    (single-float . sf)
-		    ((unsigned-byte 8) . ub8))))
-	     (labels ((find-short-type-name (type)
-			(cdr (assoc type short-image-types :test #'equal)))
-		      (find-long-type-name (short-type)
-			(car (rassoc short-type short-image-types))))
-	       `(defun ,(intern (format nil "CONVERT~d-~a/~a-~a" 
-					dim 
-					(find-short-type-name in-type)
-					(find-short-type-name out-type)
-					(if short-function-name
-					    short-function-name
-					    (subseq (format nil "~a" function)
-						    2)))) (a)
-		  (declare ((simple-array ,in-type ,dim) a)
-			   (values (simple-array ,out-type ,dim) &optional))
-		  (let* ((res (make-array (array-dimensions a)
-					  :element-type (quote ,out-type)))
-			 (res1 (sb-ext:array-storage-vector res))
-			 (a1 (sb-ext:array-storage-vector a))
-			 (n (length a1)))
-		    (dotimes (i n)
-		      (setf (aref res1 i)
-			    (funcall ,function (aref a1 i))))
-		    res)))))))
+;; the rank is looped over 1, 2 and 3
 
-(def-convert (unsigned-byte 8) (complex my-float)
-		  #'(lambda (c) (complex (* one c))) complex)
-(def-convert (unsigned-byte 8) (complex single-float)
-		  #'(lambda (c) (complex (* 1s0 c))) complex)
-(def-convert my-float (complex my-float)
-	     #'(lambda (d) (complex d)) complex)
-(def-convert my-float (unsigned-byte 8) #'floor)
-(def-convert (complex my-float) my-float #'realpart)
-(def-convert (complex my-float) my-float #'imagpart)
-(def-convert (complex my-float) my-float #'abs)
-(def-convert (complex my-float) my-float #'phase)
-
-(def-convert (complex single-float) single-float #'realpart)
-(def-convert (complex single-float) single-float #'imagpart)
-(def-convert (complex single-float) single-float #'abs)
-(def-convert (complex single-float) single-float #'phase)
-
-(def-convert (complex my-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (realpart z)))
-	     realpart)
-(def-convert (complex my-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (imagpart z)))
-	     imagpart)
-(def-convert (complex my-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (phase z)))
-	     phase)
-(def-convert (complex my-float) (unsigned-byte 8)
-	     #'(lambda (z) (floor (abs z)))
-	     abs)
-
-(def-convert (complex single-float) (complex my-float)
-  #'(lambda (z) (coerce z '(complex my-float)))
-  coerce)
+(def-generator (convert (rank type out_type func short_func))
+  (let ((long-out-type (get-long-type out_type))
+	;; override the name that is constructed by def-generator
+	(name (format-symbol "convert-~a-~a/~a-~a" 
+			     rank type out_type
+			     short_func)))
+    (store-new-function name)
+    `(defun ,name (a)
+       (declare ((simple-array ,long-type ,rank) a)
+		(values (simple-array ,long-out-type ,rank) &optional))
+       (let* ((result (make-array (array-dimensions a)
+				  :element-type (quote ,long-out-type)))
+	      (result1 (sb-ext:array-storage-vector result))
+	      (a1 (sb-ext:array-storage-vector a))
+	      (n (length a1)))
+	 (dotimes (i n)
+	   (setf (aref result1 i)
+		 (funcall ,func (aref a1 i))))
+	 result))))
 
 #+nil
-(convert3-cdf/ub8-realpart
- (make-array (list 3 3 3) :element-type '(complex my-float)))
+(def-convert-rank-type-out_type-func-short_func
+    1 sf df #'(lambda (x) (* 1d0 x)) coerce)
+#+nil
+(def-convert-rank-type-out_type-func-short_func
+    1 ub8 csf #'(lambda (x) (complex (* 1d0 x))) complex)
+#+nil
+(convert-1-sf/df-coerce
+ (make-array 4 :element-type 'single-float))
+
+
+(defmacro def-convert-functions ()
+  (labels ( ;; create a spec like this: ub8 sf (* 1s0 x) mul
+	   ;; down can be used to convert double into float
+	   (def (in-type out-type &optional (fun t))
+	       `(,in-type 
+		 ,out-type 
+		 #'(lambda (x)
+		     ,(ecase fun
+			     (:floor `(floor x))
+			     (:coerce `(coerce x ,(get-long-type out-type)))
+			     (t `(* ,(coerce 1 (get-long-type out-type)) x))))
+		 ,(ecase fun
+			 (:floor 'floor)
+			 (:coerce 'coerce)
+			 (t 'mul))))
+	   ;; create downconversions from complex types like
+	   ;; cdf df #'realpart realpart
+	   (def-comps (in-type out-type functions &optional (fun t))
+	     (loop for func in functions collect
+		  `(,in-type 
+		    ,out-type 
+		    ,(ecase fun 
+		      (:floor `#'(lambda (x) (floor (funcall #',func x))))
+		      (t `#',func)) 
+		    ,func))))
+    ;; an element of spec looks like this: (ub8 sf #'(lambda(x) (* 1s0 x))
+    ;; mul) the first two cols define input and output types, then
+    ;; comes a function that does this conversion followed by a short
+    ;; name describing the function. this name is attached to the
+    ;; convert function
+    (let ((specs `(;; upconvert from ub8 into sf and similar
+		   ,(def 'ub8 'sf)
+		    ,(def 'ub8 'df)
+		    ,(def 'ub8 'csf)
+		    ,(def 'ub8 'cdf)
+
+		    ,(def 'sf 'df)
+		    ,(def 'sf 'csf)
+		    ,(def 'sf 'cdf)
+
+		    ,(def 'df 'cdf)
+
+		    ;; upconvert complex to complex
+		    ,(def 'csf 'cdf)
+		    
+		    ;; downconvert from double into single
+		    ,(def 'df 'sf :coerce)
+		    ,(def 'cdf 'csf :coerce)
+		    
+		    ;; downconvert from float into bytes
+		    ,(def 'sf 'ub8 :floor)
+		    ,(def 'df 'ub8 :floor)
+		    
+		    ;; convert from complex into real
+		    ,@(def-comps 'csf 'sf '(realpart imagpart abs phase))
+		    ,@(def-comps 'cdf 'df '(realpart imagpart abs phase))
+
+		    ;; complex into real and conversion into fixed
+		    ,@(def-comps 'csf 'ub8 '(realpart imagpart abs phase) :floor)
+		    ,@(def-comps 'cdf 'ub8 '(realpart imagpart abs phase) :floor)
+		    ))
+	  (result nil))
+      (loop for rank in '(1 2 3) do
+	   (loop for spec in specs do
+		(destructuring-bind (in out fun name)
+		    spec
+		 (push `(def-convert-rank-type-out_type-func-short_func
+			    ,rank ,in ,out ,fun ,name)
+		       result))))
+      `(progn ,@result))))
+
+(def-convert-functions)
 
 #+nil
-(convert3-csf/cdf-coerce
+(convert-3-cdf/ub8-realpart
+ (make-array (list 3 3 3) :element-type '(complex double-float)))
+
+#+nil
+(convert-3-csf/cdf-mul
  (make-array (list 3 3 3) :element-type '(complex single-float)))
 
 ;; will have a name like normalize3-cdf/ub8-abs
