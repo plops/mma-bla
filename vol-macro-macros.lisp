@@ -73,3 +73,23 @@
 (def-fftshift-rank-type 2 sf)
 #+nil
 (fftshift-2-sf )
+
+;; given two lists the following macros get the outer product, a 2d
+;; matrix spanning all the combinations. everything is pushed into a
+;; 1d stack whose value can be altered by the optional parameter
+;; return-sexpr. for use in macros progn is a useful return-sexpr.
+
+(defmacro def-outer-cross (la lb func &optional return-sexpr)
+  (let ((result nil))
+    (loop for a in la do
+	 (loop for b in lb do
+	      (when (,predicate ,a ,b)
+	       (push `(,func ,a ,b)
+		     result))))
+    (if return-sexpr
+	`(,return-sexpr ,@result)
+	`(,@result))))
+#+nil
+(def-outer-cross (1 2 3) (sf df csf cdf) def-fftshift-rank-type progn)
+#+nil
+(def-outer-cross (1 2 3) (1 2 3) def)
