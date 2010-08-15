@@ -9,4 +9,6 @@
 	       (:file "vol-pgm")
 	       (:file "vol-operators")
 	       (:file "vol-misc")
-	       (:file "vol-bbox")))
+	       (:file "vol-bbox")
+	       (:file "vol-fft-helper")
+	       (:file "fftw-fft")))

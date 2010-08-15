@@ -42,6 +42,8 @@
     #:draw-unit-intensity-disk-precise
     #:draw-unit-energy-disk-precise
     #:draw-sphere-ub8
-    #:draw-oval-ub8))
+    #:draw-oval-ub8
+    
+    #:format-symbol))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done

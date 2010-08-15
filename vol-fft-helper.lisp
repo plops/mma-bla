@@ -42,12 +42,23 @@
 (def-fftshift-rk-type 3 sf)
 
 (defmacro def-fftshift-functions (ranks types)
-  (let ((result nil))
+  (let* ((specifics nil)
+	 (cases nil)
+	 (name (format-symbol "fftshift")))
     (loop for rank in ranks do
-	(loop for type in types do
-	     (push `(def-fftshift-rank-type ,rank ,type)
-		   result)))
-    `(progn ,@result)))
+	 (loop for type in types do
+	      (let ((def-name (format-symbol "def-~a-rank-type" name))
+		    (specific-name (format-symbol "~a-~a-~a" name rank type)))
+		(push `(,def-name ,rank ,type) specifics)
+		(push `((simple-array ,(get-long-type type) ,rank)
+			(,specific-name a))
+		      cases))))
+    (store-new-function name)
+    `(progn ,@specifics
+	    (defun ,name (a)
+	       (etypecase a
+		 ,@cases
+		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
 
 (def-fftshift-functions (1 2 3) (cdf csf))
 

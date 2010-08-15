@@ -1,4 +1,3 @@
-(require :vol)
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
 (in-package :vol)
 
@@ -122,5 +121,5 @@
 	  (a (convert-3-ub8/csf-mul
 	      (draw-sphere-ub8 20.0 nz ny nx))))
      (write-pgm "/home/martin/tmp/fftw.pgm" 
-		(normalize-2-cdf/ub8-abs
-		 (cross-section-xz-cdf (ft a)))))))
+		(normalize-2-csf/ub8-abs
+		 (cross-section-xz-csf (ft a)))))))
