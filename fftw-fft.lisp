@@ -1,19 +1,35 @@
+(require :vol)
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
-#.(require :vol)
-(defpackage :fftw-fft
-  (:use :cl :sb-alien :sb-c-call)
-  (:export #:ft3-cdf
-		 #:ift3-cdf
-		 #:ift2-cdf
-		 #:ft2-cdf))
-(in-package :fftw-fft)
+(in-package :vol)
 
-(load-shared-object "/usr/lib/libfftw3.so")
+(defconstant +forward+ 1)
+(defconstant +backward+ -1)
+(defconstant +estimate+ (ash 1 6))
 
-;; multithreading for fftw is just a matter of two initializing
-;; function calls, see:
-;; http://www.fftw.org/fftw3_doc/Usage-of-Multi_002dthreaded-FFTW.html#Usage-of-Multi_002dthreaded-FFTW
-;; but it didn't seem to get faster
+(defmacro def-ffi (&optional (library "libfftw3.so") (prefix "fftw"))
+  `(progn
+     (load-shared-object ,(format nil "~a" library))
+     (define-alien-routine (,(format nil "~a_execute" prefix) 
+			     ,(vol:format-symbol "~a-execute" prefix))
+	 void
+       (plan (* int)))
+     ,@(loop for rank in '(1 2 3) collect
+	    `(define-alien-routine 
+		 (,(format nil "~a_plan_dft_~ad" prefix rank) 
+		   ,(format-symbol "~a-plan-dft-~ad" prefix rank))
+		 (* int)
+	       ,@(loop for i below rank collect
+		      `(,(format-symbol "n~d" i) int))
+	       (in (* double-float))
+	       (out (* double-float))
+	       (sign int)
+	       (flags unsigned-int)))))
+
+;; define the foreign functions
+;; fftw{f}-execute, fftw{f}-plan-dft-{1,2,3}d
+(def-ffi "libfftw3.so.3" "fftw")
+(def-ffi "libfftw3f.so.3" "fftwf")
+
 #+nil
 (progn
   (load-shared-object "/usr/lib/libfftw3_threads.so")
@@ -31,98 +47,80 @@
 ;; to clean up completely call void fftw_cleanup_threads(void)
 
 
-(define-alien-routine ("fftw_execute" execute)
-    void
-  (plan (* int)))
- 
-(defconstant +forward+ 1)
-(defconstant +backward+ -1)
-(defconstant +estimate+ (ash 1 6))
 
- 
-(define-alien-routine ("fftw_plan_dft_3d" plan-dft-3d)
-    (* int)
-  (n0 int)
-  (n1 int)
-  (n2 int)
-  (in (* double-float))
-  (out (* double-float))
-  (sign int)
-  (flags unsigned-int))
-
-(define-alien-routine ("fftw_plan_dft_2d" plan-dft-2d)
-    (* int)
-  (n0 int)
-  (n1 int)
-  (in (* double-float))
-  (out (* double-float))
-  (sign int)
-  (flags unsigned-int))
-
-(defun ft3-cdf (in &key (forward t))
-  (declare ((simple-array (complex double-float) 3) in)
-	   (boolean forward)
-	   (values (simple-array (complex double-float) 3) &optional))
-  (let ((dims (array-dimensions in)))
-   (destructuring-bind (z y x)
-       dims
-     (let* ((out (make-array dims :element-type '(complex double-float))))
-       (sb-sys:with-pinned-objects (in out)
-	 (let ((p (plan-dft-3d z y x
-			       (sb-sys:vector-sap 
-				(sb-ext:array-storage-vector in))
-			       (sb-sys:vector-sap 
-				(sb-ext:array-storage-vector out))
-			       (if forward
-				   +forward+
-				   +backward+)
-			       +estimate+)))
-	   (execute p)))
-       (when forward ;; normalize if forward
-	 (let ((1/n (/ 1d0 (* x y z))))
-	   (vol:do-box (k j i 0 z 0 y 0 x)
-	     (setf (aref out k j i) (* 1/n (aref out k j i))))))
-       out))))
-
-(defmacro ift3-cdf (in)
-  `(ft3 ,in :forward nil))
-
-(defun ft2-cdf (in &key (forward t))
-  (declare ((simple-array (complex double-float) 2) in)
-	   (boolean forward)
-	   (values (simple-array (complex double-float) 2) &optional))
-  (let ((dims (array-dimensions in)))
-    (destructuring-bind (y x)
-	dims
-      (let* ((out (make-array dims :element-type '(complex double-float))))
+(def-generator (ft (rank type)) 
+  (let* ((prefix (ecase type
+		  (cdf 'fftw)
+		  (csf 'fftwf)))
+	 (rlong-type (ecase type
+		       (csf (get-long-type 'sf))
+		       (cdf (get-long-type 'df))))
+	 (plan (format-symbol "~a-plan-dft-~ad" prefix rank))
+	 (execute (format-symbol "~a-execute" prefix)))
+    `(defun ,name (in &key (forward t))
+       (declare ((simple-array ,long-type ,rank) in)
+		(boolean forward)
+	       (values (simple-array ,long-type ,rank) &optional))
+      (let* ((dims (array-dimensions in))
+	     (out (make-array dims :element-type ',long-type))
+	     (in-sap (sb-sys:vector-sap 
+		      (sb-ext:array-storage-vector in)))
+	     (out-sap (sb-sys:vector-sap 
+		       (sb-ext:array-storage-vector out)))
+	     (dir (if forward +forward+ +backward+)))
 	(sb-sys:with-pinned-objects (in out)
-	  (let ((p (plan-dft-2d y x
-				(sb-sys:vector-sap 
-				 (sb-ext:array-storage-vector in))
-				(sb-sys:vector-sap 
-				 (sb-ext:array-storage-vector out))
-				(if forward
-				    +forward+
-				   +backward+)
-				+estimate+)))
-	    (execute p)))
+	  ,(ecase rank
+		  (1 `(destructuring-bind (x) dims
+			(let ((p (,plan x in-sap out-sap
+					dir +estimate+)))
+			  (,execute p))))
+		  (2 `(destructuring-bind (y x) dims
+			(let ((p (,plan y x in-sap out-sap
+					dir +estimate+)))
+			  (,execute p))))
+		  (3 `(destructuring-bind (z y x) dims
+			(let ((p (,plan z y x in-sap out-sap
+					dir +estimate+)))
+			  (,execute p))))))
 	(when forward ;; normalize if forward
-	  (let ((1/n (/ 1d0 (* x y))))
-	    (vol:do-rectangle (j i 0 y 0 x)
-	      (setf (aref out j i) (* 1/n (aref out j i))))))
+	  (s* (/ ,(coerce 1 rlong-type) (array-total-size out)) out))
 	out))))
 
-(defmacro ift2-cdf (in)
-  `(ft2 ,in :forward nil))
+#+nil
+(def-ft-rank-type 1 csf)
+
+(defmacro def-ft-functions (ranks types)
+  (let* ((specifics nil)
+	 (cases nil)
+	 (name (format-symbol "ft")))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (let ((def-name (format-symbol "def-~a-rank-type" name))
+		    (specific-name (format-symbol "~a-~a-~a" name rank type)))
+		(push `(,def-name ,rank ,type) specifics)
+		(push `((simple-array ,(get-long-type type) ,rank)
+			(,specific-name a :forward forward))
+		      cases))))
+    (store-new-function name)
+    `(progn ,@specifics
+	    (defun ,name (a &key forward)
+	       (etypecase a
+		 ,@cases
+		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
+
+(def-ft-functions (1 2 3) (csf cdf))
+
+(defmacro ift (in)
+  `(ft ,in :forward nil))
 
 #+nil
 (progn
   (time
-   (let* ((nx 256)
+   (let* ((nx 128)
 	  (ny nx)
 	  (nz ny)
-	  (a (vol:convert3-ub8/cdf-complex
-	      (vol:draw-sphere-ub8 20d0 nz ny nx))))
-     (vol:write-pgm "/home/martin/tmp/fftwf.pgm" 
-		(vol:normalize2-cdf/ub8-abs
-		 (vol:cross-section-xz-cdf (ft3-cdf a)))))))
+	  (a (convert-3-ub8/csf-mul
+	      (draw-sphere-ub8 20.0 nz ny nx))))
+     (write-pgm "/home/martin/tmp/fftw.pgm" 
+		(normalize-2-cdf/ub8-abs
+		 (cross-section-xz-cdf (ft a)))))))
