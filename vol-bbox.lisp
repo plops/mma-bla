@@ -10,9 +10,9 @@
 
 (def-generator (extract-bbox (rank type))
   `(defun ,name (a bbox)
-     (declare ((simple-array ',long-type ,rank) a)
+     (declare ((simple-array ,long-type ,rank) a)
 	      (bbox bbox)
-	      (values (simple-array ',long-type ,rank) &optional))
+	      (values (simple-array ,long-type ,rank) &optional))
      ,(ecase
        rank 
        (2 `(destructuring-bind (y x) (array-dimensions a)
@@ -21,12 +21,12 @@
 		 (error "bbox is bigger than array"))
 	       (let* ((sx (floor (vec-x start)))
 		      (sy (floor (vec-y start)))
-		      (widths (v+ (v- end start) (v one one)))
-		       (res (make-array (list (floor (vec-y widths))
-					      (floor (vec-x widths)))
-					:element-type ',long-type)))
+		      (widths (v+ (v- end start) (v 1d0 1d0)))
+		      (res (make-array (list (floor (vec-y widths))
+					     (floor (vec-x widths)))
+				       :element-type ',long-type)))
 		 (destructuring-bind (yy xx)
-		      (array-dimensions res)
+		     (array-dimensions res)
 		   (do-region ((j i) (yy xx))
 		     (setf (aref res j i) (aref a (+ j sy) (+ i sx)))))
 		 res))))
@@ -37,16 +37,16 @@
 	       (let* ((sx (floor (vec-x start)))
 		      (sy (floor (vec-y start)))
 		      (sz (floor (vec-z start)))
-		      (widths (v+ (v- end start) (v one one one)))
+		      (widths (v+ (v- end start) (v 1d0 1d0 1d0)))
 		      (res (make-array (list (floor (vec-z widths))
 					     (floor (vec-y widths))
-					    (floor (vec-x widths)))
+					     (floor (vec-x widths)))
 				       :element-type ',long-type)))
 		 (destructuring-bind (zz yy xx)
 		     (array-dimensions res)
 		   (do-region ((k j i) (zz yy xx))
 		     (setf (aref res k j i)
-			  (aref a (+ k sz) (+ j sy) (+ i sx)))))
+			   (aref a (+ k sz) (+ j sy) (+ i sx)))))
 		 res)))))))
 
 (defmacro def-extract-box-functions (ranks types)
@@ -65,36 +65,89 @@
 	    (defun ,name (a bbox)
 	       (etypecase a
 		 ,@cases
-		 (t (error "The given type can't be handled with a generic ~a function." ,name)))))))
+		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
 
 (def-extract-box-functions (2 3) (ub8 sf df csf cdf))
 
 
-(defun replace-bbox2-ub8 (a b bbox)
-  "A beeing a big array, and B a smaller one with BBOX giving its
+
+(def-generator (replace-bbox (rank type))
+  `(defun ,name (a b bbox)
+     "A beeing a big array, and B a smaller one with BBOX giving its
 coordinates relative to A, replace the contents of A with B."
-  (declare ((simple-array (unsigned-byte 8) 2) a b)
-	   (bbox bbox)
-	   (values (simple-array (unsigned-byte 8) 2) &optional))
-  (destructuring-bind (y x)
-      (array-dimensions a)
-    (destructuring-bind (yy xx)
-	(array-dimensions b)
-      (with-slots (start end)
-	  bbox
-	(unless (and (< (vec-x end) x)
-		     (< (vec-y end) y))
-	  (error "bbox is bigger than array"))
-	(let ((widths (v+ (v- end start) (v one one))))
-	  (unless (and (= (floor (vec-x widths)) xx)
-		       (= (floor (vec-y widths)) yy))
-	    (error "size of BBOX isn't the same as size of small array B"))
-	  (let ((sx (floor (vec-x start)))
-		(sy (floor (vec-y start))))
-	   (do-rectangle (j i 0 yy 0 xx)
-	     (setf (aref a (+ sy j) (+ sx i))
-		   (aref b j i)))
-	   a))))))
+     (declare ((simple-array ,long-type ,rank) a b)
+	      (bbox bbox)
+	      (values (simple-array ,long-type ,rank) &optional))
+     ,(ecase 
+       rank
+       (2 `(destructuring-bind (y x) (array-dimensions a)
+	     (destructuring-bind (yy xx) (array-dimensions b)
+	       (with-slots (start end) bbox
+		 (unless (and (< (vec-x end) x) (< (vec-y end) y))
+		   (error "bbox is bigger than array"))
+		 (let* ((widths (v+ (v- end start) (v 1d0 1d0))))
+		   (unless (and (= (floor (vec-x widths)) xx)
+				(= (floor (vec-y widths)) yy))
+		     (error "size of BBOX isn't the same as size of small array B"))
+		   (let ((sx (floor (vec-x start)))
+			 (sy (floor (vec-y start))))
+		     (do-region ((j i) (yy xx))
+		       (setf (aref a (+ sy j) (+ sx i)) (aref b j i)))
+		     a))))))
+       (3 `(destructuring-bind (z y x) (array-dimensions a)
+	     (destructuring-bind (zz yy xx) (array-dimensions b)
+	       (with-slots (start end) bbox
+		 (unless (and (< (vec-x end) x) (< (vec-y end) y) (< (vec-z end) z))
+		   (error "bbox is bigger than array"))
+		 (let ((widths (v+ (v- end start) (v 1d0 1d0 1d0))))
+		   (unless (and (= (floor (vec-x widths)) xx)
+				(= (floor (vec-y widths)) yy)
+				(= (floor (vec-z widths)) zz))
+		     (error "size of BBOX isn't the same as size of small array B"))
+		   (let ((sx (floor (vec-x start)))
+			 (sy (floor (vec-y start)))
+			 (sz (floor (vec-z start))))
+		     (do-region ((k j i) (zz yy xx))
+		       (setf (aref a (+ sz k) (+ sy j) (+ sx i)) (aref b k j i)))
+		     a)))))))))
+#+nil
+(def-replace-bbox-rank-type 2 ub8)
+#+nil
+(let* ((a (make-array (list 3 3) :element-type '(unsigned-byte 8)))
+       (b (make-array (list 2 2) :element-type '(unsigned-byte 8)))
+       (b1 (sb-ext:array-storage-vector b)))
+  (dotimes (i (length b1))
+    (setf (aref b1 i) i))
+  (replace-bbox-2-ub8 a b (make-bbox :start (v) :end (v 1d0 1d0))))
+
+(defmacro def-replace-bbox-functions (ranks types)
+  (let* ((specifics nil)
+	 (cases nil)
+	 (name (format-symbol "replace-bbox")))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (let ((def-name (format-symbol "def-~a-rank-type" name))
+		    (specific-name (format-symbol "~a-~a-~a" name rank type)))
+		(push `(,def-name ,rank ,type) specifics)
+		(push `((simple-array ,(get-long-type type) ,rank)
+			(,specific-name a b bbox))
+		      cases))))
+    (store-new-function name)
+    `(progn ,@specifics
+	    (defun ,name (a b bbox)
+	       (etypecase a
+		 ,@cases
+		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
+
+(def-replace-bbox-functions (2 3) (ub8 sf df csf cdf))
+
+
+
+
+
+
+
+
 
 (defun find-bbox2-ub8 (a)
   "Return the rectangle containing non-zero pixels. Returns nil if all
@@ -235,28 +288,7 @@ coordinates relative to A, replace the contents of A with B."
   (declare ((simple-array (unsigned-byte 8) 3) a b)
 	   (bbox bbox)
 	   (values (simple-array (unsigned-byte 8) 3) &optional))
-  (destructuring-bind (z y x)
-      (array-dimensions a)
-    (destructuring-bind (zz yy xx)
-	(array-dimensions b)
-      (with-slots (start end)
-	  bbox
-	(unless (and (< (vec-x end) x)
-		     (< (vec-y end) y)
-		     (< (vec-z end) z))
-	  (error "bbox is bigger than array"))
-	(let ((widths (v+ (v- end start) (v one one one))))
-	  (unless (and (= (floor (vec-x widths)) xx)
-		       (= (floor (vec-y widths)) yy)
-		       (= (floor (vec-z widths)) zz))
-	    (error "size of BBOX isn't the same as size of small array B"))
-	  (let ((sx (floor (vec-x start)))
-		(sy (floor (vec-y start)))
-		(sz (floor (vec-z start))))
-	   (do-box (k j i 0 zz 0 yy 0 xx)
-	     (setf (aref a (+ sz k) (+ sy j) (+ sx i))
-		   (aref b k j i)))
-	   a))))))
+  )
 
 #+nil
 (let* ((empty (make-array (list 4 4 4) :element-type '(unsigned-byte 8)))
