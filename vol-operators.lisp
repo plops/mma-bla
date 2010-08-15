@@ -91,9 +91,8 @@
     (make-array 3 :element-type 'single-float
 		:initial-contents '(2s0 2s0 3s0)))
 
-;; now I define multiplication and addition with a scalar. I can't
-;; remember that I needed those, therefore the slower non-generic
-;; implementation.
+;; now I define multiplication and addition with a scalar.
+
 (defun s* (s vol)
   (let* ((a (sb-ext:array-storage-vector vol))
 	 (n (length a)))

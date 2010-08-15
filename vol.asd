@@ -11,4 +11,5 @@
 	       (:file "vol-misc")
 	       (:file "vol-bbox")
 	       (:file "vol-fft-helper")
-	       (:file "fftw-fft")))
+	       (:file "fftw-fft")
+	       (:file "vol-draw")))

@@ -1,22 +1,47 @@
-(defun convolve2-circ (vola volb)
-  (declare ((simple-array (complex my-float) 2) vola volb)
-	   (values (simple-array (complex my-float) 2) &optional))
-  (let* ((da (array-dimensions vola))
-	 (db (array-dimensions volb))
-	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
-    (when (some #'null compare-ab)
-      (error "convolve3-circ expects both input arrays to have the same dimensions."))
-    (ift2 (s*2 (* one (reduce #'* da)) (.*2 (ft2 vola) (ft2 volb))))))
+;; 2d and 3d convolutions
+(require :vol)
+(in-package :vol)
 
-(defun convolve3-circ (vola volb)
-  (declare ((simple-array (complex my-float) 3) vola volb)
-	   (values (simple-array (complex my-float) 3) &optional))
-  (let* ((da (array-dimensions vola))
-	 (db (array-dimensions volb))
-	 (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
-    (when (some #'null compare-ab)
-      (error "convolve3-circ expects both input arrays to have the same dimensions.")))
-  (ift3 (.* (ft3 vola) (ft3 volb))))
+(def-generator (convolve-circ (rank type))
+  `(defun ,name (vola volb)
+     (declare ((simple-array ,long-type ,rank) vola volb)
+	    (values (simple-array ,long-type ,rank) &optional))
+     (let* ((da (array-dimensions vola))
+	    (db (array-dimensions volb))
+	    (compare-ab (map 'list #'(lambda (x y) (eq x y)) da db)))
+       (when (some #'null compare-ab)
+	 (error
+	  ,(format
+	    nil
+	    "~a expects both input arrays to have the same dimensions." name)))
+       (let ((c (s* (* ,(coerce 1 (get-long-type (ecase type (csf 'sf) (cdf 'df))))
+		       (reduce #'* da)) 
+		    (.* (ft vola) (ft volb)))))
+	 (ift c)))))
+
+(defmacro def-convolve-circ-functions (ranks types)
+  (let* ((specifics nil)
+	 (cases nil)
+	 (name (format-symbol "convolve-circ")))
+    (loop for rank in ranks do
+	 (loop for type in types do
+	      (let ((def-name (format-symbol "def-~a-rank-type" name))
+		    (specific-name (format-symbol "~a-~a-~a" name rank type)))
+		(push `(,def-name ,rank ,type) specifics)
+		(push `((simple-array ,(get-long-type type) ,rank)
+			(,specific-name a b))
+		      cases))))
+    (store-new-function name)
+    `(progn ,@specifics
+	    (defun ,name (a b)
+	       (etypecase a
+		 ,@cases
+		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
+
+(def-convolve-circ-functions (2 3) (csf cdf))
+
+
+
 
 
 (defun front (i) ;; extra size needed to accommodate kernel overlap
