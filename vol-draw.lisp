@@ -1,3 +1,4 @@
+(require :vol)
 (in-package :vol)
 
 ;; A circular window in the center of the BFP with radius Rap gives
@@ -11,21 +12,42 @@
 ;; Rd(z)=abs(z*Rap/(n*f))
 ;; for a 63x objective we get f=2.61, with n=1.515 
 
-(defun draw-disk (radius y x)
-  (declare (my-float radius)
-	   (fixnum y x)
-	   (values (simple-array (complex my-float) 2) &optional))
-  (let ((result (make-array (list y x) :element-type '(complex my-float)))
-	(xh (floor x 2))
-	(yh (floor y 2))
-	(r2 (* radius radius)))
-    (do-rectangle (j i 0 y 0 x)
-      (let* ((ii (- i xh))
-	     (jj (- j yh))
-	     (rr2 (+ (* ii ii) (* jj jj))))
-	(when (< rr2 r2)
-	  (setf (aref result j i) (complex (/ r2))))))
-    result))
+(def-generator (draw-disk (type))
+  `(defun ,name (radius y x)
+     (declare (single-float radius)
+	      (fixnum y x)
+	      (values (simple-array ,long-type 2) &optional))
+     (let ((result (make-array (list y x) :element-type ',long-type))
+	   (xh (floor x 2))
+	   (yh (floor y 2))
+	   (r2 (* radius radius)))
+       (do-region ((j i) (y x))
+	 (let* ((ii (- i xh))
+		(jj (- j yh))
+		(rr2 (+ (* ii ii) (* jj jj))))
+	   (when (< rr2 r2)
+	     (setf (aref result j i) (* ,(case type
+					       (ub8 255)
+					       (otherwise (coerce 1 long-type))))))))
+       result)))
+
+#+nil
+(def-draw-disk-type ub8)
+
+(defmacro def-draw-disk-functions (types)
+  (let* ((specifics nil)
+	 (name (format-symbol "draw-disk")))
+    (loop for type in types do
+	 (let ((def-name (format-symbol "def-~a-type" name)))
+	   (push `(,def-name ,type) specifics)))
+    `(progn ,@specifics)))
+
+(def-draw-disk-functions (ub8 sf df csf cdf))
+
+#+nil
+(write-pgm "/home/martin/tmp/disk.pgm"
+	   (draw-disk-ub8 33.0 100 100))
+
 #+nil
 (write-pgm "/home/martin/tmp/disk.pgm"
 	   (normalize2-cdf/ub8-realpart
@@ -42,8 +64,39 @@
   (arg sb-alien:float))
 
 ;; isi.ssl.berkeley.edu/~tatebe/whitepapers/FT%20of%20Uniform%20Disk.pdf
+(def-generator (draw-uniform-disk-precise (type))
+  (let* ((rtype (ecase type
+		 (csf 'sf)
+		 (cdf 'df)))
+	(long-type (get-long-type rtype)))
+    `(defun ,name (radius y x)
+      (declare (single-float radius)
+	       (fixnum y x)
+	       (values (simple-array ,long-type 2) &optional))
+      (let ((a (make-array (list y x)
+			   :element-type ',long-type))
+	    (xh (floor x 2))
+	    (yh (floor y 2))
+	    (one ,(coerce 1 long-rtype))
+	    (tiny ,(coerce 1e-12 rlong-type)))
+	(do-region ((j i) (y x))
+	  (let* ((xx (/ (* one (- i xh)) x))
+		 (yy (/ (* one (- j yh)) y))
+		 (f (sqrt (+ (* xx xx) (* yy yy)))))
+	    (setf (aref a j i) (if (< f tiny)
+				   (complex (* ,(coerce pi rlong-type) radius))
+				   (complex (/ (,(ecase type
+							(csf `bessel-j1-sf)
+							(cdf `bessel-j1-df))
+						 (* ,(coerce (* 2 pi) rlong-type)
+						    f radius))
+					       f))))))
+	(fftshift2 (ift2 (fftshift2 a)))))))
+
+(def-draw-uniform-disk-precise-type csf)
+
 (defun draw-unit-intensity-disk-precise (radius y x)
-  (declare (my-float radius)
+  (declare (single-float radius)
 	   (fixnum y x)
 	   (values (simple-array (complex my-float) 2) &optional))
   (let ((a (make-array (list y x)
