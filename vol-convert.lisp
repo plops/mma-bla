@@ -9,7 +9,8 @@
 ;; type and coerce. coerce seemed to be quite slow last time i
 ;; tried. thats why i prefer the multiplication for most conversions.
 
-(def-generator (convert (rank type out_type func short_func))
+(def-generator (convert (rank type out_type func short_func)
+			:override-name t)
   (let ((long-out-type (get-long-type out_type))
 	;; override the name that is constructed by def-generator
 	(name (format-symbol "convert-~a-~a/~a-~a" 
@@ -136,7 +137,8 @@
 ;; intermediate real array (either double or float depending on the
 ;; input type) and then normalized into the result. float results are
 ;; in 0..1 and ub8 results in 0..255.
-(def-generator (normalize-complex (rank type out_type func short_func))
+(def-generator (normalize-complex (rank type out_type func short_func)
+				  :override-name t)
   (let ((long-out-type (get-long-type out_type))
 	;; override the name that is constructed by def-generator
 	(name (format-symbol "normalize-~a-~a/~a-~a" 
@@ -197,7 +199,8 @@
 	     :initial-contents '(#C(1s0 .2s0) #C(2s0 1s0) #C(3s0 0s0))))
 
 ;; normalize real arrays, name like: normalize-2-sf/ub8
-(def-generator (normalize (rank type out_type))
+(def-generator (normalize (rank type out_type)
+			  :override-name t)
   (let ((long-out-type (get-long-type out_type))
 	;; override the name that is constructed by def-generator
 	(name (format-symbol "normalize-~a-~a/~a" 

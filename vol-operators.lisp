@@ -8,7 +8,7 @@
 ;; in all dimensions. In the latter case a vec-i has to be supplied in
 ;; B-START to define the relative position of B inside A.
 
-(def-generator (point-wise (op rank type))
+(def-generator (point-wise (op rank type) :override-name t)
   (let ((name (format-symbol ".~a-~a-~a" op rank type)))
     (store-new-function name)
     `(defun ,name (a b &optional (b-start (make-vec-i)))

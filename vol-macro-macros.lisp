@@ -53,7 +53,7 @@
 ;; when a new macro is needed to generate a lot of functions (and
 ;; maybe one dispatch function) it should be called def-...-functions.
 
-(defmacro def-generator ((name spec) &body body)
+(defmacro def-generator ((name spec &key override-name) &body body)
   (let ((macro-name (format-symbol "def-~a~{-~a~}" name spec))
 	(function-fmt (let ((result (format nil "~a" name)))
 			(dotimes (i (length spec)) 
@@ -63,7 +63,7 @@
        (let ((name (format-symbol ,function-fmt ,@spec))
 	     ,(when (member 'type spec)
 		    `(long-type (get-long-type type))))
-	 (store-new-function name)
+	 ,(unless override-name `(store-new-function name))
 	 ,@body))))
 
 #+nil
