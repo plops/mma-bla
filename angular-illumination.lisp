@@ -1,4 +1,4 @@
-;; load run.lisp before running this file
+(require :run)
 (in-package :run)
 
 
@@ -292,12 +292,12 @@
 				   :integrand-evaluations integrand-evaluations)
 	 (when debug
 	   (write-pgm "/home/martin/tmp/cut-0psf.pgm"
-		      (normalize2-cdf/ub8-abs (cross-section-xz e0))))
-	 (setf k0 (fftshift3 (ft3 e0))
-	       k1 (fftshift3 (ft3 e1))
-	       k2 (fftshift3 (ft3 e2)))
+		      (normalize-2-cdf/ub8-abs (cross-section-xz e0))))
+	 (setf k0 (fftshift (ft e0))
+	       k1 (fftshift (ft e1))
+	       k2 (fftshift (ft e2)))
 	 (when debug (write-pgm "/home/martin/tmp/cut-1psf-k.pgm"
-				(normalize2-cdf/ub8-abs (cross-section-xz k0))))))
+				(normalize-2-cdf/ub8-abs (cross-section-xz k0))))))
      (let* ((cr window-radius)
 	    (cx window-x)
 	    (cy window-y)
@@ -309,33 +309,33 @@
 	    (kk1 (make-array (array-dimensions k1) :element-type '(complex double-float)))
 	    (kk2 (make-array (array-dimensions k2) :element-type '(complex double-float))))
 	     ;; 2d window
-	     (do-rectangle (j i 0 y 0 x)
+	     (do-region ((j i) (y x))
 	       (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
 		      (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
 		      (r2 (+ (* xx xx) (* yy yy))))
 		 (when (< r2 cr2)
 		   (setf (aref window j i) 1d0))))
-	     (do-box (k j i 0 z 0 y 0 x)
+	     (do-region ((k j i) (z y x))
 	       (setf (aref kk0 k j i) (* (aref k0 k j i) (aref window j i))
 		     (aref kk1 k j i) (* (aref k1 k j i) (aref window j i))
 		     (aref kk2 k j i) (* (aref k2 k j i) (aref window j i))))
 	     (when debug (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
-				    (normalize2-cdf/ub8-abs (cross-section-xz kk0))))
-	     (let* ((e0 (ift3 (fftshift3 kk0)))
-		    (e1 (ift3 (fftshift3 kk1)))
-		    (e2 (ift3 (fftshift3 kk2)))
+				    (normalize-2-cdf/ub8-abs (cross-section-xz kk0))))
+	     (let* ((e0 (ift (fftshift kk0)))
+		    (e1 (ift (fftshift kk1)))
+		    (e2 (ift (fftshift kk2)))
 		    (intens k0)) ;; instead of allocating a new array we store into k0
-	       (do-box (k j i 0 z 0 y 0 x)
+	       (do-region ((k j i) (z y x))
 		 (setf (aref intens k j i)
 		       (+ (* (aref e0 k j i) (conjugate (aref e0 k j i)))
 			  (* (aref e1 k j i) (conjugate (aref e1 k j i)))
 			  (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
 	       (when debug
 		 (write-pgm "/home/martin/tmp/cut-3psf-intens.pgm"
-			    (normalize-ub8 (cross-section-xz intens)))
-		 (let ((k (fftshift3 (ft3 intens))))
+			    (normalize-2-cdf/ub8-realpart (cross-section-xz intens)))
+		 (let ((k (fftshift (ft intens))))
 		   (write-pgm "/home/martin/tmp/cut-4psf-intk.pgm"
-			      (normalize2-cdf/ub8-abs (cross-section-xz k)))))
+			      (normalize-2-cdf/ub8-abs (cross-section-xz k)))))
 	       intens)))))
 
 
@@ -558,7 +558,7 @@ back focal plane set BIG-WINDOW to true."
 	   (draw-indexed-ovals 12d0 *centers* z y x))))
     (setf *index-spheres* spheres)
     (write-pgm "/home/martin/tmp/angular-indexed-spheres-cut.pgm"
-	       (normalize2-cdf/ub8-realpart
+	       (normalize-2-cdf/ub8-realpart
 		(cross-section-xz *index-spheres* 
 				  (vec-i-y (elt *centers* 31)))))
     (sb-ext:gc :full t))
@@ -568,7 +568,7 @@ back focal plane set BIG-WINDOW to true."
 	   (draw-ovals 12d0 *centers* z y x))))
     (setf *spheres* spheres)
     (write-pgm "/home/martin/tmp/angular-spheres-cut.pgm"
-	       (normalize2-cdf/ub8-realpart
+	       (normalize-2-cdf/ub8-realpart
 		(cross-section-xz *index-spheres* 
 				  (vec-i-y (elt *centers* 31)))))
     (sb-ext:gc :full t)))
@@ -604,7 +604,7 @@ back focal plane set BIG-WINDOW to true."
 		   :initialize t)))))
     (defparameter *psf* psf)
     (write-pgm "/home/martin/tmp/psf.pgm"
-	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
+	       (normalize-2-cdf/ub8-realpart (cross-section-xz psf)))
     (sb-ext:gc :full t)))
 
 #+nil
@@ -623,7 +623,7 @@ back focal plane set BIG-WINDOW to true."
 	   (result (make-array n
 			       :element-type 'boolean
 			       :initial-element nil)))
-      (do-rectangle (j i 0 y 0 x)
+      (do-region ((j i) (y x))
 	(let ((v (round (realpart (aref *index-spheres* k j i)))))
 	  (when (< 0 v n)
 	   (setf (aref result v) t))))
@@ -650,7 +650,7 @@ back focal plane set BIG-WINDOW to true."
 			   :element-type '(complex double-float))))
       ;; only the current nucleus will be illuminated
       ;; note that nucleus 0 has value 1 in index-spheres 
-      (do-rectangle (j i 0 y 0 x)
+      (do-region ((j i) (y x))
 	(if (< (abs (- nucleus (1- (aref *index-spheres* k j i)))) .5d0)
 	    (setf (aref vol k j i) (aref *spheres* k j i))))
       vol)))
@@ -668,7 +668,7 @@ back focal plane set BIG-WINDOW to true."
   (declare (simple-string fn)
 	   ((simple-array (complex double-float) 3) vol)
 	   (values null &optional))
-  (write-pgm fn (normalize2-cdf/ub8-realpart (cross-section-xz vol y))))
+  (write-pgm fn (normalize-2-cdf/ub8-realpart (cross-section-xz vol y))))
 
 (defvar *nucleus-index* 50)
 (defvar *bfp-window-radius* .08d0)
@@ -745,7 +745,8 @@ back focal plane set BIG-WINDOW to true."
 ;; calculate the excitation one nucleus
 (defun calc-light-field (k nucleus)
   (declare (fixnum k nucleus))
-  (let* ((lcos (get-lcos-volume k nucleus))
+  (let* ((result nil)
+	 (lcos (get-lcos-volume k nucleus))
 	 (bfp-pos (find-optimal-bfp-window-center nucleus))
 	 (psf (let ((dx .2d0)
 		    (dz 1d0)
@@ -760,12 +761,12 @@ back focal plane set BIG-WINDOW to true."
 				 :initialize t
 				 :debug t
 				 :integrand-evaluations 1000)
-		  (resample3-cdf h ddx ddx ddz dx dx dz)))))
+		  (resample-3-cdf h ddx ddx ddz dx dx dz)))))
     (format t "~a~%" `(bfp-pos ,bfp-pos))
     (write-section (format nil "/home/martin/tmp/angular-1expsf-cut-~3,'0d.pgm" nucleus) psf)
 
     (multiple-value-bind (conv conv-start)
-	(convolve3-nocrop lcos psf)
+	(convolve-nocrop lcos psf)
       ;; light distribution in sample
       (defparameter *angular-light-field* conv)
       (defparameter *angular-light-field-start* conv-start)
@@ -773,7 +774,7 @@ back focal plane set BIG-WINDOW to true."
 		     conv
 		     (vec-i-y (aref *centers* nucleus)))
       (save-stack-ub8 (format nil "/home/martin/tmp/angular-2light-~3,'0d/" nucleus)
-		      (normalize3-cdf/ub8-realpart conv))
+		      (normalize-3-cdf/ub8-realpart conv))
       ;; multiply fluorophore concentration with light distribution
       (let ((excite (.* conv *spheres* conv-start)))
 	(defparameter *excite* excite)
@@ -781,31 +782,44 @@ back focal plane set BIG-WINDOW to true."
 		       excite
 		       (vec-i-y (aref *centers* nucleus)))
 	(save-stack-ub8 (format nil "/home/martin/tmp/angular-3excite-~3,'0d/" nucleus)
-			(normalize3-cdf/ub8-realpart excite))
+			(normalize-3-cdf/ub8-realpart excite))
 	(destructuring-bind (z y x)
 	    (array-dimensions excite)
-	  (let* ((in-focus (extract-bbox3-cdf excite
+	  (declare (ignorable z))
+	  (let* ((in-focus (extract-bbox-3-cdf excite
 					      (make-bbox :start (v 0d0 0d0 (* 1d0 k))
 							 :end (v (* 1d0 (1- x))
 								 (* 1d0 (1- y))
 								 (* 1d0 k))))))
 	    (save-stack-ub8 "/home/martin/tmp/angular-4in-focus/"
-			    (normalize3-cdf/ub8-realpart in-focus))
-	    (let*((mplane (mean-realpart in-focus))
-		  (mvol (mean-realpart excite))
+			    (normalize-3-cdf/ub8-realpart in-focus))
+	    (let*((mplane (mean (convert-3-cdf/df-realpart in-focus)))
+		  (mvol (mean (convert-3-cdf/df-realpart excite)))
 		  (gamma (/ mplane mvol)))
-	     (debug-out mplane mvol gamma))))))))
-(array-dimensions *spheres*)
+	      (push (list mplane mvol gamma) result)
+	      (debug-out mplane mvol gamma)
+	      (format t "plane-result ~f ~f ~f~%" mplane mvol gamma))
+	    result))))))
+
 #+nil 
 (time
- (with-open-file (*standard-output* "/home/martin/tmp/angular-stack.log"
-				    :direction :output
-				    :if-exists :supersede
-				    :if-does-not-exist :create)
-  (dotimes (k (array-dimension *spheres* 0))
-    (let* ((nucs (get-visible-nuclei k)))
-      (loop for nuc in nucs do
-	   (calc-light-field k nuc))))))
+ (progn
+  (with-open-file (*standard-output* "/home/martin/tmp/angular-stack.log"
+				     :direction :output
+				     :if-exists :supersede
+				     :if-does-not-exist :create)
+    (let ((result nil))
+      (dotimes (k (array-dimension *spheres* 0))
+	(let* ((nucs (get-visible-nuclei k)))
+	  (loop for nuc in nucs do
+	       (format t "~a~%" (list 'doing k nucs))
+	       (push (list k nuc (calc-light-field k nuc)) result))))
+      (defparameter *scan-result* result)))
+  (with-open-file (s "/home/martin/tmp/angular-stack-struc.lisp"
+		     :direction :output
+		     :if-exists :supersede
+		     :if-does-not-exist :create)
+    (write *scan-result* :stream s))))
 
 #+nil ;; overlay lightfield and spheres
 (time
