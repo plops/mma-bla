@@ -12,4 +12,5 @@
 	       (:file "vol-bbox")
 	       (:file "vol-fft-helper")
 	       (:file "fftw-fft")
-	       (:file "vol-draw")))
+	       (:file "vol-draw")
+	       (:file "vol-convolve")))

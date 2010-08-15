@@ -1,5 +1,4 @@
 ;; 2d and 3d convolutions
-(require :vol)
 (in-package :vol)
 
 (def-generator (convolve-circ (rank type))
