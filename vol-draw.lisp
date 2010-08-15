@@ -96,19 +96,23 @@
 (def-draw-uniform-disk-precise-type csf)
 (def-draw-uniform-disk-precise-type cdf)
 
+(def-generator (draw-unit-energy-disk-precise (type))
+  `(defun ,name (radius y x)
+     (declare (single-float radius)
+	      (fixnum y x)
+	      (values (simple-array ,long-type 2) &optional))
+     (let* ((disk (,(format-symbol "draw-uniform-disk-precise-~a" type)
+		    radius y x))
+	    (sum (reduce #'+ (sb-ext:array-storage-vector disk))))
+       (s* (/ (realpart sum)) disk))))
 
-(defun draw-unit-energy-disk-precise (radius y x)
-  (declare (my-float radius)
-	   (fixnum y x)
-	   (values (simple-array (complex my-float) 2) &optional))
-  (let* ((disk (draw-unit-intensity-disk-precise radius y x))
-	 (sum (reduce #'+ (sb-ext:array-storage-vector disk))))
-    (s*2 (/ (realpart sum)) disk)))
+(def-draw-unit-energy-disk-precise-type csf)
+(def-draw-unit-energy-disk-precise-type cdf)
 
 #+NIL
 (write-pgm "/home/martin/tmp/disk.pgm"
-	   (normalize2-cdf/ub8-realpart (draw-unit-energy-disk-precise 12.3d0 300 300)))
-
+	   (normalize-2-csf/ub8-realpart
+	    (draw-unit-energy-disk-precise-csf 12.3 300 300)))
 
 (defun draw-sphere-ub8 (radius z y x)
   (declare (single-float radius)
