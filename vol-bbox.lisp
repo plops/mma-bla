@@ -1,4 +1,3 @@
-(require :vol)
 (in-package :vol)
 
 ;; bbox contains float values but is also used to represent pixel

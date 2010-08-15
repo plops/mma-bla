@@ -8,4 +8,5 @@
 	       (:file "vol-interpolation")
 	       (:file "vol-pgm")
 	       (:file "vol-operators")
-	       (:file "vol-misc")))
+	       (:file "vol-misc")
+	       (:file "vol-bbox")))
