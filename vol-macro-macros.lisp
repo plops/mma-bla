@@ -8,6 +8,7 @@
 		    ((complex single-float) . csf)
 		    (double-float . df)
 		    (single-float . sf)
+		    (fixnum . fix)
 		    ((signed-byte 16) . sb16)
 		    ((unsigned-byte 16) . ub16)
 		    ((unsigned-byte 8) . ub8))))

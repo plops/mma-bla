@@ -75,6 +75,12 @@
 		    ,(def 'ub8 'df)
 		    ,(def 'ub8 'csf)
 		    ,(def 'ub8 'cdf)
+		    
+		    ,(def 'fix 'sf)
+		    ,(def 'fix 'df)
+		    ,(def 'fix 'csf)
+		    ,(def 'fix 'cdf)
+		    
 
 		    ,(def 'sf 'df)
 		    ,(def 'sf 'csf)
@@ -92,7 +98,9 @@
 		    ;; downconvert from float into bytes
 		    ,(def 'sf 'ub8 :floor)
 		    ,(def 'df 'ub8 :floor)
-		    
+		    ,(def 'sf 'fix :floor)
+		    ,(def 'df 'fix :floor)
+
 		    ;; convert from complex into real
 		    ,@(def-comps 'csf 'sf '(realpart imagpart abs phase))
 		    ,@(def-comps 'cdf 'df '(realpart imagpart abs phase))

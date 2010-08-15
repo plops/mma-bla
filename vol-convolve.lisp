@@ -128,12 +128,19 @@ VOLA in RESULT."
 (defun convolve (vola volb)
   (multiple-value-bind (conv start)
       (convolve-nocrop vola volb)
-    (extract-bbox conv start)))
+    (let ((s (convert-1-fix/df-mul start))
+	  (b (convert-1-fix/df-mul 
+	      (make-array 3 :element-type 'fixnum
+			  :initial-contents
+			  (reverse (array-dimensions volb))))))
+      (extract-bbox  conv 
+		     (make-bbox :start s
+				:end (v+ s b))))))
 
 #+nil
-(let ((a (make-array (list 100 200 300)
+(let ((a (make-array (list 20 40 30)
 		     :element-type '(complex single-float)))
-      (b (make-array (list 10 200 30)
+      (b (make-array (list 10 20 30)
 		     :element-type '(complex single-float))))
   (convolve a b)
   nil)
