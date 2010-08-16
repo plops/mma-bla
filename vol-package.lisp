@@ -46,6 +46,7 @@
     
     #:format-symbol
     #:ift
+    #:interpolate
     
 #:CONVOLVE-NOCROP-2-CSF
 #:CONVOLVE-NOCROP-2-CDF

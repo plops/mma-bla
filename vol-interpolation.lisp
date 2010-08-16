@@ -102,6 +102,7 @@
 					 "interpolate-~a-~a" rank type)
 					a ,@(subseq '(x y z) 0 rank)))
 				    cases))))
+    (store-new-function (format-symbol "interpolate"))
     `(progn ,@functions
 	    (defun interpolate (a x &optional y z)
 	      (declare ((or null single-float) x y z))
