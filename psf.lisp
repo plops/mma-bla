@@ -135,17 +135,14 @@ lengths in micrometer."
 #+nil
 (transform-xyz-to-uv 0.0 1.0 1.0)
 
-(declaim (ftype (function (my-float my-float)
-			  (values (complex my-float) 
-				  (complex my-float)
-				  (complex my-float) &optional))
-		intermediate-integrals-point)
-	 (inline intermediate-integrals-point))
 (defun intermediate-integrals-point (u v)
-  (let* ((i0 (complex 0d0 0d0))
-	 (i1 (complex 0d0 0d0))
-	 (i2 (complex 0d0 0d0)))
-     (declare (type (complex my-float) i0 i1 i2))
+  (declare (my-float u v)
+	   (values (complex my-float) (complex my-float) 
+		   (complex my-float) &optional))
+  (let* ((zero #.(coerce 0 '(complex my-float)))
+	 (i0 zero)
+	 (i1 zero)
+	 (i2 zero))
      (let ((scale 1))
        (dotimes (iter n)
          (let* ((s (aref as iter))
@@ -167,22 +164,20 @@ lengths in micrometer."
      (let* ((s (* n 3d0)))
        (values (* s i0) (* s i1) (* s i2)))))
 
-(declaim (ftype (function (my-float my-float)
-			  (values my-float &optional))
-		energy-density)
-	 (inline energy-density))
 (defun energy-density (u v)
+  (declare (my-float u v)
+	   (values my-float &optional))
   (multiple-value-bind (i0 i1 i2)
       (intermediate-integrals-point u v)
     (+ (abs2 i0)
        (abs2 i1)
        (abs2 i2))))
 
-(declaim (ftype (function 
-		 (&optional fixnum fixnum my-float my-float)
-		 (values (simple-array my-float (* *)) &optional))
-		energy-density-cyl))
-(defun energy-density-cyl (&optional (nu 100) (nv 100) (du .1d0) (dv .1d0))
+(defun energy-density-cyl (&optional (nu 100) (nv 100) (du #.(coerce .1 'my-float))
+			   (dv du))
+  (declare (fixnum nu nv)
+	   (my-float du dv)
+	   (values (simple-array my-float 2) &optional))
   (let* ((res (make-array (list nu nv) 
                           :element-type 'my-float)))
     (dotimes (iu nu)
@@ -191,17 +186,14 @@ lengths in micrometer."
          (let ((v (* iv dv)))
            (setf (aref res iu iv) (energy-density u v))))))
     res))
-
-(declaim (ftype (function 
-		 (&optional fixnum fixnum my-float my-float)
-		 (values (simple-array (complex my-float) (* *))
-			 (simple-array (complex my-float) (* *)) 
-			 (simple-array (complex my-float) (* *))
-			 &optional))
-		intermediate-integrals-cyl))
  
 (defun intermediate-integrals-cyl (&optional (nu 100) (nv 100)
-				   (du .1d0) (dv .1d0))
+				   (du (coerce .1 'my-float)) (dv du))
+  (declare (fixnum nu nv)
+	   (my-float du dv)
+	   (values (simple-array (complex my-float) 2)
+		   (simple-array (complex my-float) 2) 
+		   (simple-array (complex my-float) 2) &optional))
   (let* ((dims (list nu nv))
 	 (ii0 (make-array dims :element-type '(complex my-float)))
 	 (ii1 (make-array dims :element-type '(complex my-float)))
@@ -216,19 +208,6 @@ lengths in micrometer."
 		   (aref ii1 iu iv) i1
 		   (aref ii2 iu iv) i2))))))
     (values ii0 ii1 ii2)))
-
-
-(declaim (ftype (function (fixnum fixnum fixnum my-float my-float
-				  &key 
-				  (:numerical-aperture my-float)
-				  (:immersion-index my-float)
-				  (:wavelength my-float)
-				  (:integrand-evaluations fixnum)) 
-			  (values (simple-array (complex my-float) 3)
-				  (simple-array (complex my-float) 3)
-				  (simple-array (complex my-float) 3)
-				  &optional))
-		electric-field-psf))
 
 #+nil
 (let* ((x 10)
@@ -246,9 +225,16 @@ lengths in micrometer."
 
 ;; size radius is either the extend in x or y (in um) depending on what is bigger
 (defun electric-field-psf
-    (z y x size-z size-radius &key (numerical-aperture 1.38d0) 
-     (immersion-index 1.515d0) (wavelength .480d0)
+    (z y x size-z size-radius &key (numerical-aperture (coerce 1.38 'my-float)) 
+     (immersion-index (coerce 1.515 'my-float))
+     (wavelength (coerce .480 'my-float))
      (integrand-evaluations 31))
+  (declare (fixnum z y x integrand-evaluations)
+	   (my-float size-z size-radius numerical-aperture immersion-index
+		     wavelength)
+	   (values (simple-array (complex my-float) 3)
+		   (simple-array (complex my-float) 3)
+		   (simple-array (complex my-float) 3) &optional))
   (init :numerical-aperture numerical-aperture
 	:immersion-index immersion-index
 	:integrand-evaluations integrand-evaluations)
@@ -259,7 +245,8 @@ lengths in micrometer."
 	 (e1 (make-array dims :element-type '(complex my-float)))
 	 (e2 (make-array dims :element-type '(complex my-float))))
     (multiple-value-bind (u v)
-	(transform-xyz-to-uv 0 (* (sqrt 2d0) size-radius) (* .5d0 size-z)
+	(transform-xyz-to-uv 0 (* (sqrt #.(coerce 2 'my-float)) size-radius)
+			     (* #.(coerce .5 'my-float) size-z)
 			     :numerical-aperture numerical-aperture
 			     :immersion-index immersion-index
 			     :wavelength wavelength)
@@ -270,7 +257,7 @@ lengths in micrometer."
 	      (cphi-a (make-array (list y x) :element-type 'my-float))
 	      (c2phi-a (make-array (list y x) :element-type 'my-float))
 	      (s2phi-a (make-array (list y x) :element-type 'my-float)))
-	  (do-rectangle (j i 0 y 0 x)
+	  (do-region ((j i) (y x))
 	    (let* ((ii (- i (floor x 2)))
 		   (jj (- j (floor y 2)))
 		   (radius (sqrt (+ (* 1d0 ii ii) (* jj jj))))
@@ -280,9 +267,9 @@ lengths in micrometer."
 		    (aref c2phi-a j i) (cos (* 2d0 phi))
 		    (aref s2phi-a j i) (sin (* 2d0 phi)))))
 	  (let ((del (if (eq 1 (mod z 2))
-			 0d0
-			 .5d0))) ;; add .5 if z is even
-	   (do-box (k j i 0 nz 0 y 0 x)
+			 #.(coerce 0 'my-float)
+			 #.(coerce .5 'my-float)))) ;; add .5 if z is even
+	   (do-region ((k j i) (nz y x))
 	     (let* ((zi (- nz k (- 1d0 del)))
 		    (r (aref rad-a j i))
 		    (v0 (interpolate2 i0 zi r))
