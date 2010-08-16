@@ -110,7 +110,9 @@
 (def-ft-functions (1 2 3) (csf cdf))
 
 (defmacro ift (in)
-  `(ft ,in :forward nil))
+  (alexandria:with-gensyms (input)
+    (let ((input in))
+      `(ft ,input :forward nil))))
 
 #+nil
 (progn
