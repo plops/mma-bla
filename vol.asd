@@ -1,5 +1,5 @@
 (asdf:defsystem vol
-  :depends-on (:alexandria :vector :cuda-fft)
+  :depends-on (:alexandria :vector)
   :serial t
   :components ((:file "vol-package")
 	       (:file "vol-macro-macros")

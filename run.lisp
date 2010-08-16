@@ -1,5 +1,9 @@
 #+nil
-(require :run)
+(progn
+   (require :vol)
+   (require :raytrace)
+   (require :bresenham)
+   (require :psf))
 (defpackage :run
   (:use :cl :vector :vol :raytrace :bresenham))
 (in-package :run)
@@ -90,65 +94,70 @@
     (convolve-circ points
 		   (fftshift (draw-oval-csf radius z y x)))))
 
-(defvar *stack* ())
+
 ;; to find centers of cells do a convolution with a sphere
 (defun find-centers ()
   (declare (values (simple-array vec-i 1)
 		   (simple-array my-float 1)
 		   cons &optional))
   (let* ((stack-byte (read-stack "/home/martin/tmp/xa*.pgm"))
-	 (stack (make-array (array-dimensions stack-byte)
-			    :element-type '(complex my-float))))
-    (destructuring-bind (z y x)
-	(array-dimensions stack)
-      (dotimes (k z)
-	(dotimes (j y)
-	  (dotimes (i x)
-	    (let ((v (+ (* (coerce .43745 'my-float) k)
-			(aref stack-byte k j i))))
-	      (setf
-	       (aref stack-byte k j i) (clamp (floor v))
-	       (aref stack k j i) (complex v))))))
-      #+nil(setf *stack* stack)
+	 (dims (array-dimensions stack-byte))
+	 (stack (make-array dims :element-type '(complex my-float))))
+    (destructuring-bind (z y x) dims
+      (do-region ((k j i) (z y x))
+	(setf (aref stack k j i) (complex (+ (* #.(coerce .43745 'my-float) k)
+					     (aref stack-byte k j i)))))
+      (write-pgm "/home/martin/tmp/cut-stack.pgm"
+		   (normalize-2-csf/ub8-realpart (cross-section-xz stack)))
       ;; find centers of cells by convolving with sphere, actually an
       ;; oval because the z resolution is smaller than the transversal
-      (let* ((sphere (draw-oval-csf 11.0 z y x))
-	     (conv (convolve-circ stack (fftshift sphere)))
-	     (conv-byte (convert conv 'abs))
+      (let* ((conv (convolve-circ 
+		    stack (fftshift (#.(cond 
+					 ((subtypep 'my-float 'single-float) 'draw-oval-csf)
+					 ((subtypep 'my-float 'double-float) 'draw-oval-cdf))
+				       12.0 z y x))))
+	     (cv (convert conv 'sf 'realpart))
 	     (centers nil)
 	     (center-heights nil))
-	(loop for k from 6 below (- z 3) do
-	     (do-region ((k j i) ((- z 3) (- y 1) (- x 1)) (6 1 1))
-	       (let ((v (abs (aref conv k j i))))
-		 (setf (aref conv-byte j i)
-		       (if (and (< (abs (aref conv k j (1- i))) v)
-				(< (abs (aref conv k j (1+ i))) v)
-				(< (abs (aref conv k (1- j) i)) v)
-				(< (abs (aref conv k (1+ j) i)) v)
-				(< (abs (aref conv (1- k) j i)) v)
-				(< (abs (aref conv (1+ k) j i)) v))
-			   (progn
-			     (push (make-vec-i :z k :y j :x i) centers)
-			     (push v center-heights)
-			     0)
-			   (clamp (floor (/ v (* 4e2 x y z))))))))
-	     (write-pgm (format nil "/home/martin/tmp/conv/conv~3,'0d.pgm" k)
-			conv-byte))
+	(write-pgm "/home/martin/tmp/cut-stack2.pgm"
+		   (normalize-2-csf/ub8-realpart (cross-section-xz 
+					 (ft (.* (ft stack)
+						 (ft (draw-oval-csf 12.0 z y x)))))))
+	(do-region ((k j i) ((- z 3) (- y 1) (- x 1)) (6 1 1))
+	  (macrolet ((c (a b c)
+		       `(aref cv (+ k ,a) (+ j ,b) (+ i ,c))))
+	    (let ((v (c 0 0 0)))
+	      (when (and (< (c 0 0 -1) v)
+			 (< (c 0 0 1) v)
+			 (< (c 0 -1 0) v)
+			 (< (c 0 1 0) v)
+			 (< (c -1 0 0) v)
+			 (< (c 1 0 0) v))
+		(push (make-vec-i :z k :y j :x i) centers)
+		(push v center-heights)))))
 	(let ((c (make-array (length centers)
 			     :element-type 'vec-i
 			     :initial-contents centers))
 	      (ch (make-array (length center-heights)
 			      :element-type 'my-float
 			      :initial-contents center-heights)))
-	  (values c ch (array-dimensions stack)))))))
+	  (values c ch dims))))))
 
 #+nil
 (sb-ext:gc :full t)
 #+nil
 (time
- (format t "~a~%" (find-centers)))
+ (progn 
+   (format t "~a~%" (multiple-value-list (find-centers)))
+   nil))
 
-
+#+nil
+(write-pgm "/home/martin/tmp/fftw.pgm"
+ (normalize-2-csf/ub8-abs
+	    (cross-section-xz 
+	     (let ((a (ft (draw-sphere-csf 12.0 34 206 296)))
+		   #+nil (b (ft (draw-sphere-csf 5.0 34 206 296))))
+	       a))))
 
 (defun init-model ()
   ;; find the centers of the nuclei and store into *centers*
@@ -167,21 +176,26 @@
 	   (draw-ovals 12.0 *centers* z y x))))
     (defparameter *spheres* spheres)
     (write-pgm "/home/martin/tmp/comp0-spheres-cut.pgm"
-	       (normalize-2-cdf/ub8-realpart
+	       (normalize-2-csf/ub8-realpart
 	       (cross-section-xz *spheres* 
-				 (vec-i-y (elt *centers* 31)))))
+				 (vec-i-y (elt *centers* 21)))))
    (sb-ext:gc :full t))
   
   ;; store the fluorophore concentration
   (save-stack-ub8 "/home/martin/tmp/spheres" 
-		  (normalize3-cdf/ub8-realpart *spheres*)))
+		  (normalize-3-csf/ub8-realpart *spheres*)))
+
+#+nil
+(time (init-model))
+
+
 
 (defun init-psf ()
   ;; calculate intensity psf, make extend in z big enough to span the
   ;; full fluorophore concentration even when looking at the bottom
   ;; plane of it
-  (let* ((dx .2d0)
-	 (dz 1d0)
+  (let* ((dx .2)
+	 (dz 1.0)
 	 (psf (destructuring-bind (z y x)
 		  *dims*
 		(declare (ignore y x))
@@ -190,8 +204,11 @@
 				    :integrand-evaluations 400)))))
     (defparameter *psf* psf)
     (write-pgm "/home/martin/tmp/comp1-psf.pgm"
-	       (normalize2-cdf/ub8-realpart (cross-section-xz psf)))
+	       (normalize-2-csf/ub8-realpart (cross-section-xz psf)))
     (sb-ext:gc :full t)))
+#+nil
+(time (init-psf))
+
 
 (defun clem ()
   ;; Extract one specific plane from the fluorophore concentration

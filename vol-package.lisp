@@ -7,9 +7,7 @@
 
 
 (defpackage :vol
-  (:use :cl :sb-alien :sb-c-call :vector 
-	:cuda-fft
-	)
+  (:use :cl :sb-alien :sb-c-call :vector)
   (:export
 
     #:read-pgm

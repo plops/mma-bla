@@ -90,14 +90,13 @@
     plan))
 
 
-(defun cu-malloc-csf (n)
+(defun cu-malloc (n)
   (declare (fixnum n))
-  (let ((complex-single-float-size (* 4 2)))
-    (multiple-value-bind (result device-ptr)
-	(cuda-malloc (* complex-single-float-size n))
-      (unless (eq 0 result)
-       (error "cuda-malloc error: ~a" result))
-      device-ptr)))
+  (multiple-value-bind (result device-ptr)
+      (cuda-malloc n)
+    (unless (eq 0 result)
+      (error "cuda-malloc error: ~a" result))
+    device-ptr))
 
 
 ;; same semantics as ft3 wrapper to fftw3, input array isn't modified 
@@ -111,37 +110,42 @@
 	    (out (make-array dims :element-type ',long-type))
 	    (out1 (sb-ext:array-storage-vector out))
 	    (in1 (sb-ext:array-storage-vector in))
-	    (n (length in1))
+	    (n (length in1))	    
+	    (float-size ,(ecase type
+				(csf '4)
+				(cdf '8)))
 	    ;; allocate array on device
-	    (device (cu-malloc-csf (length in1)))
-	    (complex-size (* ,(ecase type
-				     (csf '4)
-				     (cdf '8)) 2)))
+	    (complex-size (* float-size 2))
+	    (n-bytes (* n complex-size))
+	    (device (cu-malloc n-bytes))
+	    (dev-sap (sb-sys:int-sap device)))
        ;; copy data to device
-       (cuda-memcpy (sb-sys:int-sap device) 
+       (cuda-memcpy dev-sap
 		    (sb-sys:vector-sap in1)
-		    (* n complex-size) 
+		    n-bytes
 		    'host->device)
        ;; plan and execute in-place transform on device
        (let ((plan ,(ecase rank
 			   (2 `(destructuring-bind (y x) dims
-				 (cu-plan x y)))
+				 (cu-plan y x)))
 			   (3 `(destructuring-bind (z y x) dims
-				 (cu-plan x y z))))))
+				 (cu-plan z y x))))))
 	 (cufft-exec-c2c plan 
-			 (sb-sys:int-sap device)
-			 (sb-sys:int-sap device)
+			 dev-sap
+			 dev-sap
 			 (if forward +cufft-forward+ +cufft-inverse+))
 	 (cufft-destroy plan))
        ;; copy result back
        (cuda-memcpy (sb-sys:vector-sap out1)
-		    (sb-sys:int-sap device) 
-		    (* n complex-size) 'device->host)
+		    dev-sap
+		    n-bytes 'device->host)
        ;; deallocate array on device
        (cuda-free device)
        ;; normalize if forward
        (when forward 
-	 (let* ((1/n (/ 1s0 n)))
+	 (let* ((1/n (/ ,(coerce 1.0 (ecase type
+				       (csf 'single-float)
+				       (cdf 'double-float))) n)))
 	   (dotimes (i n)
 	     (setf (aref out1 i) (* 1/n (aref out1 i))))))
        out)))
@@ -178,3 +182,12 @@
 (let ((a (make-array (list 12 12 12) :element-type '(complex single-float))))
   (ift (ft a))
   nil)
+
+#+nil
+(write-pgm "/home/martin/tmp/fftw.pgm"
+ (normalize-2-csf/ub8-abs
+	    (cross-section-xz 
+	     (let ((a (ft (draw-sphere-csf 12.0 34 206 296))))
+	       ()
+	       (let ((b (ft (draw-sphere-csf 5.0 34 206 296))))
+		 a)))))
