@@ -130,6 +130,50 @@
 (convert-3-csf/cdf-mul
  (make-array (list 3 3 3) :element-type '(complex single-float)))
 
+;; now I need a generic function that converts into the requested type
+;; without me having to think about the input type. if the input is
+;; complex than the generic converter should take the realpart as
+;; default
+
+;; turns out will be quite involved to get right
+
+(defmacro gen-convert-cases (ranks types out-types funcs)
+  (let ((result nil))
+    (loop for otype in out-types do
+	 (loop for rank in ranks do
+	      (loop for type in types do
+		   (push `((and
+			    (eq ',otype out-type-spec)
+			    (eq (type-of a) 
+				(simple-array ,(get-long-type type) ,rank)))
+			   ,(if (eq otype type)
+				`a
+				`(ecase func
+				   ,@(loop for f in funcs collect
+					 `(,f (,(format-symbol "convert-~a-~a/~a-~a"
+							       rank type
+							       otype f)
+						a))))))
+			 result))))
+    `(cond 
+       ,@result
+       (t (error "Output type ~a not supported by general converter" out-type-spec)))))
+
+#+nil
+(gen-convert-cases (1 2 3) 
+		   (ub8 fix sf df csf cdf)
+		   (ub8 fix sf df csf cdf)
+		   (mul floor abs realpart imagpart phase))
+
+(defun convert (a out-type-spec &optional
+		(func (cond
+			((member out-type-spec 
+				 '(csf cdf)) 'realpart)
+			((member out-type-spec
+				 '(sf df)) 'mul)
+			((member out-type-spec
+				 '(ub8 fix)) 'floor))))
+  (gen-convert-cases (1) (fix sf csf) (fix sf csf) (mul floor realpart)))
 
 ;; converting complex into real with some function and converting into
 ;; out_type, the name of the functions will be like:
