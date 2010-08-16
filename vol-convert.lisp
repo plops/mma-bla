@@ -135,23 +135,35 @@
 ;; complex than the generic converter should take the realpart as
 ;; default
 
-(second (type-of (make-array 3 :element-type 'single-float)))
+(defun convert (a out-type &optional (func 'mul func-p))
+  (let* ((in-type (get-short-type (second (type-of a))))
+	 (func (if func-p
+		   func
+		   (cond
+		     ;; extract realpart of complex input by default
+		     ((and 
+		       (member in-type '(csf cdf))
+		       (member out-type '(ub8 fix sf df))) 'realpart)
+		     ((member out-type '(ub8 fix)) 'floor)
+		     ((and (eq in-type 'df)
+			   (eq out-type 'sf)) 'coerce)
+		     ((and (eq in-type 'cdf)
+			   (eq out-type 'csf)) 'coerce))))
+	 (name (format-symbol "convert-~a-~a/~a-~a"
+			      (array-rank a)
+			      in-type
+			      out-type
+			      func)))
+    (if (eq in-type out-type)
+	a
+	(funcall name a))))
 
-(defun convert (a out-type-spec &optional
-		(func (cond
-			((member out-type-spec 
-				 '(csf cdf)) 'realpart)
-			((member out-type-spec
-				 '(sf df)) 'mul)
-			((member out-type-spec
-				 '(ub8 fix)) 'floor))))
-  (let ((name (format-symbol "convert-~a-~a/~a-~a"
-			     (array-rank a)
-			     (get-short-type (second (type-of a)))
-			     out-type-spec
-			     func)))
-    (funcall name a)))
 
+
+#+nil
+(convert (v 231d0) 'sf)
+#+nil
+(convert (v 231d0) 'df)
 #+nil
 (convert (v 231d0) 'ub8)
 
