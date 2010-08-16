@@ -1,3 +1,6 @@
+#.
+(require :vol)
+
 (defpackage :psf
   (:use :cl :vol)
   (:export #:init
@@ -10,55 +13,79 @@
 
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
  
-(sb-alien:define-alien-routine j0
-    sb-alien:double-float
-  (x sb-alien:double-float))
+(progn
+  (sb-alien:define-alien-routine j0
+     sb-alien:double-float
+   (x sb-alien:double-float))
  
-(sb-alien:define-alien-routine j1
-    sb-alien:double-float
-  (x sb-alien:double-float))
+ (sb-alien:define-alien-routine j1
+     sb-alien:double-float
+   (x sb-alien:double-float))
  
-(sb-alien:define-alien-routine jn
-    sb-alien:double-float
-  (n sb-alien:int)
-  (x sb-alien:double-float))
+ (sb-alien:define-alien-routine jn
+     sb-alien:double-float
+   (n sb-alien:int)
+   (x sb-alien:double-float))
+
+ (sb-alien:define-alien-routine j0f
+     sb-alien:single-float
+   (x sb-alien:single-float))
  
-(declaim (ftype (function ((complex double-float))
-                          (values double-float &optional)) abs2)
-         (inline abs2))
+ (sb-alien:define-alien-routine j1f
+     sb-alien:single-float
+   (x sb-alien:single-float))
+ 
+ (sb-alien:define-alien-routine jnf
+     sb-alien:single-float
+   (n sb-alien:int)
+   (x sb-alien:single-float)))
+
+(deftype my-float-helper ()
+  `single-float)
+
+(deftype my-float (&optional (low '*) (high '*))
+  `(single-float ,(if (eq low '*)
+		      '*
+		      (coerce low 'my-float-helper)) 
+		 ,(if (eq high '*)
+		      '*
+		      (coerce high 'my-float-helper))))
+ 
 (defun abs2 (z) 
-  (declare (type (complex double-float) z))
+  (declare ((complex my-float) z)
+	   (values my-float &optional))
   (let* ((x (realpart z))
          (y (imagpart z)))
     (+ (* x x) (* y y))))
 
+
 (declaim (type fixnum n)
-	 (type double-float /sin-alpha /sin-alpha2  sin-alpha2)
-	 (type (double-float -1d0 1d0) sin-alpha)
-	 (type (simple-array double-float 1) ac as as^2 ac2))       
+	 (type my-float /sin-alpha /sin-alpha2  sin-alpha2)
+	 (type (my-float -1 1) sin-alpha)
+	 (type (simple-array my-float 1) ac as as^2 ac2))       
 
-(defparameter n 31)
-(defparameter ac (make-array n :element-type 'double-float))
-(defparameter as (make-array n :element-type 'double-float))
-(defparameter as^2 (make-array n :element-type 'double-float))
-(defparameter ac2 (make-array n :element-type 'double-float))
-(defparameter sin-alpha .4d0)
-(defparameter sin-alpha2 (* sin-alpha sin-alpha))
-(defparameter /sin-alpha (/ sin-alpha))
-(defparameter /sin-alpha2 (/ sin-alpha2))
+(progn
+ (defparameter n 31)
+ (defparameter ac (make-array n :element-type 'my-float))
+ (defparameter as (make-array n :element-type 'my-float))
+ (defparameter as^2 (make-array n :element-type 'my-float))
+ (defparameter ac2 (make-array n :element-type 'my-float))
+ (defparameter sin-alpha (coerce .4 'my-float))
+ (defparameter sin-alpha2 (* sin-alpha sin-alpha))
+ (defparameter /sin-alpha (/ sin-alpha))
+ (defparameter /sin-alpha2 (/ sin-alpha2)))
 
-(declaim (ftype (function (&key (:numerical-aperture double-float)
-				(:immersion-index double-float)
-				(:integrand-evaluations fixnum))
-			  (values null &optional))
-		init))
-
-(defun init (&key (numerical-aperture 1.2d0) (immersion-index 1.515d0) (integrand-evaluations 31))
+(defun init (&key (numerical-aperture (coerce 1.2 'my-float)) 
+	     (immersion-index (coerce 1.515 'my-float))
+	     (integrand-evaluations 31))
+  (declare (my-float numerical-aperture immersion-index)
+	   (fixnum integrand-evaluations)
+	   (values null &optional))
   (setf n integrand-evaluations
-	ac (make-array n :element-type 'double-float)
-	as (make-array n :element-type 'double-float)
-	as^2 (make-array n :element-type 'double-float)
-	ac2 (make-array n :element-type 'double-float)
+	ac (make-array n :element-type 'my-float)
+	as (make-array n :element-type 'my-float)
+	as^2 (make-array n :element-type 'my-float)
+	ac2 (make-array n :element-type 'my-float)
 	sin-alpha (/ numerical-aperture immersion-index)
 	sin-alpha2 (* sin-alpha sin-alpha)
 	/sin-alpha (/ sin-alpha)
@@ -67,12 +94,12 @@
 	 (dalpha (/ alpha n)))
 
     (dotimes (iter n)
-      (let* ((theta (the (double-float 0d0 2d0) (* dalpha iter)))
+      (let* ((theta (the (my-float 0d0 2d0) (* dalpha iter)))
 	    (ct (cos theta))
 	     (st (sin theta))
 	     (ct2 (sqrt ct))
 	    (st^2 (* st st)))
-	(declare ((double-float 0d0 1d0) ct)) ;; for the sqrt
+	(declare ((my-float 0 1) ct)) ;; for the sqrt
 	(setf (aref ac iter) ct
 	      (aref as iter) st
 	      (aref as^2 iter) st^2
@@ -90,16 +117,14 @@
 ;; with a .. radius of the exit pupil and
 ;;      R .. distance between exit pupil and focal plane
 
-(declaim (ftype (function (double-float double-float double-float
-					&key (:immersion-index double-float)
-					(:numerical-aperture double-float)
-					(:wavelength double-float))
-			  (values double-float double-float &optional))))
-(defun transform-xyz-to-uv (x y z &key (immersion-index 1.515d0)
-			    (numerical-aperture 1.38d0) (wavelength .480d0))
+(defun transform-xyz-to-uv (x y z &key (immersion-index (coerce 1.515 'my-float))
+			    (numerical-aperture (coerce 1.38 'my-float))
+			    (wavelength (coerce .480 'my-float)))
   "Return the cylindrical coordinates u and v of a given 3D point. All
 lengths in micrometer."
-  (let* ((k (/ (* 2d0 pi immersion-index)
+  (declare (my-float x y z immersion-index numerical-aperture wavelength)
+	   (values my-float my-float &optional))
+  (let* ((k (/ (* #.(coerce 2 'my-float) (coerce pi 'my-float) immersion-index)
 	       wavelength))
 	 (sina (/ numerical-aperture
 		  immersion-index))
@@ -108,19 +133,19 @@ lengths in micrometer."
    (values u v)))
 
 #+nil
-(tranform-xyz-to-uv 0 1 1)
+(transform-xyz-to-uv 0.0 1.0 1.0)
 
-(declaim (ftype (function (double-float double-float)
-			  (values (complex double-float) 
-				  (complex double-float)
-				  (complex double-float) &optional))
+(declaim (ftype (function (my-float my-float)
+			  (values (complex my-float) 
+				  (complex my-float)
+				  (complex my-float) &optional))
 		intermediate-integrals-point)
 	 (inline intermediate-integrals-point))
 (defun intermediate-integrals-point (u v)
   (let* ((i0 (complex 0d0 0d0))
 	 (i1 (complex 0d0 0d0))
 	 (i2 (complex 0d0 0d0)))
-     (declare (type (complex double-float) i0 i1 i2))
+     (declare (type (complex my-float) i0 i1 i2))
      (let ((scale 1))
        (dotimes (iter n)
          (let* ((s (aref as iter))
@@ -142,8 +167,8 @@ lengths in micrometer."
      (let* ((s (* n 3d0)))
        (values (* s i0) (* s i1) (* s i2)))))
 
-(declaim (ftype (function (double-float double-float)
-			  (values double-float &optional))
+(declaim (ftype (function (my-float my-float)
+			  (values my-float &optional))
 		energy-density)
 	 (inline energy-density))
 (defun energy-density (u v)
@@ -154,12 +179,12 @@ lengths in micrometer."
        (abs2 i2))))
 
 (declaim (ftype (function 
-		 (&optional fixnum fixnum double-float double-float)
-		 (values (simple-array double-float (* *)) &optional))
+		 (&optional fixnum fixnum my-float my-float)
+		 (values (simple-array my-float (* *)) &optional))
 		energy-density-cyl))
 (defun energy-density-cyl (&optional (nu 100) (nv 100) (du .1d0) (dv .1d0))
   (let* ((res (make-array (list nu nv) 
-                          :element-type 'double-float)))
+                          :element-type 'my-float)))
     (dotimes (iu nu)
       (let ((u (* iu du)))
        (dotimes (iv nv)
@@ -168,19 +193,19 @@ lengths in micrometer."
     res))
 
 (declaim (ftype (function 
-		 (&optional fixnum fixnum double-float double-float)
-		 (values (simple-array (complex double-float) (* *))
-			 (simple-array (complex double-float) (* *)) 
-			 (simple-array (complex double-float) (* *))
+		 (&optional fixnum fixnum my-float my-float)
+		 (values (simple-array (complex my-float) (* *))
+			 (simple-array (complex my-float) (* *)) 
+			 (simple-array (complex my-float) (* *))
 			 &optional))
 		intermediate-integrals-cyl))
  
 (defun intermediate-integrals-cyl (&optional (nu 100) (nv 100)
 				   (du .1d0) (dv .1d0))
   (let* ((dims (list nu nv))
-	 (ii0 (make-array dims :element-type '(complex double-float)))
-	 (ii1 (make-array dims :element-type '(complex double-float)))
-	 (ii2 (make-array dims :element-type '(complex double-float))))
+	 (ii0 (make-array dims :element-type '(complex my-float)))
+	 (ii1 (make-array dims :element-type '(complex my-float)))
+	 (ii2 (make-array dims :element-type '(complex my-float))))
     (dotimes (iu nu)
       (let ((u (* iu du)))
        (dotimes (iv nv)
@@ -193,15 +218,15 @@ lengths in micrometer."
     (values ii0 ii1 ii2)))
 
 
-(declaim (ftype (function (fixnum fixnum fixnum double-float double-float
+(declaim (ftype (function (fixnum fixnum fixnum my-float my-float
 				  &key 
-				  (:numerical-aperture double-float)
-				  (:immersion-index double-float)
-				  (:wavelength double-float)
+				  (:numerical-aperture my-float)
+				  (:immersion-index my-float)
+				  (:wavelength my-float)
 				  (:integrand-evaluations fixnum)) 
-			  (values (simple-array (complex double-float) 3)
-				  (simple-array (complex double-float) 3)
-				  (simple-array (complex double-float) 3)
+			  (values (simple-array (complex my-float) 3)
+				  (simple-array (complex my-float) 3)
+				  (simple-array (complex my-float) 3)
 				  &optional))
 		electric-field-psf))
 
@@ -230,9 +255,9 @@ lengths in micrometer."
   (let* ((nradius (1+ (ceiling (* (sqrt 2d0) (max x y)))))
 	 (nz (ceiling z 2))
 	 (dims (list z y x))
-	 (e0 (make-array dims :element-type '(complex double-float)))
-	 (e1 (make-array dims :element-type '(complex double-float)))
-	 (e2 (make-array dims :element-type '(complex double-float))))
+	 (e0 (make-array dims :element-type '(complex my-float)))
+	 (e1 (make-array dims :element-type '(complex my-float)))
+	 (e2 (make-array dims :element-type '(complex my-float))))
     (multiple-value-bind (u v)
 	(transform-xyz-to-uv 0 (* (sqrt 2d0) size-radius) (* .5d0 size-z)
 			     :numerical-aperture numerical-aperture
@@ -241,10 +266,10 @@ lengths in micrometer."
       (multiple-value-bind (i0 i1 i2)
 	  (intermediate-integrals-cyl nz nradius
 				      (/ (* 1d0 u) nz) (/ (* 1d0 v) nradius))
-	(let ((rad-a (make-array (list y x) :element-type 'double-float))
-	      (cphi-a (make-array (list y x) :element-type 'double-float))
-	      (c2phi-a (make-array (list y x) :element-type 'double-float))
-	      (s2phi-a (make-array (list y x) :element-type 'double-float)))
+	(let ((rad-a (make-array (list y x) :element-type 'my-float))
+	      (cphi-a (make-array (list y x) :element-type 'my-float))
+	      (c2phi-a (make-array (list y x) :element-type 'my-float))
+	      (s2phi-a (make-array (list y x) :element-type 'my-float)))
 	  (do-rectangle (j i 0 y 0 x)
 	    (let* ((ii (- i (floor x 2)))
 		   (jj (- j (floor y 2)))
@@ -277,14 +302,14 @@ lengths in micrometer."
 #+nil
 (defparameter *e0* (electric-field 10 10 10 3d0 3d0))
 
-(declaim (ftype (function (double-float double-float &key 
-					(:numerical-aperture double-float)
-					(:immersion-index double-float)
+(declaim (ftype (function (my-float my-float &key 
+					(:numerical-aperture my-float)
+					(:immersion-index my-float)
 					(:nz fixnum)
 					(:nradius fixnum)
-					(:wavelength double-float)
+					(:wavelength my-float)
 					(:integrand-evaluations fixnum))
-			  (values (simple-array double-float 2) &optional))
+			  (values (simple-array my-float 2) &optional))
 		intensity-psf-cyl))
 (defun intensity-psf-cyl (z radius &key (numerical-aperture 1.38d0) 
 			  (immersion-index 1.515d0)
@@ -307,19 +332,19 @@ transversal extend RADIUS micrometers."
  (progn (cyl-psf 3d0 1.5d0)
 	nil))
 
-(declaim (ftype (function (fixnum fixnum fixnum double-float double-float
-				  &key (:numerical-aperture double-float)
-				  (:immersion-index double-float)
+(declaim (ftype (function (fixnum fixnum fixnum my-float my-float
+				  &key (:numerical-aperture my-float)
+				  (:immersion-index my-float)
 				  (:integrand-evaluations fixnum)
-				  (:wavelength double-float)) 
-			  (values (simple-array (complex double-float) 3) &optional))
+				  (:wavelength my-float)) 
+			  (values (simple-array (complex my-float) 3) &optional))
 		intensity-psf))
 (defun intensity-psf (z y x size-z size-radius &key (numerical-aperture 1.38d0)
 		      (immersion-index 1.515d0) (integrand-evaluations 31)
 		      (wavelength .480d0))
    "Calculate an intensity point spread function for an aplanatic microobjective with the given NUMERICAL-APERTURE, IMMERSION-INDEX and WAVELENGTH. Distances in micrometer."
    (let* ((psf (make-array (list z y x)
-			   :element-type '(complex double-float)))
+			   :element-type '(complex my-float)))
 	  (nz (1+ (ceiling z 2)))
 	  (nradius (1+ (ceiling (* (sqrt 2d0) (max x y)))))
 	  (cyl (intensity-psf-cyl
@@ -332,7 +357,7 @@ transversal extend RADIUS micrometers."
 		:immersion-index immersion-index
 		:integrand-evaluations integrand-evaluations
 		:wavelength wavelength)))
-     (let ((rad-a (make-array (list y x) :element-type 'double-float)))
+     (let ((rad-a (make-array (list y x) :element-type 'my-float)))
        (do-rectangle (j i 0 y 0 x)
 	 (let* ((ii (- i (floor x 2)))
 		(jj (- j (floor y 2)))
