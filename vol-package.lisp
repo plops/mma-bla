@@ -3,12 +3,13 @@
 ;#.(require :vector)
 
 ;; only in the lab
-#+x86-64 (require :cuda-fft)
+;#+x86-64 (require :cuda-fft)
 
 
 (defpackage :vol
   (:use :cl :sb-alien :sb-c-call :vector 
-	#+x86-64 :cuda-fft)
+	:cuda-fft
+	)
   (:export
 
     #:read-pgm

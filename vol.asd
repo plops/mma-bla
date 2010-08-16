@@ -1,5 +1,5 @@
 (asdf:defsystem vol
-  :depends-on (:alexandria :vector)
+  :depends-on (:alexandria :vector :cuda-fft)
   :serial t
   :components ((:file "vol-package")
 	       (:file "vol-macro-macros")
@@ -11,6 +11,7 @@
 	       (:file "vol-misc")
 	       (:file "vol-bbox")
 	       (:file "vol-fft-helper")
-	       (:file "fftw-fft")
+	       ;;(:file "fftw-fft")
+	       (:file "cuda-fft")
 	       (:file "vol-draw")
 	       (:file "vol-convolve")))
