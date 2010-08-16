@@ -1,17 +1,21 @@
-#.(progn (require :asdf)
-	 (require :alexandria)
-	 (require :vector)
-	 (require :vol)
-	 (require :psf)
-	 (require :simplex-anneal)
-	 (require :raytrace)
-	 (require :lens)
-	 (require :bresenham))
-
+#+nil
+(require :run)
 (defpackage :run
-  (:use :cl :vector :vol :raytrace
-	:bresenham))
+  (:use :cl :vector :vol :raytrace :bresenham))
 (in-package :run)
+
+(deftype my-float-helper ()
+  `single-float)
+
+(deftype my-float (&optional (low '*) (high '*))
+  `(single-float ,(if (eq low '*)
+		      '*
+		      (coerce low 'my-float-helper)) 
+		 ,(if (eq high '*)
+		      '*
+		      (coerce high 'my-float-helper))))
+
+(defconstant +one+ #.(coerce 1 'my-float))
 
 #+nil
 (init-ft)
@@ -25,6 +29,125 @@
 	    `(defparameter ,i nil))))
 
 (defstuff)
+
+
+(defun draw-spheres (radius centers z y x)
+  "put points into the centers of nuclei and convolve a sphere around each"
+  (declare (single-float radius)
+	   ((simple-array vec-i 1) centers)
+	   (fixnum z y x)
+	   (values (simple-array (complex my-float) 3) &optional))
+  (let* ((dims (list z y x))
+	 (points (make-array dims
+			     :element-type '(complex my-float)))
+	 (n (length centers)))
+    (dotimes (i n)
+      (let ((c (aref centers i)))
+	(setf (aref points
+		    (* 5 (vec-i-z c))
+		    (vec-i-y c)
+		    (vec-i-x c))
+	      (complex +one+))))
+    (convolve-circ points 
+		   (fftshift (draw-sphere-csf radius z y x)))))
+
+(defun draw-ovals (radius centers z y x)
+  (declare (single-float radius)
+	   ((simple-array vec-i 1) centers)
+	   (fixnum z y x)
+	   (values (simple-array (complex my-float) 3) &optional))
+  (let* ((dims (list z y x))
+	 (points (make-array dims
+			     :element-type '(complex my-float)))
+	 (n (length centers)))
+    (dotimes (i n)
+      (let ((c (aref centers i)))
+	(setf (aref points
+		    (vec-i-z c)
+		    (vec-i-y c)
+		    (vec-i-x c))
+	      (complex +one+))))
+    (convolve-circ points (fftshift (draw-oval-csf radius z y x)))))
+
+(defun draw-indexed-ovals (radius centers z y x)
+  "The first oval contains the value 1 the second 2, ..."
+  (declare (single-float radius)
+	   ((simple-array vec-i 1) centers)
+	   (fixnum z y x)
+	   (values (simple-array (complex my-float) 3) &optional))
+  (let* ((dims (list z y x))
+	 (big (* x y z))
+	 (points (make-array dims
+			     :element-type '(complex my-float)))
+	 (n (length centers)))
+    (dotimes (i n)
+      (let ((c (aref centers i)))
+	(setf (aref points
+		    (vec-i-z c)
+		    (vec-i-y c)
+		    (vec-i-x c))
+	      (complex (* (+ +one+ i) big)))))
+    (convolve-circ points
+		   (fftshift (draw-oval-csf radius z y x)))))
+
+(defvar *stack* ())
+;; to find centers of cells do a convolution with a sphere
+(defun find-centers ()
+  (declare (values (simple-array vec-i 1)
+		   (simple-array my-float 1)
+		   cons &optional))
+  (let* ((stack-byte (read-stack "/home/martin/tmp/xa*.pgm"))
+	 (stack (make-array (array-dimensions stack-byte)
+			    :element-type '(complex my-float))))
+    (destructuring-bind (z y x)
+	(array-dimensions stack)
+      (dotimes (k z)
+	(dotimes (j y)
+	  (dotimes (i x)
+	    (let ((v (+ (* (coerce .43745 'my-float) k)
+			(aref stack-byte k j i))))
+	      (setf
+	       (aref stack-byte k j i) (clamp (floor v))
+	       (aref stack k j i) (complex v))))))
+      #+nil(setf *stack* stack)
+      ;; find centers of cells by convolving with sphere, actually an
+      ;; oval because the z resolution is smaller than the transversal
+      (let* ((sphere (draw-oval-csf 11.0 z y x))
+	     (conv (convolve-circ stack (fftshift sphere)))
+	     (conv-byte (convert conv 'abs))
+	     (centers nil)
+	     (center-heights nil))
+	(loop for k from 6 below (- z 3) do
+	     (do-region ((k j i) ((- z 3) (- y 1) (- x 1)) (6 1 1))
+	       (let ((v (abs (aref conv k j i))))
+		 (setf (aref conv-byte j i)
+		       (if (and (< (abs (aref conv k j (1- i))) v)
+				(< (abs (aref conv k j (1+ i))) v)
+				(< (abs (aref conv k (1- j) i)) v)
+				(< (abs (aref conv k (1+ j) i)) v)
+				(< (abs (aref conv (1- k) j i)) v)
+				(< (abs (aref conv (1+ k) j i)) v))
+			   (progn
+			     (push (make-vec-i :z k :y j :x i) centers)
+			     (push v center-heights)
+			     0)
+			   (clamp (floor (/ v (* 4e2 x y z))))))))
+	     (write-pgm (format nil "/home/martin/tmp/conv/conv~3,'0d.pgm" k)
+			conv-byte))
+	(let ((c (make-array (length centers)
+			     :element-type 'vec-i
+			     :initial-contents centers))
+	      (ch (make-array (length center-heights)
+			      :element-type 'my-float
+			      :initial-contents center-heights)))
+	  (values c ch (array-dimensions stack)))))))
+
+#+nil
+(sb-ext:gc :full t)
+#+nil
+(time
+ (format t "~a~%" (find-centers)))
+
 
 
 (defun init-model ()
@@ -41,10 +164,10 @@
   (let ((spheres
 	 (destructuring-bind (z y x)
 	     *dims*
-	   (draw-ovals 12d0 *centers* z y x))))
+	   (draw-ovals 12.0 *centers* z y x))))
     (defparameter *spheres* spheres)
     (write-pgm "/home/martin/tmp/comp0-spheres-cut.pgm"
-	       (normalize2-cdf/ub8-realpart
+	       (normalize-2-cdf/ub8-realpart
 	       (cross-section-xz *spheres* 
 				 (vec-i-y (elt *centers* 31)))))
    (sb-ext:gc :full t))
@@ -128,7 +251,7 @@
     (declare (ignore z))
     (let* ((zz (vec-i-z (elt *centers* 31)))
 	   (current-slice (make-array (list 1 y x)
-				      :element-type '(complex double-float)
+				      :element-type '(complex my-float)
 				      :initial-element (complex 1d0))))
       (multiple-value-bind (conv conv-start)
 	  (convolve3-nocrop current-slice *psf*)
@@ -186,69 +309,6 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 ||#
 
 
-(declaim (ftype (function ()
-			  (values (simple-array vec-i 1)
-				  (simple-array double-float 1)
-				  cons
-				  &optional))
-		find-centers))
-(defvar *stack* ())
-;; to find centers of cells do a convolution with a sphere
-(defun find-centers ()
-  (let* ((stack-byte (read-stack "/home/martin/tmp/xa*.pgm"))
-	 (stack (make-array (array-dimensions stack-byte)
-			    :element-type '(complex double-float))))
-    (destructuring-bind (z y x)
-	(array-dimensions stack)
-      (dotimes (k z)
-	(dotimes (j y)
-	  (dotimes (i x)
-	    (let ((v (+ (* .43745d0 k)
-			(aref stack-byte k j i))))
-	      (setf
-	       (aref stack-byte k j i) (clamp (floor v))
-	       (aref stack k j i) (complex v))))))
-      #+nil(setf *stack* stack)
-      ;; find centers of cells by convolving with sphere, actually an
-      ;; oval because the z resolution is smaller than the transversal
-      (let* ((sphere (convert3-ub8/cdf-complex (draw-oval-ub8 11d0 z y x)))
-	     (conv (convolve3-circ stack (fftshift3 sphere)))
-	     (conv-byte (make-array (list y x)
-				   :element-type '(unsigned-byte 8)))
-	     (centers (make-array 0 :element-type 'vec-i
-				  :initial-element (make-vec-i)
-				  :adjustable t
-				  :fill-pointer t))
-	     (center-heights (make-array 0 :element-type 'double-float
-				  :adjustable t
-				  :fill-pointer t)))
-	(loop for k from 6 below (- z 3) do
-	     (loop for j from 1 below (1- y) do
-		  (loop for i from 1 below (1- x) do
-		       (let ((v (abs (aref conv k j i))))
-			 (setf (aref conv-byte j i)
-			       (if (and (< (abs (aref conv k j (1- i))) v)
-					(< (abs (aref conv k j (1+ i))) v)
-					(< (abs (aref conv k (1- j) i)) v)
-					(< (abs (aref conv k (1+ j) i)) v)
-					(< (abs (aref conv (1- k) j i)) v)
-					(< (abs (aref conv (1+ k) j i)) v))
-				   (progn
-				     (vector-push-extend
-				      (make-vec-i :z k :y j :x i)
-				      centers)
-				     (vector-push-extend v center-heights)
-				     0)
-				   (clamp (floor (/ v (* 4e2 x y z)))))))))
-	     #+nil(write-pgm conv-byte
-			(format nil "/home/martin/tmp/conv~3,'0d.pgm" k)))
-	(let ((c (make-array (length centers)
-			     :element-type 'vec-i
-			     :initial-contents centers))
-	      (ch (make-array (length center-heights)
-			     :element-type 'double-float
-			     :initial-contents center-heights)))
-	  (values c ch (array-dimensions stack)))))))
 
 
 (declaim (ftype (function (fixnum)
@@ -259,11 +319,11 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
       (1+ x)
       x))
 
-(declaim (ftype (function (double-float (simple-array vec-i 1)
-					&key (:div-x double-float)
-					(:div-y double-float)
-					(:div-z double-float))
-			  (values (simple-array (complex double-float) 3)
+(declaim (ftype (function (my-float (simple-array vec-i 1)
+					&key (:div-x my-float)
+					(:div-y my-float)
+					(:div-z my-float))
+			  (values (simple-array (complex my-float) 3)
 				  &optional))
 		draw-scaled-spheres))
 ;; put points into the centers of nuclei and convolve a sphere around each
@@ -286,7 +346,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	 (z (ensure-even (+ max-z cr)))
 	 (dims (list z y x))
 	 (points (make-array dims
-			     :element-type '(complex double-float))))
+			     :element-type '(complex my-float))))
     (loop for c across centers do
 	 (setf (aref points
 		     (- (floor (vec-i-z c) div-z) rh)
@@ -297,60 +357,6 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		    (convert3-ub8/cdf-complex (draw-sphere-ub8 radius z y x)))))
 
 
-
-(declaim (ftype (function (double-float (simple-array vec-i 1)
-					fixnum fixnum
-					fixnum)
-			  (values (simple-array (complex double-float) 3)
-				  &optional))
-		draw-spheres draw-ovals))
-;; put points into the centers of nuclei and convolve a sphere around each
-(defun draw-spheres (radius centers z y x)
-  (let* ((dims (list z y x))
-	 (points (make-array dims
-			     :element-type '(complex double-float)))
-	 (n (length centers)))
-    (dotimes (i n)
-      (let ((c (aref centers i)))
-	(setf (aref points
-		    (* 5 (vec-i-z c))
-		    (vec-i-y c)
-		    (vec-i-x c))
-	      (complex 1d0 0d0))))
-    (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
-				       (draw-sphere-ub8 radius z y x))))))
-
-(defun draw-ovals (radius centers z y x)
-  (let* ((dims (list z y x))
-	 (points (make-array dims
-			     :element-type '(complex double-float)))
-	 (n (length centers)))
-    (dotimes (i n)
-      (let ((c (aref centers i)))
-	(setf (aref points
-		    (vec-i-z c)
-		    (vec-i-y c)
-		    (vec-i-x c))
-	      (complex 1d0 0d0))))
-    (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
-				       (draw-oval-ub8 radius z y x))))))
-
-(defun draw-indexed-ovals (radius centers z y x)
-  "The first oval contains the value 1 the second 2, ..."
-  (let* ((dims (list z y x))
-	 (big (* x y z))
-	 (points (make-array dims
-			     :element-type '(complex double-float)))
-	 (n (length centers)))
-    (dotimes (i n)
-      (let ((c (aref centers i)))
-	(setf (aref points
-		    (vec-i-z c)
-		    (vec-i-y c)
-		    (vec-i-x c))
-	      (complex (* big (+ 1d0 i)) 0d0))))
-    (convolve3-circ points (fftshift3 (convert3-ub8/cdf-complex
-				       (draw-oval-ub8 radius z y x))))))
 
 
 
@@ -445,13 +451,13 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 					   (ceiling (* (sqrt 2d0) (max y x)))))))
 	      :function #'(lambda (x) (* 1d-1 (abs x))))))
 
-(declaim (ftype (function ((simple-array (complex double-float) (* * *)))
-			  (values (simple-array (complex double-float) (* * *))
+(declaim (ftype (function ((simple-array (complex my-float) (* * *)))
+			  (values (simple-array (complex my-float) (* * *))
 				  &optional))
 		zshift3))
 (defun zshift3 (in)
   (let ((out (make-array (array-dimensions in)
-			 :element-type '(complex double-float))))
+			 :element-type '(complex my-float))))
    (destructuring-bind (w2 w1 w0)
        (array-dimensions in)
      (dotimes (k w2)
@@ -487,7 +493,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
   (multiple-value-bind (e0 e1 e2)
       (psf:electric-field-psf z x y 10d0 5d0)
     (let ((intens (make-array (array-dimensions e0)
-			      :element-type '(complex double-float))))
+			      :element-type '(complex my-float))))
       (do-box (k j i 0 z 0 y 0 x)
 	(setf (aref intens k j i) (complex (+ (psf::abs2 (aref e0 k j i))
 					      (psf::abs2 (aref e1 k j i))
@@ -495,7 +501,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
       (let* ((k0 (fftshift3 (ft3 intens)))
 	     (k1 (fftshift3 (ft3 (psf:intensity-psf z y x 10d0 5d0))))
 	     (k- (make-array (array-dimensions k0)
-			     :element-type '(complex double-float))))
+			     :element-type '(complex my-float))))
 	(do-box (k j i 0 z 0 y 0 x)
 	  (setf (aref k- k j i) (- (aref k0 k j i)
 				   (aref k1 k j i))))
@@ -537,7 +543,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	    *dims*
 	  (let* ((dims (list z y x))
 		 (points (make-array dims
-			     :element-type '(complex double-float)))
+			     :element-type '(complex my-float)))
 		 (centers *centers*)
 		 (radius 7d0)
 		 (n (length centers)))
@@ -558,7 +564,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 (let ((coord (aref *centers* 31))
       (radius 7d0)
       (slice (make-array (array-dimensions *spheres*)
-			 :element-type '(complex double-float))))
+			 :element-type '(complex my-float))))
   (destructuring-bind (z y x)
       (array-dimensions *spheres*)
     ;; draw only the center sphere
@@ -691,7 +697,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 		  *dims*
 		(list (* z 5) y x)))
 	(psf-big (make-array dims
-			     :element-type '(complex double-float))))
+			     :element-type '(complex my-float))))
    (setf *psf-big* psf-big)
    (destructuring-bind (z y x)
        dims
@@ -714,9 +720,9 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 #+nil ;; check convolution
 (time
  (let ((a (make-array (list 64 64 64)
-		      :element-type '(complex double-float)))
+		      :element-type '(complex my-float)))
        (b (psf:intensity-psf 64 64 64 20d0 20d0) #+nil (make-array (list 64 64 64)
-		      :element-type '(complex double-float))))
+		      :element-type '(complex my-float))))
    (setf (aref a 12 12 12) (complex 255d0))
 #+nil   (setf (aref b 0 0 0) (complex 255d0))
    (save-stack-ub8 "/home/martin/tmp/conv-test" (normalize-ub8 (convolve3-circ a (fftshift3 b))))))
@@ -738,7 +744,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 
 #+nil
 (let ((sli (make-array (array-dimensions *spheres*)
-		       :element-type '(complex double-float))))
+		       :element-type '(complex my-float))))
   (destructuring-bind (z y x)
       (array-dimensions *spheres*)
     (do-box (k j i 0 z 0 y 0 x)
@@ -921,7 +927,7 @@ if there were an empty string between them."
 	       "/home/martin/tmp/time0.pgm")))
 
 (defun find-maxima3-df (conv)
-  (declare ((simple-array double-float 3) conv)
+  (declare ((simple-array my-float 3) conv)
 	   (values (simple-array * 1) &optional))
  (destructuring-bind (z y x)
      (array-dimensions conv)

@@ -1,7 +1,7 @@
 (in-package :vol)
 
 (defun read-pgm (filename)
-  (declare (string filename)
+  (declare ((or pathname string) filename)
 	   (values (simple-array (unsigned-byte 8) 2) &optional))
   (with-open-file (s filename)
     (unless (equal (symbol-name (read s)) "P5")
