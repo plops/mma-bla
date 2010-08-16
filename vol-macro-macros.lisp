@@ -13,7 +13,7 @@
 		    ((unsigned-byte 16) . ub16)
 		    ((unsigned-byte 8) . ub8))))
   (defun get-short-type (long-type)
-    (cdr (assoc long-type type-names)))
+    (cdr (assoc long-type type-names :test #'equal)))
   (defun get-long-type (short-type)
     (car (rassoc short-type type-names))))
 
