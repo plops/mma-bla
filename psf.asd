@@ -1,3 +1,3 @@
 (asdf:defsystem psf
-  ;:depends-on (:vol)
+  :depends-on (:vol)
   :components ((:file "psf")))

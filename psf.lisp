@@ -1,6 +1,3 @@
-#.
-(require :vol)
-
 (defpackage :psf
   (:use :cl :vol)
   (:export #:init
@@ -13,33 +10,34 @@
 
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
  
+#+nil  (progn
+    (sb-alien:define-alien-routine j0
+	sb-alien:double-float
+      (x sb-alien:double-float))
+    
+    (sb-alien:define-alien-routine j1
+	sb-alien:double-float
+      (x sb-alien:double-float))
+    
+    (sb-alien:define-alien-routine jn
+	sb-alien:double-float
+      (n sb-alien:int)
+      (x sb-alien:double-float))
+    )
 (progn
   (sb-alien:define-alien-routine j0
-     sb-alien:double-float
-   (x sb-alien:double-float))
+      sb-alien:single-float
+    (x sb-alien:single-float))
  
- (sb-alien:define-alien-routine j1
-     sb-alien:double-float
-   (x sb-alien:double-float))
+  (sb-alien:define-alien-routine j1
+      sb-alien:single-float
+    (x sb-alien:single-float))
  
- (sb-alien:define-alien-routine jn
-     sb-alien:double-float
-   (n sb-alien:int)
-   (x sb-alien:double-float))
-
- (sb-alien:define-alien-routine j0f
-     sb-alien:single-float
-   (x sb-alien:single-float))
- 
- (sb-alien:define-alien-routine j1f
-     sb-alien:single-float
-   (x sb-alien:single-float))
- 
- (sb-alien:define-alien-routine jnf
-     sb-alien:single-float
-   (n sb-alien:int)
-   (x sb-alien:single-float)))
-
+  (sb-alien:define-alien-routine jn
+      sb-alien:single-float
+    (n sb-alien:int)
+    (x sb-alien:single-float))
+  )
 (deftype my-float-helper ()
   `single-float)
 
@@ -161,7 +159,7 @@ lengths in micrometer."
                  ((eq iter (- n 2)) (setf scale 1))
                  ((eq scale 2) (setf scale 4)) 
                  ((eq scale 4) (setf scale 2))))))
-     (let* ((s (* n 3d0)))
+     (let* ((s (* n #.(coerce 3 'my-float))))
        (values (* s i0) (* s i1) (* s i2)))))
 
 (defun energy-density (u v)
@@ -245,7 +243,8 @@ lengths in micrometer."
 	 (e1 (make-array dims :element-type '(complex my-float)))
 	 (e2 (make-array dims :element-type '(complex my-float))))
     (multiple-value-bind (u v)
-	(transform-xyz-to-uv 0 (* (sqrt #.(coerce 2 'my-float)) size-radius)
+	(transform-xyz-to-uv #.(coerce 0 'my-float)
+			     (* (sqrt #.(coerce 2 'my-float)) size-radius)
 			     (* #.(coerce .5 'my-float) size-z)
 			     :numerical-aperture numerical-aperture
 			     :immersion-index immersion-index
@@ -260,27 +259,29 @@ lengths in micrometer."
 	  (do-region ((j i) (y x))
 	    (let* ((ii (- i (floor x 2)))
 		   (jj (- j (floor y 2)))
-		   (radius (sqrt (+ (* 1d0 ii ii) (* jj jj))))
-		   (phi (atan (* 1d0 jj) ii)))
+		   (one #.(coerce 1 'my-float))
+		   (radius (sqrt (+ (* one ii ii) (* jj jj))))
+		   (phi (atan (* one jj) ii)))
 	      (setf (aref rad-a j i) radius
 		    (aref cphi-a j i) (cos phi)
-		    (aref c2phi-a j i) (cos (* 2d0 phi))
-		    (aref s2phi-a j i) (sin (* 2d0 phi)))))
-	  (let ((del (if (eq 1 (mod z 2))
+		    (aref c2phi-a j i) (cos (* one 2 phi))
+		    (aref s2phi-a j i) (sin (* one 2 phi)))))
+	  (let ((neg-i #.(complex (coerce 0 'my-float) (coerce -1 'my-float)))
+		(del (if (eq 1 (mod z 2))
 			 #.(coerce 0 'my-float)
 			 #.(coerce .5 'my-float)))) ;; add .5 if z is even
 	   (do-region ((k j i) (nz y x))
 	     (let* ((zi (- nz k (- 1d0 del)))
 		    (r (aref rad-a j i))
-		    (v0 (interpolate2 i0 zi r))
-		    (v1 (interpolate2 i1 zi r))
-		    (v2 (interpolate2 i2 zi r)))
-	       (setf (aref e0 k j i) (* (complex 0d0 -1d0)
+		    (v0 (interpolate i0 zi r))
+		    (v1 (interpolate i1 zi r))
+		    (v2 (interpolate i2 zi r)))
+	       (setf (aref e0 k j i) (* neg-i
 					(+ v0 (* v2 (aref c2phi-a j i))))
-		     (aref e1 k j i) (* (complex 0d0 -1d0)
+		     (aref e1 k j i) (* neg-i
 					v2 (aref s2phi-a j i))
 		     (aref e2 k j i) (* -2d0 v1 (aref cphi-a j i))))))
-	  (do-box (k j i 0 nz 0 y 0 x)
+	  (do-region ((k j i) (nz y x))
 	    (setf (aref e0 (- z k 1) j i) (- (conjugate (aref e0 k j i)))
 		  (aref e1 (- z k 1) j i) (- (conjugate (aref e1 k j i)))
 		  (aref e2 (- z k 1) j i) (conjugate (aref e2 k j i)))))))
@@ -289,26 +290,23 @@ lengths in micrometer."
 #+nil
 (defparameter *e0* (electric-field 10 10 10 3d0 3d0))
 
-(declaim (ftype (function (my-float my-float &key 
-					(:numerical-aperture my-float)
-					(:immersion-index my-float)
-					(:nz fixnum)
-					(:nradius fixnum)
-					(:wavelength my-float)
-					(:integrand-evaluations fixnum))
-			  (values (simple-array my-float 2) &optional))
-		intensity-psf-cyl))
-(defun intensity-psf-cyl (z radius &key (numerical-aperture 1.38d0) 
-			  (immersion-index 1.515d0)
-			  (nz 50) (nradius 50) (wavelength .480d0)
+(defun intensity-psf-cyl (z radius &key 
+			  (numerical-aperture #.(coerce 1.38 'my-float)) 
+			  (immersion-index #.(coerce 1.515 'my-float))
+			  (nz 50) (nradius 50)
+			  (wavelength #.(coerce .480 'my-float))
 			  (integrand-evaluations 31)) 
   "Calculate 2D cylindrical PSF with axial extend Z micrometers and
 transversal extend RADIUS micrometers."
+  (declare (fixnum nz nradius integrand-evaluations)
+	   (my-float z radius numerical-aperture immersion-index
+		     wavelength)
+	   (values (simple-array my-float 2) &optional))
   (psf:init :numerical-aperture numerical-aperture 
 	    :immersion-index immersion-index
 	    :integrand-evaluations integrand-evaluations)
   (multiple-value-bind (u v)
-      (transform-xyz-to-uv 0 radius z
+      (transform-xyz-to-uv #.(coerce 0 'my-float) radius z
 		  :numerical-aperture numerical-aperture
 		  :immersion-index immersion-index
 		  :wavelength wavelength)
@@ -316,27 +314,27 @@ transversal extend RADIUS micrometers."
       a)))
 #+nil
 (time
- (progn (cyl-psf 3d0 1.5d0)
+ (progn (intensity-psf-cyl (coerce 3 'my-float) (coerce 1.5 'my-float))
 	nil))
 
-(declaim (ftype (function (fixnum fixnum fixnum my-float my-float
-				  &key (:numerical-aperture my-float)
-				  (:immersion-index my-float)
-				  (:integrand-evaluations fixnum)
-				  (:wavelength my-float)) 
-			  (values (simple-array (complex my-float) 3) &optional))
-		intensity-psf))
-(defun intensity-psf (z y x size-z size-radius &key (numerical-aperture 1.38d0)
-		      (immersion-index 1.515d0) (integrand-evaluations 31)
-		      (wavelength .480d0))
+(defun intensity-psf (z y x size-z size-radius &key 
+		      (numerical-aperture #.(coerce 1.38 'my-float))
+		      (immersion-index #.(coerce 1.515 'my-float))
+		      (integrand-evaluations 31)
+		      (wavelength #.(coerce .480 'my-float)))
    "Calculate an intensity point spread function for an aplanatic microobjective with the given NUMERICAL-APERTURE, IMMERSION-INDEX and WAVELENGTH. Distances in micrometer."
+     (declare (fixnum z y x integrand-evaluations)
+	      (my-float size-z size-radius numerical-aperture immersion-index
+			wavelength)
+	      (values (simple-array (complex my-float) 3) &optional))
    (let* ((psf (make-array (list z y x)
 			   :element-type '(complex my-float)))
 	  (nz (1+ (ceiling z 2)))
-	  (nradius (1+ (ceiling (* (sqrt 2d0) (max x y)))))
+	  (one #.(coerce 1 'my-float))
+	  (nradius (1+ (ceiling (* (sqrt (* one 2)) (max x y)))))
 	  (cyl (intensity-psf-cyl
-		(* .5d0 size-z) 
-		(* (sqrt 2d0)
+		(* one .5 size-z) 
+		(* (sqrt (* one 2))
 		   size-radius)
 		:nz nz 
 		:nradius nradius
@@ -345,28 +343,26 @@ transversal extend RADIUS micrometers."
 		:integrand-evaluations integrand-evaluations
 		:wavelength wavelength)))
      (let ((rad-a (make-array (list y x) :element-type 'my-float)))
-       (do-rectangle (j i 0 y 0 x)
+       (do-region ((j i) (y x))
 	 (let* ((ii (- i (floor x 2)))
 		(jj (- j (floor y 2)))
-		(radius (sqrt (+ (* 1d0 ii ii) (* jj jj)))))
+		(radius (sqrt (+ (* one ii ii) (* jj jj)))))
 	   (setf (aref rad-a j i) radius)))
        (let ((del (if (eq 1 (mod z 2)) ;; add .5 when z is even
-		      0d0
-		      .5d0)))
-	 (do-box (k j i 0 nz 0 y 0 x)
+		      (* one 0)
+		      (* one .5))))
+	 (do-region ((k j i) (nz y x))
 	   (setf (aref psf k j i)
-		 (complex (vol::interpolate2-df cyl
-						(-  nz k (- 1d0 del)) (aref rad-a j i))))))
-       (do-box (k j i 0 nz 0 y 0 x)
+		 (complex (interpolate cyl
+				       (-  nz k (- one del)) 
+				       (aref rad-a j i))))))
+       (do-region ((k j i) (nz y x))
 	 (setf (aref psf (- z k 1) j i) (aref psf k j i))))
      psf))
 
 
 #+nil
 (time (init))
-#+nil
-(time (progn (integ-all)
-	     nil))
 
 ;; cylindrical coordinates:
 ;; v is rho
@@ -374,12 +370,13 @@ transversal extend RADIUS micrometers."
 
 #+nil ;; print out a cross section of the psf transversal 1.5 um and
       ;; axial 3 um wide.
-(let ((numerical-aperture 1.38d0)
-      (immersion-index 1.515d0)) 
+(let ((numerical-aperture (coerce 1.38 'my-float))
+      (immersion-index (coerce 1.515 'my-float))) 
   (init :numerical-aperture numerical-aperture
 	:immersion-index immersion-index)
   (multiple-value-bind (u v)
-      (transform-xyz-to-uv 0 1.5 3 
+      (transform-xyz-to-uv (coerce 0 'my-float) (coerce 1.5 'my-float)
+			   (coerce 3 'my-float) 
 			   :numerical-aperture numerical-aperture
 			   :immersion-index immersion-index)
    (let* ((nu 10)
