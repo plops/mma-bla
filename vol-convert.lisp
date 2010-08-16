@@ -135,35 +135,7 @@
 ;; complex than the generic converter should take the realpart as
 ;; default
 
-;; turns out will be quite involved to get right
-
-(defmacro gen-convert-cases (ranks types out-types funcs)
-  (let ((result nil))
-    (loop for otype in out-types do
-	 (loop for rank in ranks do
-	      (loop for type in types do
-		   (push `((and
-			    (eq ',otype out-type-spec)
-			    (eq (type-of a) 
-				(simple-array ,(get-long-type type) ,rank)))
-			   ,(if (eq otype type)
-				`a
-				`(ecase func
-				   ,@(loop for f in funcs collect
-					 `(,f (,(format-symbol "convert-~a-~a/~a-~a"
-							       rank type
-							       otype f)
-						a))))))
-			 result))))
-    `(cond 
-       ,@result
-       (t (error "Output type ~a not supported by general converter" out-type-spec)))))
-
-#+nil
-(gen-convert-cases (1 2 3) 
-		   (ub8 fix sf df csf cdf)
-		   (ub8 fix sf df csf cdf)
-		   (mul floor abs realpart imagpart phase))
+(second (type-of (make-array 3 :element-type 'single-float)))
 
 (defun convert (a out-type-spec &optional
 		(func (cond
@@ -173,7 +145,15 @@
 				 '(sf df)) 'mul)
 			((member out-type-spec
 				 '(ub8 fix)) 'floor))))
-  (gen-convert-cases (1) (fix sf csf) (fix sf csf) (mul floor realpart)))
+  (let ((name (format-symbol "convert-~a-~a/~a-~a"
+			     (array-rank a)
+			     (get-short-type (second (type-of a)))
+			     out-type-spec
+			     func)))
+    (funcall name a)))
+
+#+nil
+(convert (v 231d0) 'ub8)
 
 ;; converting complex into real with some function and converting into
 ;; out_type, the name of the functions will be like:
