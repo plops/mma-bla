@@ -1,1 +1,3 @@
-(asdf:defsystem bresenham :components ((:file "bresenham")))
+(asdf:defsystem bresenham 
+  :depends-on (:vector)
+  :components ((:file "bresenham")))

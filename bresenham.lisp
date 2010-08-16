@@ -1,5 +1,6 @@
+#.(require :vector)
 (defpackage :bresenham
-  (:use :cl :vol :vector)
+  (:use :cl :vector)
   (:export #:scan-convert-line3))
 
 (in-package :bresenham)
