@@ -22,22 +22,22 @@
     (sb-alien:define-alien-routine jn
 	sb-alien:double-float
       (n sb-alien:int)
-      (x sb-alien:double-float))
-    )
+      (x sb-alien:double-float)))
+
 (progn
-  (sb-alien:define-alien-routine j0
+  (sb-alien:define-alien-routine ("j0f" j0)
       sb-alien:single-float
     (x sb-alien:single-float))
  
-  (sb-alien:define-alien-routine j1
+  (sb-alien:define-alien-routine ("j1f" j1)
       sb-alien:single-float
     (x sb-alien:single-float))
  
-  (sb-alien:define-alien-routine jn
+  (sb-alien:define-alien-routine ("jnf" jn)
       sb-alien:single-float
     (n sb-alien:int)
-    (x sb-alien:single-float))
-  )
+    (x sb-alien:single-float)))
+
 (deftype my-float-helper ()
   `single-float)
 
@@ -48,6 +48,8 @@
 		 ,(if (eq high '*)
 		      '*
 		      (coerce high 'my-float-helper))))
+
+(defconstant +one+ #.(coerce 1 'my-float))
  
 (defun abs2 (z) 
   (declare ((complex my-float) z)
@@ -73,13 +75,13 @@
  (defparameter /sin-alpha (/ sin-alpha))
  (defparameter /sin-alpha2 (/ sin-alpha2)))
 
-(defun init (&key (numerical-aperture (coerce 1.2 'my-float)) 
+(defun init (&key (numerical-aperture (coerce 1.38 'my-float)) 
 	     (immersion-index (coerce 1.515 'my-float))
 	     (integrand-evaluations 31))
   (declare (my-float numerical-aperture immersion-index)
 	   (fixnum integrand-evaluations)
 	   (values null &optional))
-  (setf n integrand-evaluations
+  (setf n (+ 1 (* 2 (floor integrand-evaluations 2))) ;; make sure its odd
 	ac (make-array n :element-type 'my-float)
 	as (make-array n :element-type 'my-float)
 	as^2 (make-array n :element-type 'my-float)
@@ -134,10 +136,11 @@ lengths in micrometer."
 (transform-xyz-to-uv 0.0 1.0 1.0)
 
 (defun intermediate-integrals-point (u v)
+  "Calculate the three integrals I1, I2 and I3 at a point u,v."
   (declare (my-float u v)
 	   (values (complex my-float) (complex my-float) 
 		   (complex my-float) &optional))
-  (let* ((zero #.(coerce 0 '(complex my-float)))
+  (let* ((zero #.(complex (coerce 0 'my-float)))
 	 (i0 zero)
 	 (i1 zero)
 	 (i2 zero))
@@ -148,7 +151,7 @@ lengths in micrometer."
                 (c2 (aref ac iter))
                 (vv (* v s /sin-alpha))
                 (uu (* u c /sin-alpha2))
-                (e (exp (complex 0 uu)))
+                (e (exp (complex #.(coerce 0 'my-float) uu)))
                 (cmul0 (* scale e (* c2 s (+ 1 c) (j0 vv))))
                 (cmul1 (* scale e (* c2 (aref as^2 iter) (j1 vv))))
                 (cmul2 (* scale e (* c2 s (- 1 c) (jn 2 vv)))))
@@ -162,6 +165,11 @@ lengths in micrometer."
      (let* ((s (* n #.(coerce 3 'my-float))))
        (values (* s i0) (* s i1) (* s i2)))))
 
+#+nil
+(init :integrand-evaluations 301)
+#+nil
+(intermediate-integrals-point .0 .0)
+
 (defun energy-density (u v)
   (declare (my-float u v)
 	   (values my-float &optional))
@@ -171,8 +179,12 @@ lengths in micrometer."
        (abs2 i1)
        (abs2 i2))))
 
+#+nil
+(energy-density .0 .0)
+
 (defun energy-density-cyl (&optional (nu 100) (nv 100) (du #.(coerce .1 'my-float))
 			   (dv du))
+  "Calculate a 2D image containing the energy density in cylindrical coordinates."
   (declare (fixnum nu nv)
 	   (my-float du dv)
 	   (values (simple-array my-float 2) &optional))
@@ -236,7 +248,7 @@ lengths in micrometer."
   (init :numerical-aperture numerical-aperture
 	:immersion-index immersion-index
 	:integrand-evaluations integrand-evaluations)
-  (let* ((nradius (1+ (ceiling (* (sqrt 2d0) (max x y)))))
+  (let* ((nradius (1+ (ceiling (* (sqrt (* +one+ 2)) (max x y)))))
 	 (nz (ceiling z 2))
 	 (dims (list z y x))
 	 (e0 (make-array dims :element-type '(complex my-float)))
@@ -244,14 +256,14 @@ lengths in micrometer."
 	 (e2 (make-array dims :element-type '(complex my-float))))
     (multiple-value-bind (u v)
 	(transform-xyz-to-uv #.(coerce 0 'my-float)
-			     (* (sqrt #.(coerce 2 'my-float)) size-radius)
-			     (* #.(coerce .5 'my-float) size-z)
+			     (* (sqrt (* +one+ 2)) size-radius)
+			     (* +one+ .5 size-z)
 			     :numerical-aperture numerical-aperture
 			     :immersion-index immersion-index
 			     :wavelength wavelength)
       (multiple-value-bind (i0 i1 i2)
 	  (intermediate-integrals-cyl nz nradius
-				      (/ (* 1d0 u) nz) (/ (* 1d0 v) nradius))
+				      (/ (* +one+ u) nz) (/ (* +one+ v) nradius))
 	(let ((rad-a (make-array (list y x) :element-type 'my-float))
 	      (cphi-a (make-array (list y x) :element-type 'my-float))
 	      (c2phi-a (make-array (list y x) :element-type 'my-float))
@@ -271,16 +283,16 @@ lengths in micrometer."
 			 #.(coerce 0 'my-float)
 			 #.(coerce .5 'my-float)))) ;; add .5 if z is even
 	   (do-region ((k j i) (nz y x))
-	     (let* ((zi (- nz k (- 1d0 del)))
+	     (let* ((zi (- nz k (- +one+ del)))
 		    (r (aref rad-a j i))
 		    (v0 (interpolate i0 zi r))
 		    (v1 (interpolate i1 zi r))
 		    (v2 (interpolate i2 zi r)))
-	       (setf (aref e0 k j i) (* neg-i
-					(+ v0 (* v2 (aref c2phi-a j i))))
-		     (aref e1 k j i) (* neg-i
-					v2 (aref s2phi-a j i))
-		     (aref e2 k j i) (* -2d0 v1 (aref cphi-a j i))))))
+	       (setf (aref e0 k j i) 
+		     (* neg-i (+ v0 (* v2 (aref c2phi-a j i))))
+		     (aref e1 k j i) 
+		     (* neg-i v2 (aref s2phi-a j i))
+		     (aref e2 k j i) (* +one+ -2 v1 (aref cphi-a j i))))))
 	  (do-region ((k j i) (nz y x))
 	    (setf (aref e0 (- z k 1) j i) (- (conjugate (aref e0 k j i)))
 		  (aref e1 (- z k 1) j i) (- (conjugate (aref e1 k j i)))
@@ -288,7 +300,7 @@ lengths in micrometer."
     (values e0 e1 e2)))
 
 #+nil
-(defparameter *e0* (electric-field 10 10 10 3d0 3d0))
+(progn (electric-field-psf 10 10 10 3.0 3.0) nil)
 
 (defun intensity-psf-cyl (z radius &key 
 			  (numerical-aperture #.(coerce 1.38 'my-float)) 
@@ -322,23 +334,20 @@ transversal extend RADIUS micrometers."
 		      (immersion-index #.(coerce 1.515 'my-float))
 		      (integrand-evaluations 31)
 		      (wavelength #.(coerce .480 'my-float)))
-   "Calculate an intensity point spread function for an aplanatic microobjective with the given NUMERICAL-APERTURE, IMMERSION-INDEX and WAVELENGTH. Distances in micrometer."
+   "Calculate an intensity point spread function for an aplanatic
+microobjective with the given NUMERICAL-APERTURE, IMMERSION-INDEX and
+WAVELENGTH. Distances in micrometer."
      (declare (fixnum z y x integrand-evaluations)
 	      (my-float size-z size-radius numerical-aperture immersion-index
 			wavelength)
 	      (values (simple-array (complex my-float) 3) &optional))
-   (let* ((psf (make-array (list z y x)
-			   :element-type '(complex my-float)))
+   (let* ((psf (make-array (list z y x) :element-type '(complex my-float)))
 	  (nz (1+ (ceiling z 2)))
-	  (one #.(coerce 1 'my-float))
-	  (nradius (1+ (ceiling (* (sqrt (* one 2)) (max x y)))))
+	  (nradius (1+ (ceiling (* (sqrt (* +one+ 2)) (max x y)))))
 	  (cyl (intensity-psf-cyl
-		(* one .5 size-z) 
-		(* (sqrt (* one 2))
-		   size-radius)
-		:nz nz 
-		:nradius nradius
-		:numerical-aperture numerical-aperture
+		(* +one+ .5 size-z) 
+		(* (sqrt (* +one+ 2)) size-radius)
+		:nz nz :nradius nradius :numerical-aperture numerical-aperture
 		:immersion-index immersion-index
 		:integrand-evaluations integrand-evaluations
 		:wavelength wavelength)))
@@ -346,15 +355,15 @@ transversal extend RADIUS micrometers."
        (do-region ((j i) (y x))
 	 (let* ((ii (- i (floor x 2)))
 		(jj (- j (floor y 2)))
-		(radius (sqrt (+ (* one ii ii) (* jj jj)))))
+		(radius (sqrt (+ (* +one+ ii ii) (* jj jj)))))
 	   (setf (aref rad-a j i) radius)))
        (let ((del (if (eq 1 (mod z 2)) ;; add .5 when z is even
-		      (* one 0)
-		      (* one .5))))
+		      (* +one+ 0)
+		      (* +one+ .5))))
 	 (do-region ((k j i) (nz y x))
 	   (setf (aref psf k j i)
 		 (complex (interpolate cyl
-				       (-  nz k (- one del)) 
+				       (-  nz k (- +one+ del)) 
 				       (aref rad-a j i))))))
        (do-region ((k j i) (nz y x))
 	 (setf (aref psf (- z k 1) j i) (aref psf k j i))))
