@@ -1,9 +1,40 @@
-(require :run)
+#+nil
+(progn
+  (require :vol)
+  (require :lens)
+  (require :raytrace)
+  (require :bresenham)
+  (require :psf))
+ 
+(defpackage :run
+  (:use :cl :vector :vol :raytrace :bresenham))
 (in-package :run)
+
+(deftype my-float-helper ()
+  `single-float)
+
+(deftype my-float (&optional (low '*) (high '*))
+  `(single-float ,(if (eq low '*)
+		      '*
+		      (coerce low 'my-float-helper)) 
+		 ,(if (eq high '*)
+		      '*
+		      (coerce high 'my-float-helper))))
+
+(defconstant +one+ #.(coerce 1 'my-float))
 
 
 ;; run the following code to test the downhill simplex optimizer on a
 ;; 2d function:
+
+
+#+nil
+(time (let ((start (make-array 2 :element-type 'my-float
+			       :initial-contents (list 1.5d0 1.5d0))))
+	(simplex-anneal:anneal (simplex-anneal:make-simplex start 1d0)
+		#'rosenbrock
+		:ftol 1d-5)))
+
 
 ;; +-----	 |       |
 ;; |     \--     |       |
@@ -15,13 +46,6 @@
 ;; |-------------+-------+------- <- z
 ;; -nf          /0       f
 ;; object      lens     bfp
-
-#+nil
-(time (let ((start (make-array 2 :element-type 'double-float
-			       :initial-contents (list 1.5d0 1.5d0))))
-	(simplex-anneal:anneal (simplex-anneal:make-simplex start 1d0)
-		#'rosenbrock
-		:ftol 1d-5)))
 
 (defun draw-ray-into-vol (x-mm y-mm bfp-ratio-x bfp-ratio-y vol
 			  &key (dx-mm .2d-3) (dz-mm 1d-3)
@@ -60,7 +84,7 @@
 		    `(let* ((pos ,position)
 			    (center (v* ,normal pos))
 			    (outer-normal (normalize center)))
-		       (declare (type double-float pos))
+		       (declare (type my-float pos))
 		       (lens::make-disk :normal outer-normal :center center)))))
        ;; define the borders of the viewing volume, distances in mm
        (let ((p+z (plane :z (- (* dz (- z cz))
@@ -237,35 +261,35 @@
       (k1 nil)
       (k2 nil))
  (defun angular-psf (&key (x 64) (y x) (z 40)
-		     (window-radius .2d0)
-		     (window-x (- 1d0 window-radius))
-		     (window-y 0d0)
+		     (window-radius #.(coerce .2 'my-float))
+		     (window-x (- #.(coerce 1 'my-float) window-radius))
+		     (window-y #.(coerce 0 'my-float))
 		     (pixel-size-x nil)
 		     (pixel-size-z nil)
-		     (wavelength .480d0)
-		     (numerical-aperture 1.38d0)
-		     (immersion-index 1.515d0)
+		     (wavelength #.(coerce .480 'my-float))
+		     (numerical-aperture #.(coerce 1.38 'my-float))
+		     (immersion-index #.(coerce 1.515 'my-float))
 		     (integrand-evaluations 30)
 		     (debug nil)
 		     (initialize nil))
    (declare (fixnum x y z integrand-evaluations)
-	    (double-float window-radius window-x window-y
+	    (my-float window-radius window-x window-y
 			  wavelength numerical-aperture
 			  immersion-index)
-	    ((or null double-float) pixel-size-x pixel-size-z)
+	    ((or null my-float) pixel-size-x pixel-size-z)
 	    (boolean debug initialize)
-	    (values (simple-array (complex double-float) 3) &optional))
+	    (values (simple-array (complex my-float) 3) &optional))
    ;; changing z,y,x without touching dx or dz leaves the area that is
    ;; shown in k space constant
    (let* ((na numerical-aperture)
 	  (ri immersion-index)
 	  (lambd (/ wavelength ri))
-	  (dz (* .5d0 lambd))
-	  (dz2 (* dz (/ 2d0 (- 1d0 (sqrt (- 1d0
-					    (let ((sinphi (/ na ri)))
-					      (* sinphi sinphi))))))))
+	  (dz (* +one+ .5 lambd))
+	  (dz2 (* dz (/ 2 (- 1 (sqrt (- 1
+					(let ((sinphi (/ na ri)))
+					  (* sinphi sinphi))))))))
 	  (dx (* dz (/ ri na)))
-	  (dx2 (* .5 dx))
+	  (dx2 (* dx .5))
 	  (dx3 (if pixel-size-x
 		   (progn
 		     #+nil (unless (< pixel-size-x dx2)
@@ -285,59 +309,68 @@
      ;; when parameters change (implemented via reinitialize argument)
      (when (or (null k0) (null k1) (null k2) initialize)
        (multiple-value-bind (e0 e1 e2)
-	   (psf:electric-field-psf z y x (* z dz3) (* x dx3)
+	   (psf:electric-field-psf z y x (* dz3 z) (* dx3 x)
 				   :numerical-aperture na
 				   :immersion-index ri
 				   :wavelength wavelength
 				   :integrand-evaluations integrand-evaluations)
 	 (when debug
 	   (write-pgm "/home/martin/tmp/cut-0psf.pgm"
-		      (normalize-2-cdf/ub8-abs (cross-section-xz e0))))
+		      (normalize-2-csf/ub8-abs (cross-section-xz e0))))
 	 (setf k0 (fftshift (ft e0))
 	       k1 (fftshift (ft e1))
 	       k2 (fftshift (ft e2)))
 	 (when debug (write-pgm "/home/martin/tmp/cut-1psf-k.pgm"
-				(normalize-2-cdf/ub8-abs (cross-section-xz k0))))))
+				(normalize-2-csf/ub8-abs (cross-section-xz k0))))))
      (let* ((cr window-radius)
 	    (cx window-x)
 	    (cy window-y)
 	    (sx (/ dx2 dx3))
 	    (cr2 (* cr cr))
-	    (window (make-array (list y x)
-				:element-type 'double-float))
-	    (kk0 (make-array (array-dimensions k0) :element-type '(complex double-float)))
-	    (kk1 (make-array (array-dimensions k1) :element-type '(complex double-float)))
-	    (kk2 (make-array (array-dimensions k2) :element-type '(complex double-float))))
+	    (window (make-array (list y x) :element-type 'my-float))
+	    (kk0 (make-array (array-dimensions k0)
+			     :element-type '(complex my-float)))
+	    (kk1 (make-array (array-dimensions k1)
+			     :element-type '(complex my-float)))
+	    (kk2 (make-array (array-dimensions k2)
+			     :element-type '(complex my-float))))
 	     ;; 2d window
 	     (do-region ((j i) (y x))
-	       (let* ((xx (- (* sx (* 4d0 (- (* i (/ 1d0 x)) .5d0))) cx))
-		      (yy (- (* sx (* 4d0 (- (* j (/ 1d0 y)) .5d0))) cy))
+	       (let* ((xx (- (* sx (* 4 (- (* i (/ +one+ x)) .5))) cx))
+		      (yy (- (* sx (* 4 (- (* j (/ +one+ y)) .5))) cy))
 		      (r2 (+ (* xx xx) (* yy yy))))
 		 (when (< r2 cr2)
-		   (setf (aref window j i) 1d0))))
+		   (setf (aref window j i) +one+))))
 	     (do-region ((k j i) (z y x))
 	       (setf (aref kk0 k j i) (* (aref k0 k j i) (aref window j i))
 		     (aref kk1 k j i) (* (aref k1 k j i) (aref window j i))
 		     (aref kk2 k j i) (* (aref k2 k j i) (aref window j i))))
-	     (when debug (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
-				    (normalize-2-cdf/ub8-abs (cross-section-xz kk0))))
+	     (when debug 
+	       (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
+			  (normalize-2-csf/ub8-abs (cross-section-xz kk0))))
 	     (let* ((e0 (ift (fftshift kk0)))
 		    (e1 (ift (fftshift kk1)))
 		    (e2 (ift (fftshift kk2)))
-		    (intens k0)) ;; instead of allocating a new array we store into k0
+		    (intens k0)) ;; instead of allocating a new array
+				 ;; we store into k0
 	       (do-region ((k j i) (z y x))
 		 (setf (aref intens k j i)
 		       (+ (* (aref e0 k j i) (conjugate (aref e0 k j i)))
 			  (* (aref e1 k j i) (conjugate (aref e1 k j i)))
 			  (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
 	       (when debug
-		 (write-pgm "/home/martin/tmp/cut-3psf-intens.pgm"
-			    (normalize-2-cdf/ub8-realpart (cross-section-xz intens)))
+		 (write-pgm 
+		  "/home/martin/tmp/cut-3psf-intens.pgm"
+		  (normalize-2-csf/ub8-realpart (cross-section-xz intens)))
 		 (let ((k (fftshift (ft intens))))
 		   (write-pgm "/home/martin/tmp/cut-4psf-intk.pgm"
-			      (normalize-2-cdf/ub8-abs (cross-section-xz k)))))
+			      (normalize-2-csf/ub8-abs (cross-section-xz k)))))
 	       intens)))))
 
+(write-pgm "/home/martin/tmp/psf.pgm"
+	   (normalize-2-sf/ub8 (.- (resample-2-sf (draw-disk-sf 25.0 75 75) 1s0 1s0 .25 .25)
+				   (draw-disk-sf 100.0 300 300))))
+(psf:intensity-psf)
 
 #+nil
 (time (progn
@@ -406,34 +439,35 @@ diameter of the bfp.
 |                       |     2 rr                 |
 ||#
 
-(defun angular-intensity-psf-minimal-resolution (&key
-						 (x-um 50d0) (y-um x-um) (z-um 40d0)
-						 (window-radius .1d0)
-						 (window-x .5d0)
-						 (window-y 0d0)
-						 (wavelength .480d0)
-						 (numerical-aperture 1.38d0)
-						 (immersion-index 1.515d0)
-						 (integrand-evaluations 30)
-						 (debug nil)
-						 (initialize t)
-						 (store-cap nil)
-						 (big-window nil))
+(defun angular-intensity-psf-minimal-resolution 
+    (&key
+     (x-um #.(coerce 50 'my-float)) (y-um x-um) (z-um #.(coerce 40 'my-float))
+     (window-radius #.(coerce .1 'my-float))
+     (window-x #.(coerce .5 'my-float))
+     (window-y #.(coerce 0 'my-float))
+     (wavelength #.(coerce .480 'my-float))
+     (numerical-aperture #.(coerce 1.38 'my-float))
+     (immersion-index #.(coerce 1.515 'my-float))
+     (integrand-evaluations 30)
+     (debug nil)
+     (initialize t)
+     (store-cap nil)
+     (big-window nil))
   "Calculate angular intensity PSF, ensure that the maximum sampling
 distance is chosen. Set INITIALIZE to nil if the e-field can be reused
 from a previous calculation. In that case you may need to set
 STORE-CAP to true for all evaluations and use a lot more memory. Only
 if the window diameter is going to be bigger than the radius of the
 back focal plane set BIG-WINDOW to true."
-  (declare ((double-float 0d0 1d0) window-radius)
-	   ((double-float -1d0 1d0) window-x window-y)
-	   (double-float wavelength numerical-aperture immersion-index
+  (declare ((my-float 0 1) window-radius)
+	   ((my-float -1 1) window-x window-y)
+	   (my-float wavelength numerical-aperture immersion-index
 			 x-um y-um z-um)
 	   (fixnum integrand-evaluations)
 	   (boolean debug initialize store-cap big-window)
-	   (values (simple-array (complex double-float) 3)
-		   double-float double-float &optional))
-  (let* ((k0 (/ (* 2d0 pi) wavelength))
+	   (values (simple-array (complex my-float) 3)
+		   my-float my-float &optional))
+  (let* ((k0 (/ #.(coerce (* 2 pi) 'my-float) wavelength))
 	 (k (* immersion-index k0))
 	 (R (* numerical-aperture k0))
 	 (rr (* R window-radius)))
@@ -462,10 +496,11 @@ back focal plane set BIG-WINDOW to true."
 			   ;; bfp-diam/2 transversally the bfp has to
 			   ;; fit in twice, to accommodate the full
 			   ;; donut
-			   (* 2 R)
-			   R)) 
-	     (dx (/ pi kxextent))
-	     (dz (/ pi kzextent)))
+			   (* +one+ 2 R)
+			   (* +one+ R))) 
+	     (pif #.(coerce pi 'my-float))
+	     (dx (/ pif kxextent))
+	     (dz (/ pif kzextent)))
 	(debug-out dx dz kxextent R rr kzextent k rho)
 	(values
 	 (angular-psf :x (floor x-um dx) :y (floor y-um dx) :z (floor z-um dz)
@@ -484,17 +519,20 @@ back focal plane set BIG-WINDOW to true."
 #+nil
 (time
  (multiple-value-bind (a dx dz)
-     (angular-intensity-psf-minimal-resolution :x-um 20d0 :z-um 40d0
-					       :window-radius .14d0
-					       :window-x .73d0
-					       :window-y 0d0 
-					       :integrand-evaluations 1000 
-					       :debug t)
+     (angular-intensity-psf-minimal-resolution 
+      :x-um (* +one+ 20)
+      :z-um (* +one+ 40)
+      :window-radius (* +one+ .14)
+      :window-x (* +one+ .73)
+      :window-y (* +one+ 0) 
+      :integrand-evaluations 30 
+      :initialize t
+      :debug t)
    (write-pgm "/home/martin/tmp/cut5-resampled.pgm"
-	      (normalize2-cdf/ub8-realpart
+	      (normalize-2-csf/ub8-realpart
 	       (cross-section-xz 
-		(resample3-cdf a dx dx dz .2d0 .2d0 .2d0))))))
-
+		a #+nil (resample-3-csf a dx dx dz .2 .2 .2))))
+   (sb-ext:gc :full t)))
 
 
 (defmacro defstuff ()
@@ -521,11 +559,11 @@ back focal plane set BIG-WINDOW to true."
  (destructuring-bind (z y x)
      dims
    (declare (fixnum z y x))
-   (let* ((dx .2d-3)
-	  (dz 1d-3)
-	  (xh (* .5d0 x))
-	  (yh (* .5d0 y))
-	  (zh (* .5d0 z))
+   (let* ((dx (* +one+ .2e-3))
+	  (dz (* +one+  1e-3))
+	  (xh (* +one+ .5d0 x))
+	  (yh (* +one+ .5d0 y))
+	  (zh (* +one+ .5d0 z))
 	  (n (length centers))
 	  (result-l nil))
      (labels ((convert-point (point)
@@ -641,13 +679,13 @@ back focal plane set BIG-WINDOW to true."
 ;; create a volume containing just the current slice
 (defun get-lcos-volume (k nucleus)
   (declare (fixnum k)
-	   (values (simple-array (complex double-float) 3) &optional))
+	   (values (simple-array (complex my-float) 3) &optional))
   (destructuring-bind (z y x)
       (array-dimensions *index-spheres*)
     (unless (< 0 k z)
       (error "slice index k out of range."))
     (let ((vol (make-array (list z y x)
-			   :element-type '(complex double-float))))
+			   :element-type '(complex my-float))))
       ;; only the current nucleus will be illuminated
       ;; note that nucleus 0 has value 1 in index-spheres 
       (do-region ((j i) (y x))
@@ -666,7 +704,7 @@ back focal plane set BIG-WINDOW to true."
 
 (defun write-section (fn vol &optional (y (floor (array-dimension vol 1) 2)))
   (declare (simple-string fn)
-	   ((simple-array (complex double-float) 3) vol)
+	   ((simple-array (complex my-float) 3) vol)
 	   (values null &optional))
   (write-pgm fn (normalize-2-cdf/ub8-realpart (cross-section-xz vol y))))
 
@@ -676,8 +714,8 @@ back focal plane set BIG-WINDOW to true."
 ;; the following global variable contain state for merit-function:
 ;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
 (defun merit-function (vec2)
-  (declare ((simple-array double-float (2)) vec2)
-	   (values double-float &optional))
+  (declare ((simple-array my-float (2)) vec2)
+	   (values my-float &optional))
   (let* ((border-value 100d0) ;; value to return when outside of bfp
 	 ;; this has to be considerably bigger than the maxima on the bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
@@ -840,12 +878,12 @@ back focal plane set BIG-WINDOW to true."
 (progn
   (defun merit-function (vec)
     (declare (vec vec)
-	     (values double-float &optional))
+	     (values my-float &optional))
     (raytrace:ray-spheres-intersection
      (v 0d0 0d0 0d0)
      (normalize (direction (aref vec 0) (aref vec 1)))
      *sphere-c-r*))
-  (let ((start (make-array 2 :element-type 'double-float
+  (let ((start (make-array 2 :element-type 'my-float
                           :initial-contents (list 100d0 100d0))))
    (with-open-file (*standard-output* "/dev/shm/anneal.log"
                                       :direction :output
@@ -873,7 +911,7 @@ back focal plane set BIG-WINDOW to true."
   "Take a point on the back focal plane and a point in the sample and
  calculate the ray direction ro that leaves the objective. So its the
  same calculation that is used for draw-ray-into-vol."
-  (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
+  (declare (my-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
 	   (values vec vec &optional))
   (let* ((f (lens:focal-length-from-magnification 63d0))
 	 (na 1.38d0)
@@ -922,10 +960,10 @@ back focal plane set BIG-WINDOW to true."
   "Given a circle CENTER and RADIUS return the point in the left,
 right, top or bottom of its periphery. CENTER and result are complex
 numbers x+i y."
-  (declare ((complex double-float) center)
-	   (double-float radius)
+  (declare ((complex my-float) center)
+	   (my-float radius)
 	   (direction direction)
-	   (values (complex double-float) &optional))
+	   (values (complex my-float) &optional))
   (let ((phi (ecase direction
 	       (:right 0d0)
 	       (:top (* .5d0 pi))
@@ -947,9 +985,9 @@ one of the four values :LEFT, :RIGHT, :TOP and :BOTTOM indicating
 which point on the periphery of the corresponding circle is meant."
   (declare (fixnum illuminated-sphere-index)
 	   (direction sample-position bfp-position)
-	   (double-float bfp-center-x bfp-center-y bfp-radius)
+	   (my-float bfp-center-x bfp-center-y bfp-radius)
 	   ((simple-array sphere 1) spheres-c-r)
-	   (values double-float &optional))
+	   (values my-float &optional))
   (with-slots (center radius)
       (aref spheres-c-r illuminated-sphere-index)
     (let* ((sample-pos (sample-circle (complex (vec-x center) (vec-y center))
@@ -983,11 +1021,11 @@ which point on the periphery of the corresponding circle is meant."
 #+nil ;; store the scan for each nucleus in the bfp
 (time
  (let* ((n 100)
-	(a (make-array (list n n) :element-type 'double-float))
+	(a (make-array (list n n) :element-type 'my-float))
 	(nn (length *spheres-c-r*))
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
-			    :element-type 'double-float)))
+			    :element-type 'my-float)))
    (dotimes (*nucleus-index* nn)
      (dotimes (i n)
        (dotimes (j n)
