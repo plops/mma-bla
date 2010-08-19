@@ -93,3 +93,6 @@
 (def-outer-cross (1 2 3) (sf df csf cdf) def-fftshift-rank-type progn)
 #+nil
 (def-outer-cross (1 2 3) (1 2 3) def)
+
+
+

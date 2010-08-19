@@ -153,7 +153,7 @@
 	     (let ((a (ft (draw-sphere-csf 12.0 34 206 296)))
 		   #+nil (b (ft (draw-sphere-csf 5.0 34 206 296))))
 	       a))))
-
+#+bla
 (defun init-model ()
   ;; find the centers of the nuclei and store into *centers*
   (multiple-value-bind (c ch dims)
@@ -184,7 +184,7 @@
 (time (init-model))
 
 
-
+#+bla
 (defun init-psf ()
   ;; calculate intensity psf, make extend in z big enough to span the
   ;; full fluorophore concentration even when looking at the bottom
@@ -204,7 +204,7 @@
 #+nil
 (time (init-psf))
 
-
+#+bla
 (defun clem ()
   ;; Extract one specific plane from the fluorophore concentration
   ;; model and convolve with intensity psf. The result is the light
@@ -255,7 +255,7 @@
       (/ (mean-realpart in-focus)
 	 (mean-realpart Lf)))))
 
-
+#+bla
 (defun widefield ()
   ;; convolve a plane with the psf
   (destructuring-bind (z y x)
@@ -323,53 +323,13 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 
 
 
-(declaim (ftype (function (fixnum)
-			  (values fixnum &optional))
-		ensure-even))
+#+bla
 (defun ensure-even (x)
+  (declare (fixnum x)
+	   (values fixnum &optional))
   (if (eq 1 (mod x 2))
       (1+ x)
       x))
-
-(declaim (ftype (function (my-float (simple-array vec-i 1)
-					&key (:div-x my-float)
-					(:div-y my-float)
-					(:div-z my-float))
-			  (values (simple-array (complex my-float) 3)
-				  &optional))
-		draw-scaled-spheres))
-;; put points into the centers of nuclei and convolve a sphere around each
-(defun draw-scaled-spheres (radius centers &key (div-x 5d0)
-		     (div-y 5d0)
-		     (div-z 1d0))
-  (let* ((max-x (floor (reduce #'max
-			       (map '(simple-array fixnum 1) #'vec-i-x
-				    centers)) div-x))
-	 (max-y (floor (reduce #'max
-			       (map '(simple-array fixnum 1) #'vec-i-y
-				    centers)) div-y))
-	 (max-z (floor (reduce #'max
-			       (map '(simple-array fixnum 1) #'vec-i-z
-				    centers)) div-z))
-	 (cr (ceiling radius))
-	 (rh (floor radius 2))
-	 (x (ensure-even (+ max-x cr)))
-	 (y (ensure-even (+ max-y cr)))
-	 (z (ensure-even (+ max-z cr)))
-	 (dims (list z y x))
-	 (points (make-array dims
-			     :element-type '(complex my-float))))
-    (loop for c across centers do
-	 (setf (aref points
-		     (- (floor (vec-i-z c) div-z) rh)
-		     (- (floor (vec-i-y c) div-y) rh)
-		     (- (floor (vec-i-x c) div-x) rh))
-	       (complex 1d0 0d0)))
-    (convolve3-circ points
-		    (convert3-ub8/cdf-complex (draw-sphere-ub8 radius z y x)))))
-
-
-
 
 
 #+nil
@@ -462,28 +422,6 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 					(* .198d0
 					   (ceiling (* (sqrt 2d0) (max y x)))))))
 	      :function #'(lambda (x) (* 1d-1 (abs x))))))
-
-(declaim (ftype (function ((simple-array (complex my-float) (* * *)))
-			  (values (simple-array (complex my-float) (* * *))
-				  &optional))
-		zshift3))
-(defun zshift3 (in)
-  (let ((out (make-array (array-dimensions in)
-			 :element-type '(complex my-float))))
-   (destructuring-bind (w2 w1 w0)
-       (array-dimensions in)
-     (dotimes (k w2)
-       (dotimes (j w1)
-	 (dotimes (i w0)
-	   (let* ((kk (if (> k (/ w2 2))
-			  (+ w2 (/ w2 2) (- k))
-			  (- (/ w2 2) k))))
-	     (setf (aref out k j i)
-		   (aref in kk j i))
-	     nil)))))
-   out))
-
-
 
 #+nil
 (time
@@ -598,8 +536,8 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 	     "/home/martin/tmp/slice-cut.pgm")
   (sb-ext:gc :full t))
 
-(defparameter *bfp-circ-radius* .3d0)
-(defparameter *bfp-circ-center-x* .4d0 #+nil (- .999d0 *bfp-circ-radius*))
+#+bla (defparameter *bfp-circ-radius* .3d0)
+#+bla (defparameter *bfp-circ-center-x* .4d0 #+nil (- .999d0 *bfp-circ-radius*))
 
 #+nil ;; 11.3s 2.6s
 (time
@@ -833,142 +771,7 @@ for i in *.tif ; do tifftopnm $i > `basename $i .tif`.pgm;done
 
 
 ;; 
-(defun split-by-char (char string)
-    "Returns a list of substrings of string
-divided by ONE character CHAR each.
-Note: Two consecutive CHAR will be seen as
-if there were an empty string between them."
-    (declare (character char)
-	     (string string))
-    (loop for i = 0 then (1+ j)
-       as j = (position char string :start i)
-       collect (subseq string i j)
-       while j))
-
-#+nil
-(split-by-char #\x "12x124x42")
-
-(defun parse-raw-filename (fn)
-  "Parses a filename like
-/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000.raw and returns
-291 354 41 and 91 as multiple values."
-  (declare (string fn)
-	   (values (or null fixnum) fixnum fixnum fixnum &optional))
-  (let* ((p- (position #\- fn :from-end t))
-	 (part (subseq fn (1+ p-)))
-	 (p_ (position #\_ part))
-	 (sizes (subseq part 0 p_))
-	 (numlist (split-by-char #\x sizes)))
-    (unless (eq 4 (length numlist))
-      (error "didn't read 4 dimensions as expected."))
-    (destructuring-bind (x y z time)
-	(mapcar #'read-from-string numlist)
-     (values x y z time))))
 
 
-#+nil
-(parse-raw-filename "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000.raw")
 
-(defun read-raw-stack-video-frame (fn time)
-  (declare (string fn)
-	   (fixnum time)
-	   (values (simple-array (unsigned-byte 8) 3) &optional))
-  (multiple-value-bind (x y z maxtime)
-      (parse-raw-filename fn)
-      (unless (< time maxtime)
-	(error "requested time ~d is to big (must be <~d!)" time maxtime))
-      (let* ((vol (make-array (list z y x)
-			      :element-type '(unsigned-byte 8)))
-	     (vol1 (sb-ext:array-storage-vector vol)))
-	(with-open-file (s fn :direction :input
-			   :element-type '(unsigned-byte 8))
-	  (file-position s (* x y z time))
-	  (read-sequence vol1 s))
-	vol)))
-#+nil
-(time 
- (let* ((fn "/home/martin/d0708/stacks/c-291x354x41x91_dx200_dz1000_2.raw")
-	(ao (decimate-xy-ub8 5
-			     (read-raw-stack-video-frame fn 0))))
-   (destructuring-bind (z y x)
-       (array-dimensions ao)
-     (let* ((timestep 20)
-	    (o (loop for radius from 1 upto 10 collect
-		    (let* ((oval (draw-sphere-ub8 (* 1d0 radius) z y x))
-			   (volume (count-non-zero-ub8 oval)))
-		      (list radius volume
-			    (ft3 (convert3-ub8/cdf-complex oval)))))))
-       (let* ((ao (decimate-xy-ub8 5
-				   (read-raw-stack-video-frame fn timestep)))
-	      (a (convert3-ub8/cdf-complex ao))
-	      (ka (ft3 a)))
-	 (loop for i in o do
-	      (destructuring-bind (radius volume oval)
-		  i
-		(let* ((dir (format nil "/home/martin/tmp/o~d" radius))
-		       (conv (fftshift3 (ift3 (.* ka oval))))
-		       (conv-df (convert3-cdf/df-realpart conv)))
-		 (save-stack-ub8 dir
-				 (normalize-ub8-df/ub8-realpart conv-df))
-		 (with-open-file (s (format nil "~a/maxima" dir)
-				    :if-exists :supersede
-				   :direction :output)
-		   (loop for el in (find-maxima3-df conv-df) do
-			(destructuring-bind (height pos)
-			    el
-			  (format s "~f ~d ~a~%" 
-				  (/ height volume)
-				  volume
-				  (v*-i 
-				   (map 'vec-i #'(lambda (x) (floor x 2)) pos)
-				   2))))))))
-	nil)))))
-#+nil
-(sb-ext:gc :full t)
-#+nil
-(save-stack-ub8 "/home/martin/tmp/conv" conv)
-
-#+nil
-(find-maxima3 conv)
-
-#+nil
-(destructuring-bind (z y x)
-    (array-dimensions *a*)
-  (let ((b (draw-ovals 12d0 (find-maxima3 conv) (ensure-even z) (ensure-even y) (ensure-even x))))
-    (write-pgm (convert-img (cross-section-xz b 42))
-	       "/home/martin/tmp/time0.pgm")))
-
-(defun find-maxima3-df (conv)
-  (declare ((simple-array my-float 3) conv)
-	   (values (simple-array * 1) &optional))
- (destructuring-bind (z y x)
-     (array-dimensions conv)
-   (let ((centers nil #+nil(make-array 0 :element-type 'vec-i
-			      :initial-element (make-vec-i)
-			      :adjustable t
-			      :fill-pointer t)))
-     (do-box (k j i 6 (- z 3) 1 (1- y) 1 (1- x))
-       (let ((v (aref conv k j i)))
-	 (when (and (< (aref conv k j (1- i)) v)
-		    (< (aref conv k j (1+ i)) v)
-		    (< (aref conv k (1- j) i) v)
-		    (< (aref conv k (1+ j) i) v)
-		    (< (aref conv (1- k) j i) v)
-		    (< (aref conv (1+ k) j i) v))
-	   ;; this is TOO slow
-	   #+nil(setf centers (append centers
-				 (list (list v (make-vec-i :z k :y j :x i)))))
-	   ;; this is faster
-	   #+nil(setf centers (nconc centers 
-				(list (list v (make-vec-i :z k :y j :x i)))))
-	   ;; I think push is the right thing to do
-	   (push (list v (make-vec-i :z k :y j :x i)) centers)
-	   #+nil(vector-push-extend
-	    (make-vec-i :z k :y j :x i)
-	    centers))))
-;;    (nreverse centers)
-     (coerce centers 'simple-vector) ;; I saw this in raylisps load-obj
-   #+nil  (make-array (length centers)
-		 :element-type 'vec-i
-		 :initial-contents centers))))
 

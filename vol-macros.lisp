@@ -10,6 +10,19 @@ so that (ARRAY ...) corresponds to (AREF ARRAY ...)."
                       arrays)
      ,@body))
 
+(defmacro with-linear-arrays (arrays &body body)
+  "Exposes the linear array for each of the supplied arrays. When a
+and b are multidimensional arrays you can use (with-arrays (a
+b) (setf (a1 0) (b1 324))) to access their storage vectors."
+  (let* ((arrays1 (mapcar #'(lambda (x) 
+			      (unless (symbolp x)
+			       (error "only symbols are allowed in with1."))
+			      (intern (format nil "~a1" x)))
+			  arrays)))
+   `(let (,@(mapcar #'(lambda (x y) `(,x (sb-ext:array-storage-vector ,y)))
+		    arrays1 arrays))
+      (with-arrays ,arrays1
+	,@body))))
 
 (defmacro do-region ((indices end &optional (start '(0 0 0))) &body body)
   "Write intertwined loops to traverse a vector, an image or a volume."
