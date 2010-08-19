@@ -71,7 +71,7 @@
   
   (define-alien-routine ("cudaFree" cuda-free)
     cuda-error
-  (device-pointer cuda-device-ptr :copy))
+  (device-pointer cuda-device-ptr))
 
   (define-alien-routine ("cudaMemcpy" cuda-memcpy)
       cuda-error
@@ -120,27 +120,27 @@
 	    (device (cu-malloc n-bytes))
 	    (dev-sap (sb-sys:int-sap device)))
        ;; copy data to device
-       (cuda-memcpy dev-sap
-		    (sb-sys:vector-sap in1)
-		    n-bytes
-		    'host->device)
+       (assert (= 0 (cuda-memcpy dev-sap
+				 (sb-sys:vector-sap in1)
+				 n-bytes
+				 'host->device)))
        ;; plan and execute in-place transform on device
        (let ((plan ,(ecase rank
 			   (2 `(destructuring-bind (y x) dims
 				 (cu-plan y x)))
 			   (3 `(destructuring-bind (z y x) dims
 				 (cu-plan z y x))))))
-	 (cufft-exec-c2c plan 
-			 dev-sap
-			 dev-sap
-			 (if forward +cufft-forward+ +cufft-inverse+))
-	 (cufft-destroy plan))
+	 (assert (= 0 (cufft-exec-c2c plan 
+			       dev-sap
+			       dev-sap
+			       (if forward +cufft-forward+ +cufft-inverse+))))
+	 (assert (= 0 (cufft-destroy plan))))
        ;; copy result back
-       (cuda-memcpy (sb-sys:vector-sap out1)
-		    dev-sap
-		    n-bytes 'device->host)
+       (assert (= 0 (cuda-memcpy (sb-sys:vector-sap out1)
+				 dev-sap
+				 n-bytes 'device->host)))
        ;; deallocate array on device
-       (cuda-free device)
+       (assert (= 0 (cuda-free device)))
        ;; normalize if forward
        (when forward 
 	 (let* ((1/n (/ ,(coerce 1.0 (ecase type
@@ -149,7 +149,6 @@
 	   (dotimes (i n)
 	     (setf (aref out1 i) (* 1/n (aref out1 i))))))
        out)))
-
 
 #+nil
 (def-ft-rank-type 2 csf)
@@ -187,7 +186,6 @@
 (write-pgm "/home/martin/tmp/fftw.pgm"
  (normalize-2-csf/ub8-abs
 	    (cross-section-xz 
-	     (let ((a (ft (draw-sphere-csf 12.0 34 206 296))))
-	       ()
-	       (let ((b (ft (draw-sphere-csf 5.0 34 206 296))))
-		 a)))))
+	     (let ((a (ft-3-csf (draw-sphere-csf 12.0 34 206 296)))
+		   (b (ft-3-csf (fftshift (draw-sphere-csf 5.0 34 206 296)))))
+	       (ift (.* a b))))))
