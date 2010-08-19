@@ -85,7 +85,7 @@
 		    `(let* ((pos ,position)
 			    (center (v* ,normal pos))
 			    (outer-normal (normalize center)))
-		       (declare (type my-float pos))
+		       (declare (type double-float pos))
 		       (lens::make-disk :normal outer-normal :center center)))))
        ;; define the borders of the viewing volume, distances in mm
        (let ((p+z (plane :z (- (* dz (- z cz))
@@ -574,20 +574,41 @@ back focal plane set BIG-WINDOW to true."
 		   (* dz (- (vec-i-z point) zh)))))
        (dotimes (i n)
 	 (push (make-sphere :center (convert-point (aref centers i))
-			    :radius (* dx 17d0))
+			    :radius (* dx 12d0))
 	       result-l))
        (make-array (length result-l) :element-type 'sphere
-		   :initial-contents result-l)))))
+		   :initial-contents (nreverse result-l))))))
 
 (defun init-angular-model ()
   ;; find the centers of the nuclei and store into *centers*
-  (multiple-value-bind (c ch dims)
+  #+nil(multiple-value-bind (c ch dims)
       (find-centers)
     (declare (ignore ch))
     (defparameter *centers* c)
     (defparameter *dims* dims)
     (sb-ext:gc :full t))
-
+  (progn 
+    (defparameter *dims* '(34 206 296))
+    (let* ((result nil)
+	   (nx 10)
+	   (ny 7)
+	   (z 20)
+	   (dx 30))
+      (loop for i below nx do
+	   (loop for j below ny do
+		(let ((x (+ (floor dx 2) (* dx i)))
+		      (y (+ (floor dx 2) (* dx j))))
+		  (unless (and (= i 4) (= j 3))
+		    (push (make-vec-i :x x :y y :z z)
+			  result)))))
+      ;; the first sphere is the one i want to illuminate its center
+      ;; is in plane 10 (why is z inverted. in spheres the single
+      ;; nucleus is in plane 25)
+      (push (make-vec-i :x 130 :y 100 :z 10) result)
+      (defparameter *centers* (make-array (length result)
+					  :element-type 'vec-i
+					  :initial-contents result))))
+  
   (defparameter *spheres-c-r*
     (create-sphere-array *dims* *centers*))
   (let ((spheres
@@ -598,17 +619,21 @@ back focal plane set BIG-WINDOW to true."
     (write-pgm "/home/martin/tmp/angular-indexed-spheres-cut.pgm"
 	       (normalize-2-csf/ub8-realpart
 		(cross-section-xz *index-spheres* 
-				  (vec-i-y (elt *centers* 31)))))
+				  (vec-i-y (elt *centers* 0)))))
     (sb-ext:gc :full t))
   (let ((spheres
 	 (destructuring-bind (z y x)
 	     *dims*
 	   (draw-ovals 12.0 *centers* z y x))))
     (setf *spheres* spheres)
+    (save-stack-ub8 "/home/martin/tmp/angular-spheres/"
+		    (normalize-3-csf/ub8-realpart *spheres*))
     (write-pgm "/home/martin/tmp/angular-spheres-cut.pgm"
 	       (normalize-2-csf/ub8-realpart
-		(cross-section-xz *spheres* 
-				  (vec-i-y (elt *centers* 31)))))
+		(resample-2-csf 
+		 (cross-section-xz *spheres* 
+				   (vec-i-y (elt *centers* 0)))
+		 .2 1.0 .2 .2)))
     (sb-ext:gc :full t)))
 
 #+nil
@@ -717,16 +742,15 @@ back focal plane set BIG-WINDOW to true."
   (save-stack-ub8 "/home/martin/tmp/angular-0lcos" (normalize-3-csf/ub8-realpart vol)))
 
 
-
-(defvar *nucleus-index* 50)
+(defvar *nucleus-index* 0)
 (defvar *bfp-window-radius* .08d0)
 
 ;; the following global variable contain state for merit-function:
 ;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
 (defun merit-function (vec2)
-  (declare ((simple-array my-float (2)) vec2)
-	   (values my-float &optional))
-  (let* ((border-value 100d0) ;; value to return when outside of bfp
+  (declare ((simple-array double-float (2)) vec2)
+	   (values double-float &optional))
+  (let* ((border-value 0d0) ;; value to return when outside of bfp
 	 ;; this has to be considerably bigger than the maxima on the bfp
 	 (border-width *bfp-window-radius*) ;; in this range to the
 	 ;; border of the bfp
@@ -769,7 +793,7 @@ back focal plane set BIG-WINDOW to true."
 	   (return-from find-optimal-bfp-window-center point))))))
 
 #+nil
-(find-optimal-bfp-window-center 50)
+(find-optimal-bfp-window-center 0)
 ;; FIXME: are these coordinates in mm or relative positions for a bfp-radius of 1?
 ;; I think the latter, but I'm not sure.
 #+nil
@@ -921,7 +945,7 @@ back focal plane set BIG-WINDOW to true."
   "Take a point on the back focal plane and a point in the sample and
  calculate the ray direction ro that leaves the objective. So its the
  same calculation that is used for draw-ray-into-vol."
-  (declare (my-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
+  (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
 	   (values vec vec &optional))
   (let* ((f (lens:focal-length-from-magnification 63d0))
 	 (na 1.38d0)
@@ -970,20 +994,27 @@ back focal plane set BIG-WINDOW to true."
   "Given a circle CENTER and RADIUS return the point in the left,
 right, top or bottom of its periphery. CENTER and result are complex
 numbers x+i y."
-  (declare ((complex my-float) center)
-	   (my-float radius)
+  (declare ((complex double-float) center)
+	   (double-float radius)
 	   (direction direction)
-	   (values (complex my-float) &optional))
+	   (values (complex double-float) &optional))
   (let ((phi (ecase direction
 	       (:right 0d0)
 	       (:top (* .5d0 pi))
 	       (:left pi)
-	       (:bottom (* 1.5 pi)))))
+	       (:bottom (* 1.5d0 pi)))))
    (+ center (* radius (exp (complex 0d0 phi))))))
 
 #+nil
 (sample-circle (complex 1d0 1d0) 1d0 :right)
 
+#+nil ;; prepare volume for drawing lines
+(progn
+ (defparameter *spheres-ub8* (normalize-3-csf/ub8-realpart
+			      (resample-3-csf *spheres* .2 .2 1.0 .2 .2 .2)))
+
+ (save-stack-ub8 "/home/martin/tmp/spheres-ub8" *spheres-ub8*)
+ )
 (defun illuminate-ray (spheres-c-r illuminated-sphere-index
 		       sample-position
 		       bfp-center-x bfp-center-y
@@ -995,9 +1026,9 @@ one of the four values :LEFT, :RIGHT, :TOP and :BOTTOM indicating
 which point on the periphery of the corresponding circle is meant."
   (declare (fixnum illuminated-sphere-index)
 	   (direction sample-position bfp-position)
-	   (my-float bfp-center-x bfp-center-y bfp-radius)
+	   (double-float bfp-center-x bfp-center-y bfp-radius)
 	   ((simple-array sphere 1) spheres-c-r)
-	   (values my-float &optional))
+	   (values double-float &optional))
   (with-slots (center radius)
       (aref spheres-c-r illuminated-sphere-index)
     (let* ((sample-pos (sample-circle (complex (vec-x center) (vec-y center))
@@ -1024,19 +1055,21 @@ which point on the periphery of the corresponding circle is meant."
 	  exposure)))))
 
 #+nil
-(illuminate-ray *spheres-c-r* 30 :bottom
+(illuminate-ray *spheres-c-r* 20 :bottom
 		.1d0 .0d0
 		.01d0 :right)
+
+(defvar *bfp-window-radius* .0001d0)
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
  (let* ((n 100)
-	(a (make-array (list n n) :element-type 'my-float))
+	(a (make-array (list n n) :element-type 'double-float))
 	(nn (length *spheres-c-r*))
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
-			    :element-type 'my-float)))
-   (dotimes (*nucleus-index* nn)
+			    :element-type 'double-float)))
+   (dotimes (*nucleus-index* 3  nn)
      (dotimes (i n)
        (dotimes (j n)
 	 (let ((x (- (* 2d0 (/ i n)) 1d0))
@@ -1044,12 +1077,23 @@ which point on the periphery of the corresponding circle is meant."
 	   (setf (aref a j i)
 		 (merit-function
 		  (make-vec2 :x x :y y))))))
-     (do-rectangle (j i 0 n 0 n)
+     (do-region ((j i) (n n))
        (let ((x (mod *nucleus-index* mosaicx))
 	     (y (floor *nucleus-index* mosaicx)))
 	 (setf (aref mosaic (+ (* n y) j) (+ (* n x) i))
 	       (aref a j i)))))
-   (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-ub8 mosaic))))
+   (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-2-df/ub8 mosaic))))
+
+#+nil
+(let ((vol (make-array dims :element-type '(unsigned-byte 8))))
+  (loop for i in '(4.0d-3 -.2d-3) do
+   (draw-ray-into-vol i 0d0 .99d0 .0d0 vol)
+   #+nil(draw-ray-into-vol i 0d0 -.99d0 .0d0 vol)
+   (draw-ray-into-vol i 0d0 0d0 .99d0 vol)
+   (draw-ray-into-vol i 0d0 0d0 -.99d0 vol))
+
+  (save-stack-ub8 "/home/martin/tmp/line"
+		  vol))
 
 
 #+nil
