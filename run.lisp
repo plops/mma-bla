@@ -107,22 +107,18 @@
       (do-region ((k j i) (z y x))
 	(setf (aref stack k j i) (complex (+ (* #.(coerce .43745 'my-float) k)
 					     (aref stack-byte k j i)))))
-      (write-pgm "/home/martin/tmp/cut-stack.pgm"
-		   (normalize-2-csf/ub8-realpart (cross-section-xz stack)))
       ;; find centers of cells by convolving with sphere, actually an
       ;; oval because the z resolution is smaller than the transversal
       (let* ((conv (convolve-circ 
-		    stack (fftshift (#.(cond 
-					 ((subtypep 'my-float 'single-float) 'draw-oval-csf)
-					 ((subtypep 'my-float 'double-float) 'draw-oval-cdf))
-				       12.0 z y x))))
+		    stack 
+		    (fftshift
+		     (#.(cond 
+			  ((subtypep 'my-float 'single-float) 'draw-oval-csf)
+			  ((subtypep 'my-float 'double-float) 'draw-oval-cdf))
+			12.0 z y x))))
 	     (cv (convert conv 'sf 'realpart))
 	     (centers nil)
 	     (center-heights nil))
-	(write-pgm "/home/martin/tmp/cut-stack2.pgm"
-		   (normalize-2-csf/ub8-realpart (cross-section-xz 
-					 (ft (.* (ft stack)
-						 (ft (draw-oval-csf 12.0 z y x)))))))
 	(do-region ((k j i) ((- z 3) (- y 1) (- x 1)) (6 1 1))
 	  (macrolet ((c (a b c)
 		       `(aref cv (+ k ,a) (+ j ,b) (+ i ,c))))
@@ -201,7 +197,7 @@
 		(declare (ignore y x))
 		(let ((r 100))
 		 (psf:intensity-psf (* 2 z) r r (* z dz) (* r dx)
-				    :integrand-evaluations 400)))))
+				    :integrand-evaluations 40)))))
     (defparameter *psf* psf)
     (write-pgm "/home/martin/tmp/comp1-psf.pgm"
 	       (normalize-2-csf/ub8-realpart (cross-section-xz psf)))

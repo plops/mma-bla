@@ -2,6 +2,7 @@
 (progn
   (require :vol)
   (require :lens)
+  (require :simplex-anneal)
   (require :raytrace)
   (require :bresenham)
   (require :psf))
@@ -367,14 +368,13 @@
 			      (normalize-2-csf/ub8-abs (cross-section-xz k)))))
 	       intens)))))
 
-(write-pgm "/home/martin/tmp/psf.pgm"
+#+nil
+(write-pgm "/home/martin/tmp/interpolation-test.pgm"
 	   (normalize-2-sf/ub8 (.- (resample-2-sf (draw-disk-sf 25.0 75 75) 1s0 1s0 .25 .25)
 				   (draw-disk-sf 100.0 300 300))))
-(psf:intensity-psf)
-
 #+nil
 (time (progn
-	(angular-psf :x 128 :z 64 :integrand-evaluations 280 :debug t)
+	(angular-psf :x 128 :z 128 :integrand-evaluations 280 :debug t :initialize t)
 	nil))
 
 (defmacro debug-out (&rest rest)
@@ -525,13 +525,13 @@ back focal plane set BIG-WINDOW to true."
       :window-radius (* +one+ .14)
       :window-x (* +one+ .73)
       :window-y (* +one+ 0) 
-      :integrand-evaluations 30 
+      :integrand-evaluations 180
       :initialize t
       :debug t)
-   (write-pgm "/home/martin/tmp/cut5-resampled.pgm"
+   (write-pgm "/home/martin/tmp/cut-5resampled.pgm"
 	      (normalize-2-csf/ub8-realpart
 	       (cross-section-xz 
-		a #+nil (resample-3-csf a dx dx dz .2 .2 .2))))
+		(resample-3-csf a dx dx dz .2 .2 1))))
    (sb-ext:gc :full t)))
 
 

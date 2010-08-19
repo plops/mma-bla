@@ -268,7 +268,7 @@
 				   (yy (coord j y))
 				   (zz (coord k z)))
 			       (setf (aref result (+ bz k) (+ by j) (+ bx i))
-				     (,(format-symbol "interpolate-~a-~a" rank type) vol xx yy zz))))
+				     (,(format-symbol "interpolate-~a-~a" rank type) vol zz yy xx))))
 			   result))))))))))))
 #+nil
 (def-resample-rank-type 1 sf)
