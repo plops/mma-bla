@@ -131,9 +131,9 @@
 			   (3 `(destructuring-bind (z y x) dims
 				 (cu-plan z y x))))))
 	 (assert (= 0 (cufft-exec-c2c plan 
-			       dev-sap
-			       dev-sap
-			       (if forward +cufft-forward+ +cufft-inverse+))))
+				      dev-sap
+				      dev-sap
+				      (if forward +cufft-forward+ +cufft-inverse+))))
 	 (assert (= 0 (cufft-destroy plan))))
        ;; copy result back
        (assert (= 0 (cuda-memcpy (sb-sys:vector-sap out1)
@@ -141,13 +141,12 @@
 				 n-bytes 'device->host)))
        ;; deallocate array on device
        (assert (= 0 (cuda-free device)))
-       ;; normalize if forward
-       (when forward 
-	 (let* ((1/n (/ ,(coerce 1.0 (ecase type
-				       (csf 'single-float)
-				       (cdf 'double-float))) n)))
-	   (dotimes (i n)
-	     (setf (aref out1 i) (* 1/n (aref out1 i))))))
+       ;; normalize so that a=ift(ft(a))
+       (let* ((s (sqrt (/ ,(coerce 1.0 (ecase type
+				      (csf 'single-float)
+				      (cdf 'double-float))) n))))
+	 (dotimes (i n)
+	   (setf (aref out1 i) (* s (aref out1 i)))))
        out)))
 
 #+nil
