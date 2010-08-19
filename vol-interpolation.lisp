@@ -250,7 +250,7 @@
 			   (let ((xx (coord i x))
 				 (yy (coord j y)))
 			     (setf (aref result (+ by j) (+ bx i))
-				   (,(format-symbol "interpolate-~a-~a" rank type) vol xx yy))))
+				   (,(format-symbol "interpolate-~a-~a" rank type) vol yy xx))))
 			 result)))))
 	       (3
 		`(destructuring-bind (z y x)
