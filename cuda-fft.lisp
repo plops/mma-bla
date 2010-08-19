@@ -141,13 +141,15 @@
 				 n-bytes 'device->host)))
        ;; deallocate array on device
        (assert (= 0 (cuda-free device)))
-       ;; normalize so that a=ift(ft(a))
-       (let* ((s (sqrt (/ ,(coerce 1.0 (ecase type
-				      (csf 'single-float)
-				      (cdf 'double-float))) n))))
-	 (dotimes (i n)
-	   (setf (aref out1 i) (* s (aref out1 i)))))
-       out)))
+       
+       ;; normalize so that a=ift(ft(a)), divide by n when forward
+       (if forward
+	   (s* (/ ,(coerce 1 (ecase type
+			       (csf 'single-float)
+			       (cdf 'double-float)))
+		  (array-total-size out))
+	       out)
+	   out))))
 
 #+nil
 (def-ft-rank-type 2 csf)

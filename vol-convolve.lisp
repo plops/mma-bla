@@ -13,7 +13,13 @@
 	  ,(format
 	    nil
 	    "~a expects both input arrays to have the same dimensions." name)))
-       (ift (.* (ft vola) (ft volb))))))
+       
+       
+       ;; fta and ftb are both already divided by n, the following ift
+       ;; will introduce will not divide by n so i have to do that
+       (ift (s* (/ ,(coerce 1 (ecase type (csf 'single-float) (cdf 'double-float)))
+		   (array-total-size vola))
+		(.* (ft vola) (ft volb)))))))
 
 (defmacro def-convolve-circ-functions (ranks types)
   (let* ((specifics nil)
@@ -30,9 +36,9 @@
     (store-new-function name)
     `(progn ,@specifics
 	    (defun ,name (a b)
-	       (etypecase a
-		 ,@cases
-		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
+	      (etypecase a
+		,@cases
+		(t (error "The given type can't be handled with a generic ~a function." ',name)))))))
 
 (def-convolve-circ-functions (2 3) (csf cdf))
 

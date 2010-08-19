@@ -81,9 +81,13 @@
 			(let ((p (,plan z y x in-sap out-sap
 					dir +estimate+)))
 			  (,execute p))))))
-	;; normalize so that a=ift(ft(a))
-	(s* (sqrt (/ ,(coerce 1 rlong-type) (array-total-size out))) out)
-	out))))
+	;; normalize so that a=ift(ft(a)), after forward transform
+	;; divide by n
+	(if forward
+	    (s* (/ ,(coerce 1 rlong-type)
+		   (array-total-size out))
+		out)
+	    out)))))
 
 #+nil
 (def-ft-rank-type 1 csf)
