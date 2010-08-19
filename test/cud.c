@@ -134,24 +134,19 @@ fft(complex float*data,int nz,int ny,int nx)
   cudaMalloc((void**) &idata,n);
   cudaMemcpy(idata,data,n,cudaMemcpyHostToDevice);
   
-  printf("(idata %d)\n",idata);
-
-  cudaMalloc((void**) &odata,n);
-
-  printf("(odata %d)\n",odata);
+  printf("(idata #x%x)\n",idata);
 
   cufftPlan3d(&plan,nx,ny,nz,CUFFT_C2C);
   
-  printf("(plan %d)\n",plan);
+  printf("(plan #x%x)\n",plan);
 
-  cufftExecC2C(plan,idata,odata,CUFFT_FORWARD);
+  cufftExecC2C(plan,idata,idata,CUFFT_FORWARD);
 
-  cudaMemcpy((void*) data,odata,n,
+  cudaMemcpy((void*) data,idata,n,
 	     cudaMemcpyDeviceToHost);
 
   cufftDestroy(plan);
-  cudaFree(idata);
-  cudaFree(odata);
+  printf("cuda-free %d\n",cudaFree(idata));
 }
 
 unsigned long long int rdtsc(void)
