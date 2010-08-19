@@ -13,9 +13,7 @@
 	  ,(format
 	    nil
 	    "~a expects both input arrays to have the same dimensions." name)))
-       (ift (s* (* ,(coerce 1 (get-long-type (ecase type (csf 'sf) (cdf 'df))))
-		   (reduce #'* da)) 
-		(.* (ft vola) (ft volb)))))))
+       (ift (.* (ft vola) (ft volb))))))
 
 (defmacro def-convolve-circ-functions (ranks types)
   (let* ((specifics nil)
