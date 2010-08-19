@@ -80,7 +80,6 @@
 	   (fixnum z y x)
 	   (values (simple-array (complex my-float) 3) &optional))
   (let* ((dims (list z y x))
-	 (big (* x y z))
 	 (points (make-array dims
 			     :element-type '(complex my-float)))
 	 (n (length centers)))
@@ -90,7 +89,7 @@
 		    (vec-i-z c)
 		    (vec-i-y c)
 		    (vec-i-x c))
-	      (complex (* (+ +one+ i) big)))))
+	      (complex (+ +one+ i)))))
     (convolve-circ points
 		   (fftshift (draw-oval-csf radius z y x)))))
 

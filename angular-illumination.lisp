@@ -531,7 +531,7 @@ back focal plane set BIG-WINDOW to true."
    (write-pgm "/home/martin/tmp/cut-5resampled.pgm"
 	      (normalize-2-csf/ub8-realpart
 	       (cross-section-xz 
-		(resample-3-csf a dx dx dz .2 .2 1))))
+		(resample-3-csf a dx dx dz .2 .2 .2))))
    (sb-ext:gc :full t)))
 
 
@@ -593,21 +593,21 @@ back focal plane set BIG-WINDOW to true."
   (let ((spheres
 	 (destructuring-bind (z y x)
 	     *dims*
-	   (draw-indexed-ovals 12d0 *centers* z y x))))
+	   (draw-indexed-ovals 12.0 *centers* z y x))))
     (setf *index-spheres* spheres)
     (write-pgm "/home/martin/tmp/angular-indexed-spheres-cut.pgm"
-	       (normalize-2-cdf/ub8-realpart
+	       (normalize-2-csf/ub8-realpart
 		(cross-section-xz *index-spheres* 
 				  (vec-i-y (elt *centers* 31)))))
     (sb-ext:gc :full t))
   (let ((spheres
 	 (destructuring-bind (z y x)
 	     *dims*
-	   (draw-ovals 12d0 *centers* z y x))))
+	   (draw-ovals 12.0 *centers* z y x))))
     (setf *spheres* spheres)
     (write-pgm "/home/martin/tmp/angular-spheres-cut.pgm"
-	       (normalize-2-cdf/ub8-realpart
-		(cross-section-xz *index-spheres* 
+	       (normalize-2-csf/ub8-realpart
+		(cross-section-xz *spheres* 
 				  (vec-i-y (elt *centers* 31)))))
     (sb-ext:gc :full t)))
 
@@ -626,27 +626,32 @@ back focal plane set BIG-WINDOW to true."
   ;; if only a small part of the cap is selected the dimensions can be
   ;; reduced accordingly. calculating the size requires to find the
   ;; intersection of a cylinder and the sphere cap.
-  (let* ((dx .2d0)
-	 (dz 1d0)
+  (let* ((dx .2)
+	 (dz 1.0)
 	 (psf (destructuring-bind (z y x)
 		  *dims*
 		(declare (ignore y x))
 		(let ((r 100))
 		  (angular-psf
-		   :window-radius .4d0
-		   :window-x .6d0
+		   :window-radius .4
+		   :window-x .6
 		   :z (* 8 z) :x (* 2 r) :y (* 2 r)
-		   :pixel-size-z (* .25d0 dz) :pixel-size-x (* .5d0 dx)
+		   :pixel-size-z (* .25 dz) :pixel-size-x (* .5 dx)
 		   :integrand-evaluations 400
 		   :debug t
 		   :initialize t)))))
     (defparameter *psf* psf)
     (write-pgm "/home/martin/tmp/psf.pgm"
-	       (normalize-2-cdf/ub8-realpart (cross-section-xz psf)))
+	       (normalize-2-csf/ub8-realpart (cross-section-xz psf)))
     (sb-ext:gc :full t)))
 
 #+nil
 (time (init-angular-psf)) ;; 62.2 s
+
+#+nil ;; store indexed-spheres for inspection
+(save-stack-ub8 "/home/martin/tmp/angular-indexed-spheres/"
+		(normalize-3-csf/ub8-realpart *index-spheres*))
+
 
 (defun get-visible-nuclei (k)
   "Find all the nuclei in slice K."
@@ -670,6 +675,9 @@ back focal plane set BIG-WINDOW to true."
 	 collect
 	 (1- i)))))
 #+nil
+(get-visible-nuclei 25)
+
+#+nil
 (time
  (loop for i below (array-dimension *index-spheres* 0) 
     collect
@@ -689,24 +697,26 @@ back focal plane set BIG-WINDOW to true."
       ;; only the current nucleus will be illuminated
       ;; note that nucleus 0 has value 1 in index-spheres 
       (do-region ((j i) (y x))
-	(if (< (abs (- nucleus (1- (aref *index-spheres* k j i)))) .5d0)
+	(if (< (abs (- nucleus (1- (aref *index-spheres* k j i)))) .5)
 	    (setf (aref vol k j i) (aref *spheres* k j i))))
       vol)))
-
-#+ni
-(let* ((k 25)
-       (nuc (first (get-visible-nuclei k)))
-       (vol (get-lcos-volume k nuc)))
-  (format t "~a~%" `(nuc ,nuc))
-  (write-section "/home/martin/tmp/angular-0lcos-cut.pgm" vol)
-  (save-stack-ub8 "/home/martin/tmp/angular-0lcos" (normalize3-cdf/ub8-realpart vol)))
-
 
 (defun write-section (fn vol &optional (y (floor (array-dimension vol 1) 2)))
   (declare (simple-string fn)
 	   ((simple-array (complex my-float) 3) vol)
 	   (values null &optional))
-  (write-pgm fn (normalize-2-cdf/ub8-realpart (cross-section-xz vol y))))
+  (write-pgm fn (normalize-2-csf/ub8-realpart (cross-section-xz vol y))))
+
+
+#+nil
+(let* ((k 25)
+       (nuc (first (get-visible-nuclei k)))
+       (vol (get-lcos-volume k nuc)))
+  (format t "~a~%" `(nuc ,nuc))
+  (write-section "/home/martin/tmp/angular-0lcos-cut.pgm" vol)
+  (save-stack-ub8 "/home/martin/tmp/angular-0lcos" (normalize-3-csf/ub8-realpart vol)))
+
+
 
 (defvar *nucleus-index* 50)
 (defvar *bfp-window-radius* .08d0)
