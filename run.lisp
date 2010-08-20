@@ -1,6 +1,6 @@
-#+nil
-(progn
+#.(progn
    (require :vol)
+   (require :simplex-anneal)
    (require :raytrace)
    (require :bresenham)
    (require :psf))
