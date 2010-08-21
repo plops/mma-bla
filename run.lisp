@@ -2,6 +2,7 @@
    (require :vol)
    (require :simplex-anneal)
    (require :raytrace)
+   (require :lens)
    (require :bresenham)
    (require :psf))
 (defpackage :run
