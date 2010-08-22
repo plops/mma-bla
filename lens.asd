@@ -1,2 +1,2 @@
 (asdf:defsystem lens 
-  :components ((:file "lens")))
+  :components ((:module "lens" :components ((:file "lens")))))
