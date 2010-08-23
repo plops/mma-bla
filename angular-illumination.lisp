@@ -616,7 +616,7 @@ back focal plane set BIG-WINDOW to true."
 (time (init-angular-model)) 
 
 (defvar *rot* 0)
-
+#+nil
 (defun draw ()
   (gl:enable :depth-test)
   (when (< 360 (incf *rot*))
@@ -645,9 +645,6 @@ back focal plane set BIG-WINDOW to true."
 	 (aref *spheres-c-r* i)
        (gl:translate (aref center 0) (aref center 1) (aref center 2))
        (glut:wire-sphere (* 1.03 radius) 8 4)))))
-#+nil
-(gui:with-gui
-  (draw))
 
 #+bla
 (defun init-angular-psf ()
@@ -1043,116 +1040,200 @@ numbers x+i y."
 			 *spheres-ub8*)))
 #+nil
 (init-angular-model)
+
+(defun vertex-v (vec)
+  (declare (vec vec)
+           (values null &optional))
+  (gl:vertex (vec-x vec) (vec-y vec) (vec-z vec))
+  nil)
+
+(defun translate-v (vec)
+  (declare (vec vec)
+           (values null &optional))
+  (gl:translate (vec-x vec) (vec-y vec) (vec-z vec))
+  nil)
+
+(defun normal-v (vec)
+  (declare (vec vec)
+           (values null &optional))
+  (gl:normal (vec-x vec) (vec-y vec) (vec-z vec))
+  nil)
+
+(defvar circle-points
+  (let* ((n 37)
+         (ps (make-array (+ n 2) :element-type 'vec
+                         :initial-element (v))))
+    (declare (fixnum n)
+             ((simple-array vec 1) ps))
+    (setf (aref ps 0) (v))
+    (dotimes (i n)
+      (let ((arg (* 2d0 pi i (/ 1d0 n))))
+        (declare ((double-float 0d0 6.3d0) arg))
+        (setf (aref ps (1+ i)) (v (cos arg) (sin arg)))))
+    (setf (aref ps (1+ n)) (aref ps 1))
+    ps))
+(declaim (type (simple-array vec 1) circle-points))
+(defun draw-circle ()
+  "Draw circle with radius 1."
+  (dotimes (i (length circle-points))
+    (vertex-v (aref circle-points i)))
+  nil)
+
+
+
+(defun draw-disk (center radius)
+  (gl:with-pushed-matrix
+    (gl:translate (aref center 0) (aref center 1) (aref center 2))
+    (gl:scale radius radius radius)
+    (gl:with-primitive :triangle-fan
+      (draw-circle))))
+
 #+nil
-(destructuring-bind (z y x)
-    *dims*
- (let* ((x-mm .04d0)
-	(y-mm 0d0)
-	(bfp-ratio-x 0d0)
-	(bfp-ratio-y 0d0)
-	(f (lens:focal-length-from-magnification 63d0))
-	(na 1.38d0)
-	(ri 1.515d0)
-	(bfp-radius (lens:back-focal-plane-radius f na))
-	(obj (lens:make-thin-objective :normal (v 0d0 0d0 -1d0)
-				       :center (v)
-				       :focal-length f
-				       :radius bfp-radius
-				       :numerical-aperture na
-				       :immersion-index ri))
-	(theta (lens:find-inverse-ray-angle x-mm y-mm obj))
-	(phi (atan y-mm x-mm))
-	(start (v (* bfp-radius bfp-ratio-x)
-		  (* bfp-radius bfp-ratio-y)
-		  f))
-	(dx .2d-3)
-	(dz 1d-3)
-	(cz (* .5d0 z)) ;; position that is in the center of front focal plane
-	(cy (* .5d0 y))
-	(cx (* .5d0 x))
-	(nf (* ri f))
-	(shift-z 25))
-   (debug-out f bfp-radius theta phi)
-   (macrolet ((plane (direction position)
-		;; for defining a plane that is perpendicular to an
-		;; axis and crosses it at POSITION
-		(declare (type (member :x :y :z) direction))
-		(let* ((normal (ecase direction
-				 (:x (v 1d0))
-				 (:y (v 0d0 1d0))
-				 (:z (v 0d0 0d0 1d0)))))
-		  `(let* ((pos ,position)
-			  (center (v* ,normal pos))
-			  (outer-normal (normalize center)))
-		     (declare (type double-float pos))
-		     (lens::make-disk :normal outer-normal :center center)))))
-     (let ((p+z (plane :z (- (* dz (- z cz))
-			     nf)))
-	   (p-z (plane :z (- (* dz (- (- z cz)))
-			     nf)))
-	   (p+y (plane :y (* dx (- y cy))))
-	   (p-y (plane :y (* dx (- (- y cy)))))
-	   (p+x (plane :x (* dx (- x cx))))
-	   (p-x (plane :x (* dx (- (- x cx))))))
-       (multiple-value-bind (ro s)
-	   (lens:thin-objective-ray obj
-				    start
-				    (v* (v (* (cos phi) (sin theta))
-					   (* (sin phi) (sin theta))
-					   (cos theta))
-					-1d0))
-	 (format t "~a~%" (list 'dir (v* (v (* (cos phi) (sin theta))
-					    (* (sin phi) (sin theta))
-					    (cos theta))
-					 -1d0)
-				's s
-				's-new (v+ s (v 0d0 0d0 (* dz shift-z)))))
-	 (setf s (v+ s (v 0d0 0d0 (* dz shift-z))))
-	 (let* ((nro (normalize ro)))
-	   (debug-out nro)
-	   (macrolet ((hit (plane)
-			;; find intersection between plane and the ray
-			`(multiple-value-bind (dir hit-point)
-			     (lens::plane-ray ,plane
-					      ;; shift start of vector a bit
-					      s
-					      nro)
-			   (declare (ignore dir))
-			   hit-point))
-		      (pixel (hit-expr)
-			;; convert coordinates from mm into integer pixel positions
-			`(let ((h ,hit-expr))
-			   (declare (type (or null vec) h))
-			   (when h
-			     (make-vec-i
-			      :z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
-			      :y (floor (+ cy (/ (aref h 1) dx)))
-			      :x (floor (+ cx (/ (aref h 0) dx))))))))
-	     (let* ((h+z (pixel (hit p+z)))
-		    (h-z (pixel (hit p-z)))
-		    (h+y (pixel (hit p+y)))
-		    (h-y (pixel (hit p-y)))
-		    (h+x (pixel (hit p+x)))
-		    (h-x (pixel (hit p-x)))
-		    ;; make a list of all the points
-		    (hlist (list h+z h-z h+y h-y h+x h-x))
-		    ;; throw away points that are nil or that contain
-		    ;; coordinates outside of the array dimensions
-		    (filtered-hlist 
-		     (remove-if-not #'(lambda (v)
-					(if v
-					    (and (< -1 (vec-i-x v) x)
-						 (< -1 (vec-i-y v) y)
-						 (< -1 (vec-i-z v) z))
-					    nil)) hlist))
-		    ;; sort best points by x
-		    (choice (sort filtered-hlist #'< :key (lambda (v) (vec-i-x v)))))
-	       (debug-out h+z h-z)
-	       (format t "~a~%" (list 'choice choice))
-	       #+nil (scan-convert-line3
-		(first choice)
-		(second choice)
-		*spheres-ub8*)))))))))
+(gui:with-gui
+  (draw))
+
+(defun draw ()
+  (progn
+    (gl:enable :depth-test)
+    (when (< 360 (incf *rot*))
+      (setf *rot* 0))
+    (gl:rotate *rot* 0 0 1)
+    (let ((s 1))
+      (gl:scale s s s))
+    (gl:disable :lighting)
+    (gl:line-width 3)
+    (gl:with-primitive :lines
+      (gl:color 1 0 0 1) (gl:vertex 0 0 0) (gl:vertex 1 0 0)
+      (gl:color 0 1 0 1) (gl:vertex 0 0 0) (gl:vertex 0 1 0)
+      (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1))
+    (gl:color 0 0 0 1)
+    (dotimes (i (length *spheres-c-r*))
+      (gl:with-pushed-matrix 
+	(with-slots (center radius)
+	    (aref *spheres-c-r* i)
+	  (translate-v (v* center 1.515d0))
+	  (glut:solid-sphere (* 1.515d0 radius) 8 4))))
+    (gl:color 1 1 1 1)
+    (gl:line-width 1)
+    (dotimes (i (length *spheres-c-r*))
+      (gl:with-pushed-matrix 
+	(with-slots (center radius)
+	    (aref *spheres-c-r* i)
+	  (translate-v (v* center 1.515d0))
+	  (glut:wire-sphere (* 1.515d0 1.03 radius) 8 4)))))
+
+  (destructuring-bind (z y x)
+      *dims*
+   (let* ((x-mm .04d0)
+	  (y-mm 0d0)
+	  (bfp-ratio-x 0d0)
+	  (bfp-ratio-y 0d0)
+	  (f (lens:focal-length-from-magnification 63d0))
+	  (na 1.38d0)
+	  (ri 1.515d0)
+	  (bfp-radius (lens:back-focal-plane-radius f na))
+	  (obj (lens:make-thin-objective :normal (v 0d0 0d0 -1d0)
+					 :center (v)
+					 :focal-length f
+					 :radius bfp-radius
+					 :numerical-aperture na
+					 :immersion-index ri))
+	  (theta (lens:find-inverse-ray-angle x-mm y-mm obj))
+	  (phi (atan y-mm x-mm))
+	  (start (v (* bfp-radius bfp-ratio-x)
+		    (* bfp-radius bfp-ratio-y)
+		    f))
+	  (dx .2d-3)
+	  (dz 1d-3)
+	  (cz (* .5d0 z)) ;; position that is in the center of front focal plane
+	  (cy (* .5d0 y))
+	  (cx (* .5d0 x))
+	  (nf (* ri f))
+	  (shift-z 25))
+     (debug-out f bfp-radius theta phi)
+     (draw-disk (v 0d0 0d0 (+ (* ri f) f)) bfp-radius)
+     (draw-disk (v 0d0 0d0 (+ (* ri f))) bfp-radius)
+     (macrolet ((plane (direction position)
+		  ;; for defining a plane that is perpendicular to an
+		  ;; axis and crosses it at POSITION
+		  (declare (type (member :x :y :z) direction))
+		  (let* ((normal (ecase direction
+				   (:x (v 1d0))
+				   (:y (v 0d0 1d0))
+				   (:z (v 0d0 0d0 1d0)))))
+		    `(let* ((pos ,position)
+			    (center (v* ,normal pos))
+			    (outer-normal (normalize center)))
+		       (declare (type double-float pos))
+		       (lens::make-disk :normal outer-normal :center center)))))
+       (let ((p+z (plane :z (- (* dz (- z cz))
+			       nf)))
+	     (p-z (plane :z (- (* dz (- (- z cz)))
+			       nf)))
+	     (p+y (plane :y (* dx (- y cy))))
+	     (p-y (plane :y (* dx (- (- y cy)))))
+	     (p+x (plane :x (* dx (- x cx))))
+	     (p-x (plane :x (* dx (- (- x cx))))))
+
+	#+nil (multiple-value-bind (ro s)
+	     (lens:thin-objective-ray obj
+				      start
+				      (v* (v (* (cos phi) (sin theta))
+					     (* (sin phi) (sin theta))
+					     (cos theta))
+					  -1d0))
+	   (format t "~a~%" (list 'dir (v* (v (* (cos phi) (sin theta))
+					      (* (sin phi) (sin theta))
+					      (cos theta))
+					   -1d0)
+				  's s
+				  's-new (v+ s (v 0d0 0d0 (* dz shift-z)))))
+	   (setf s (v+ s (v 0d0 0d0 (* dz shift-z))))
+	   (let* ((nro (normalize ro)))
+	     (debug-out nro)
+	     (macrolet ((hit (plane)
+			  ;; find intersection between plane and the ray
+			  `(multiple-value-bind (dir hit-point)
+			       (lens::plane-ray ,plane
+						;; shift start of vector a bit
+						s
+						nro)
+			     (declare (ignore dir))
+			     hit-point))
+			(pixel (hit-expr)
+			  ;; convert coordinates from mm into integer pixel positions
+			  `(let ((h ,hit-expr))
+			     (declare (type (or null vec) h))
+			     (when h
+			       (make-vec-i
+				:z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
+				:y (floor (+ cy (/ (aref h 1) dx)))
+				:x (floor (+ cx (/ (aref h 0) dx))))))))
+	       (let* ((h+z (pixel (hit p+z)))
+		      (h-z (pixel (hit p-z)))
+		      (h+y (pixel (hit p+y)))
+		      (h-y (pixel (hit p-y)))
+		      (h+x (pixel (hit p+x)))
+		      (h-x (pixel (hit p-x)))
+		      ;; make a list of all the points
+		      (hlist (list h+z h-z h+y h-y h+x h-x))
+		      ;; throw away points that are nil or that contain
+		      ;; coordinates outside of the array dimensions
+		      (filtered-hlist 
+		       (remove-if-not #'(lambda (v)
+					  (if v
+					      (and (< -1 (vec-i-x v) x)
+						   (< -1 (vec-i-y v) y)
+						   (< -1 (vec-i-z v) z))
+					      nil)) hlist))
+		      ;; sort best points by x
+		      (choice (sort filtered-hlist #'< :key (lambda (v) (vec-i-x v)))))
+		 (debug-out h+z h-z)
+		 (format t "~a~%" (list 'choice choice))
+		 #+nil (scan-convert-line3
+			(first choice)
+			(second choice)
+			*spheres-ub8*))))))))))
 
 #+nil
 (destructuring-bind (z y x)
