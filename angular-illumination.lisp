@@ -1007,6 +1007,8 @@ numbers x+i y."
 			 (imagpart bfp-pos)
 			 *spheres-ub8*)))
 #+nil
+(init-angular-model)
+#+nil
 (destructuring-bind (z y x)
     *dims*
  (let* ((x-mm .04d0)
