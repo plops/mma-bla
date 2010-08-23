@@ -1092,6 +1092,18 @@ numbers x+i y."
 (gui:with-gui
   (draw))
 
+#+nil ;; z slice of sphere
+(+ (floor (elt *dims* 0) 2)
+   (/
+    (vec-x 
+     (sphere-center
+      (aref *spheres-c-r* 0)))
+    .001))
+#+nil ;; xy coords of sphere
+(sphere-center
+      (aref *spheres-c-r* 0))
+
+
 (defun draw ()
   
   (progn
@@ -1099,7 +1111,7 @@ numbers x+i y."
     (when (< 360 (incf *rot*))
       (setf *rot* 0))
     (gl:rotate *rot* 0 0 1)
-    (let ((s 100))
+    (let ((s 200))
       (gl:scale s s s))
     (gl:disable :lighting)
     (gl:line-width 3)
@@ -1124,9 +1136,11 @@ numbers x+i y."
 	  (glut:wire-sphere (* 1.515d0 1.03 radius) 8 4)))))
   (destructuring-bind (z y x)
       *dims*
-    (let* ((x-mm .04d0)
-	   (y-mm 0d0)
-	   (bfp-ratio-x 0d0)
+    (let* ((cent (sphere-center (aref *spheres-c-r* 0)))
+	   (x-mm (vec-y cent))
+	   (y-mm (vec-x cent))
+	   (z-mm (vec-z cent))
+	   (bfp-ratio-x 0.99d0)
 	   (bfp-ratio-y 0d0)
 	   (f (lens:focal-length-from-magnification 63d0))
 	   (na 1.38d0)
@@ -1141,7 +1155,7 @@ numbers x+i y."
 	   (theta (lens:find-inverse-ray-angle x-mm y-mm obj))
 	   (phi (atan y-mm x-mm))
 	   (start (make-vec (* bfp-radius bfp-ratio-x)
-		     (* bfp-radius bfp-ratio-y)
+			    (* bfp-radius bfp-ratio-y)
 		     f))
 	   (dx .2d-3)
 	   (dz 1d-3)
@@ -1149,7 +1163,10 @@ numbers x+i y."
 	   (cy (* .5d0 y))
 	   (cx (* .5d0 x))
 	   (nf (* ri f))
-	   (shift-z 25))
+	   (znf (make-vec 0d0 0d0 nf))
+	   (shift-z (-
+		     (/ (vec-z cent) dz)
+		     )))
       (debug-out f bfp-radius theta phi)
       (draw-disk (make-vec 0d0 0d0 (+ (* ri f) f)) bfp-radius)
       (draw-disk (make-vec 0d0 0d0 (+ (* ri f))) bfp-radius)
@@ -1192,6 +1209,16 @@ numbers x+i y."
 				   's s
 				   's-new (v+ s (make-vec 0d0 0d0 (* dz shift-z)))))
 	    (setf s (v+ s (make-vec 0d0 0d0 (* dz shift-z))))
+	    (gl:color 1 0 0 1)
+	    (gl:line-width 7)
+	    (gl:with-primitive :line-strip
+	      (vertex-v (v+ start znf))
+	      (vertex-v (v+ s znf))
+	      (vertex-v (v+ (make-vec
+			     x-mm
+			     y-mm
+			     (- (- (* dz shift-z)) nf))
+			    znf)))
 	    #+nil (let* ((nro (normalize ro)))
 		    (debug-out nro)
 		    (macrolet ((hit (plane)

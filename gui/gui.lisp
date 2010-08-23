@@ -43,7 +43,7 @@
   (funcall (draw-func w))
 
   (swap-buffers)
-  (sleep (/ 2))
+  (sleep (/ 20))
   (post-redisplay))
 
 (defmethod passive-motion ((w fenster) x y)
