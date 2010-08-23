@@ -1,3 +1,4 @@
+#.(require :gui)
 (in-package :run)
 
 ;; run the following code to test the downhill simplex optimizer on a
@@ -549,7 +550,7 @@ back focal plane set BIG-WINDOW to true."
 		   (* dz (- (vec-i-z point) zh)))))
        (dotimes (i n)
 	 (push (make-sphere :center (convert-point (aref centers i))
-			    :radius (* dx 1d0))
+			    :radius (* dx 12d0))
 	       result-l))
        (make-array (length result-l) :element-type 'sphere
 		   :initial-contents (nreverse result-l))))))
@@ -613,6 +614,40 @@ back focal plane set BIG-WINDOW to true."
 
 #+nil
 (time (init-angular-model)) 
+
+(defvar *rot* 0)
+
+(defun draw ()
+  (gl:enable :depth-test)
+  (when (< 360 (incf *rot*))
+    (setf *rot* 0))
+  (gl:rotate *rot* 0 0 1)
+  (let ((s 200))
+   (gl:scale s s s))
+  (gl:disable :lighting)
+  (gl:line-width 3)
+  (gl:with-primitive :lines
+    (gl:color 1 0 0 1) (gl:vertex 0 0 0) (gl:vertex 1 0 0)
+    (gl:color 0 1 0 1) (gl:vertex 0 0 0) (gl:vertex 0 1 0)
+    (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1))
+  (gl:color 0 0 0 1)
+  (dotimes (i (length *spheres-c-r*))
+    (gl:with-pushed-matrix 
+     (with-slots (center radius)
+	 (aref *spheres-c-r* i)
+       (gl:translate (aref center 0) (aref center 1) (aref center 2))
+       (glut:solid-sphere radius 8 4))))
+  (gl:color 1 1 1 1)
+  (gl:line-width 1)
+  (dotimes (i (length *spheres-c-r*))
+    (gl:with-pushed-matrix 
+     (with-slots (center radius)
+	 (aref *spheres-c-r* i)
+       (gl:translate (aref center 0) (aref center 1) (aref center 2))
+       (glut:wire-sphere (* 1.03 radius) 8 4)))))
+#+nil
+(gui:with-gui
+  (draw))
 
 #+bla
 (defun init-angular-psf ()

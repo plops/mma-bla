@@ -113,6 +113,13 @@
 	    (incf sum len))))))
    sum))
 
+(defmethod print-object ((sphere sphere) stream)
+  (with-slots (center radius) sphere
+   (format stream "#<sphere radius: ~4f center: ~a>" radius center)))
+
+#+nil
+(make-sphere :radius 3.1415d0 :center (v 1d0 2d0 3.032032d0)) 
+ 
 #+nil 
 (defparameter centers 
   '(( 6 87 157) ( 7 69 111) ( 7 87 196) ( 7 88 66) ( 7 92 33) ( 7 137 224)
