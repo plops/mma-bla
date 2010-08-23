@@ -84,9 +84,9 @@
 	 (phi (* phi-degree (/ pi 180d0))))
     #+nil    (declare ((double-float 0d0 #.pi) theta) ;; ranges were a bit complicated
 		      ((double-float 0d0 #.pi) phi))
-    (v (* st (cos phi))
-       (* st (sin phi))
-       (* (cos theta)))))
+    (make-vec (* st (cos phi))
+	      (* st (sin phi))
+	      (* (cos theta)))))
 
 #+nil
 (direction 45 0)
@@ -143,9 +143,9 @@
 	       :initial-contents
 	       (let* ((q (elt centers *central-sphere*))
 		      (s (/ 70d0))
-		      (cen (v (* s (third q))
-			      (* s (second q))
-			      (* 5d0 s (first q)))))
+		      (cen (make-vec (* s (third q))
+				     (* s (second q))
+				     (* 5d0 s (first q)))))
 		 (loop for c in centers collect
 		      (make-sphere :center
 				   (v- (v (* s (third c))

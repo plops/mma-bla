@@ -1,10 +1,6 @@
 (declaim (optimize (speed 2) (debug 3) (safety 3)))
-;#.(require :alexandria)
-;#.(require :vector)
-
-;; only in the lab
-;#+x86-64 (require :cuda-fft)
-
+#+nil #.(progn (require :alexandria)
+	 (require :vector))
 
 (defpackage :vol
   (:use :cl :sb-alien :sb-c-call :vector)

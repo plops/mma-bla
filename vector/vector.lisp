@@ -8,7 +8,8 @@
    #:cross
    #:m #:rotation-matrix #:m*
    #:vec-i #:make-vec-i #:vec-i-x #:vec-i-y #:vec-i-z
-   #:v.-i #:v+-i #:v--i #:v*-i #:norm-i))
+   #:v.-i #:v+-i #:v--i #:v*-i #:norm-i
+   #:make-vec))
 
 (in-package :vector)
 
@@ -52,18 +53,27 @@
 (deftype vec ()
   `(simple-array double-float (3)))
 
-(defstruct (vec (:type (vector double-float)))
-  (x 0d0) (y 0d0) (z 0d0))
+(defun vec-x (vec)
+  (aref vec 0))
+(defun vec-y (vec)
+  (aref vec 1))
+(defun vec-z (vec)
+  (aref vec 2))
 
 (deftype mat ()
   `(simple-array double-float (3 3)))
 
-(defun v (&optional (x 0d0) (y 0d0) (z 0d0))
+(defun make-vec (&optional (x 0d0) (y 0d0) (z 0d0))
   (declare (double-float x y z)
 	   (values vec &optional))
   (make-array 3
 	      :element-type 'double-float
 	      :initial-contents (list x y z)))
+
+(defmacro v (&rest args)
+  `(make-vec ,@(mapcar #'(lambda (x)
+			   (coerce x 'double-float))
+		       args)))
 
 (defun v. (a b)
   "Dot product between two vectors."
@@ -78,7 +88,7 @@
 (defun cross (a b)
   (declare (vec a b)
 	   (values vec &optional))
-  (v (- (* (aref a 1) (aref b 2))
+  (make-vec (- (* (aref a 1) (aref b 2))
         (* (aref a 2) (aref b 1)))
      (- (* (aref a 2) (aref b 0))
         (* (aref a 0) (aref b 2)))

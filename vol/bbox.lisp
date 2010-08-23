@@ -174,8 +174,8 @@ coordinates relative to A, replace the contents of A with B."
 	       (let ((l (left))
 		     (r (right)))
 		 (when (<= l r) ;; otherwise all pixels are zero
-		   (make-bbox :start (v (* 1d0 l) (* 1d0 (top)))
-			      :end (v (* 1d0 r) (* 1d0 (bottom)))))))))
+		   (make-bbox :start (make-vec (* 1d0 l) (* 1d0 (top)))
+			      :end (make-vec (* 1d0 r) (* 1d0 (bottom)))))))))
        (3 `(destructuring-bind (z y x) (array-dimensions a)
 	     (labels ((front ()
 			(do-region ((k j i) (z y x)) (unless (= 0 (aref a k j i))
@@ -207,8 +207,8 @@ coordinates relative to A, replace the contents of A with B."
 	       (let ((l (left))
 		     (r (right)))
 		 (when (<= l r) ;; otherwise all pixels are zero
-		   (make-bbox :start (v (* 1d0 l) (* 1d0 (top)) (* 1d0 (front)))
-			      :end (v (* 1d0 r) (* 1d0 (bottom)) (* 1d0 (back))))))))))))
+		   (make-bbox :start (make-vec (* 1d0 l) (* 1d0 (top)) (* 1d0 (front)))
+			      :end (make-vec (* 1d0 r) (* 1d0 (bottom)) (* 1d0 (back))))))))))))
 #+nil
 (def-find-bbox-rank-type 2 ub8)
 
