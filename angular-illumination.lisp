@@ -953,12 +953,12 @@ back focal plane set BIG-WINDOW to true."
  calculate the ray direction ro that leaves the objective. So its the
  same calculation that is used for draw-ray-into-vol."
   (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
-	   (values vec vec &optional))
+	   (values (or null vec) (or null vec) &optional))
   (let* ((f (lens:focal-length-from-magnification 63d0))
 	 (na 1.38d0)
 	 (ri 1.515d0)
 	 (bfp-radius (lens:back-focal-plane-radius f na))
-	 (obj (lens:make-thin-objective :normal (v 0 0 -1)
+	 (obj (lens:make-thin-objective :normal (v 0 0 1)
 					:center (v)
 					:focal-length f
 					:radius bfp-radius
@@ -968,14 +968,13 @@ back focal plane set BIG-WINDOW to true."
 	 (phi (atan y-mm x-mm))
 	 (start (make-vec (* bfp-ratio-x bfp-radius)
 			  (* bfp-ratio-y bfp-radius)
-			  f)))
+			  (- f))))
     (multiple-value-bind (ro s)
 	(lens:thin-objective-ray obj
 				 start
-				 (v* (make-vec (* (cos phi) (sin theta))
-					       (* (sin phi) (sin theta))
-					       (cos theta))
-				     -1d0))
+				 (make-vec (* (cos phi) (sin theta))
+					   (* (sin phi) (sin theta))
+					   (cos theta)))
       (values ro s))))
 
 #+nil
@@ -1153,7 +1152,7 @@ numbers x+i y."
 	   (x-mm (vec-x cent))
 	   (y-mm (vec-y cent))
 	   (z-mm (vec-z cent))
-	   (bfp-ratio-x .9d0 #+nil (random .9d0))
+	   (bfp-ratio-x (- (random 2d0) 1d0))
 	   (bfp-ratio-y 0d0)
 	   (f (lens:focal-length-from-magnification 63d0))
 	   (na 1.38d0)
@@ -1169,7 +1168,7 @@ numbers x+i y."
 	   (phi (atan y-mm x-mm))
 	   (start (make-vec (* bfp-radius bfp-ratio-x)
 			    (* bfp-radius bfp-ratio-y)
-		     (- f)))
+			    (- f)))
 	   (dx (* ri .2d-3))
 	   (dz (* ri 1d-3))
 	   (nf (* ri f))
@@ -1240,134 +1239,139 @@ numbers x+i y."
 						 (* (sin phi) (sin theta))
 						 (cos theta)))
 	    (when ro
-	     (let* ((nro (normalize ro)))
-	       (macrolet ((hit (plane)
-			    ;; find intersection between plane and the ray
-			    `(multiple-value-bind (dir hit-point)
-				 (lens::plane-ray ,plane
-						  s
-						  nro)
-			       (declare (ignore dir))
-			       hit-point))
-			  #+nil (pixel (hit-expr)
-				  ;; convert coordinates from mm into integer pixel positions
-				  `(let ((h ,hit-expr))
-				     (declare (type (or null vec) h))
-				     (when h
-				       (make-vec-i
-					:z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
-					:y (floor (+ cy (/ (aref h 1) dx)))
-					:x (floor (+ cx (/ (aref h 0) dx))))))))
-		 (let ((h+z (hit p+z))
-		       (h-z (hit p-z)))
-		   (when (and h+z h-z)
-		     (gl:line-width 7)
-		     (gl:with-primitive :lines
-		       (gl:color 1 0 0 1)
-		       (vertex-v start)
-		       (vertex-v s)
+	      (let* ((nro (normalize ro)))
+		(macrolet ((hit (plane)
+			     ;; find intersection between plane and the ray
+			     `(multiple-value-bind (dir hit-point)
+				  (lens::plane-ray ,plane
+						   s
+						   nro)
+				(declare (ignore dir))
+				hit-point))
+			   #+nil (pixel (hit-expr)
+				   ;; convert coordinates from mm into integer pixel positions
+				   `(let ((h ,hit-expr))
+				      (declare (type (or null vec) h))
+				      (when h
+					(make-vec-i
+					 :z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
+					 :y (floor (+ cy (/ (aref h 1) dx)))
+					 :x (floor (+ cx (/ (aref h 0) dx))))))))
+		  (let ((h+z (hit p+z))
+			(h-z (hit p-z)))
+		    (when (and h+z h-z)
+		      (gl:line-width 7)
+		      (gl:with-primitive :lines
+			(gl:color 1 0 0 1)
+			(vertex-v start)
+			(vertex-v s)
 		       
-		       (vertex-v s)
-		       (vertex-v h+z)
+			(vertex-v s)
+			(vertex-v h+z)
 		       
-		       (gl:color 0 1 0 1)
-		       (vertex-v h+z)
-		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+			(gl:color 0 1 0 1)
+			(vertex-v h+z)
+			(vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
 
-		       (gl:color 0 .7 1 1)
-		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
-		       (vertex-v h-z))))
-		 (progn
-		   (dotimes (i (length *spheres-c-r*))
-		     (with-slots (center radius)
-			 (aref *spheres-c-r* i)
-		       (let ((ray-start s)
-			     (ray-direction nro))
-			 ;; (c-x)^2=r^2 defines the sphere, substitute x with the rays p+alpha a,
-			 ;; the raydirection should have length 1, solve the quadratic equation,
-			 ;; the distance between the two solutions is the distance that the ray
-			 ;; travelled through the sphere
-			 (let* ((l (v+ (v* ez (- nf z-mm)) (v- center ray-start)))
-				(c (- (v. l l) (* radius radius)))
-				(a ray-direction)
-				(b (* -2d0 (v. l a))))
-			   #+nil (format t "~a~%" (list i center ray-start ray-direction))
-			   (multiple-value-bind (x1 x2)
-			       (quadratic-roots 1d0 b c)
-			     (when x1
-			       (gl:color 1 0 0 1)
-			       (gl:point-size 12)
-			       (gl:with-primitive :points
-				 (vertex-v (v+ s (v* nro (- x1))))
-				 (vertex-v (v+ s (v* nro (- x2))))))))))))
+			(gl:color 0 .7 1 1)
+			(vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+			(vertex-v h-z))))
+		  (progn
+		    #+nil
+		    (format t "~f ~f~%"
+			    bfp-ratio-x 
+			    (ray-spheres-intersection (v- s (v* ez (- nf z-mm)))
+						      nro *spheres-c-r* 0))
+		    (dotimes (i (length *spheres-c-r*))
+		      (with-slots (center radius)
+			  (aref *spheres-c-r* i)
+			(let ((ray-start s)
+			      (ray-direction nro))
+			  ;; (c-x)^2=r^2 defines the sphere, substitute x with the rays p+alpha a,
+			  ;; the raydirection should have length 1, solve the quadratic equation,
+			  ;; the distance between the two solutions is the distance that the ray
+			  ;; travelled through the sphere
+			  (let* ((l (v- center (v- ray-start (v* ez (- nf z-mm)))))
+				 (c (- (v. l l) (* radius radius)))
+				 (a ray-direction)
+				 (b (* -2d0 (v. l a))))
+			    #+nil (format t "~a~%" (list i center ray-start ray-direction))
+			    (multiple-value-bind (x1 x2)
+				(quadratic-roots 1d0 b c)
+			      (when x1
+				(gl:color 1 0 0 1)
+				(gl:point-size 12)
+				(gl:with-primitive :points
+				  (vertex-v (v+ s (v* nro (- x1))))
+				  (vertex-v (v+ s (v* nro (- x2))))))))))))
 		 
-		 (progn
-		   (gl:color .8 1 .2 1)
-		   (gl:with-primitive :lines
-		     (vertex-v s)
-		     (vertex-v (v+ s (v* nro 4.2d0)))))
-		 (let ((z+ (- nf z-mm))
-		       (z- (+ nf (- (* dz z) z-mm))))
-		   (gl:with-primitive :line-loop
-		     (gl:color .5 .5 .5)
-		     (vertex-v (make-vec 0d0 y-mm z+))
-		     (vertex-v (make-vec (* dx x) y-mm z+))
-		     (vertex-v (make-vec (* dx x) y-mm z-))
-		     (vertex-v (make-vec 0d0 y-mm z-)))
-		   (let* ((target :texture-rectangle-nv)
-			(im (cross-section-xz *spheres-ub8*
-					      (vec-i-y (aref *centers* 0)))))
-		   (defparameter *obj* (first (gl:gen-textures 1)))
-		   (gl:bind-texture target *obj*)
-		   (gl:enable target)
-		   (gl:tex-parameter target :texture-min-filter :linear)
-		   (gl:tex-parameter target :texture-mag-filter :linear)
-		   (destructuring-bind (h w)
-		       (array-dimensions im)
-		     (let* ((dat1 (sb-ext:array-storage-vector im)))
-		       (sb-sys:with-pinned-objects (im)
-			 (cffi:with-pointer-to-vector-data (ptr dat1)
-			   (gl:tex-image-2d target 0 :luminance w h
-					 0 :luminance :unsigned-byte ptr))))
-		     (let ((texcoords (list (v)
-					    (make-vec (* 1d0 w) 0d0)
-					    (make-vec (* 1d0 w) (* 1d0 h))
-					    (make-vec 0d0 (* 1d0 h))))
-			   (vertexs (list (make-vec (* dx x) y-mm z-)
-					  (make-vec 0d0 y-mm z-)
-					  (make-vec 0d0 y-mm z+)
-					  (make-vec (* dx x) y-mm z+))))
-		       (gl:with-primitive :quads
-			 (dotimes (i (length vertexs))
-			   (tex-coord-v (elt texcoords i))
-			   (vertex-v (elt vertexs i)))))
-		     (gl:disable target)))))
+		  (progn
+		    (gl:color .8 1 .2 1)
+		    (gl:with-primitive :lines
+		      (vertex-v s)
+		      (vertex-v (v+ s (v* nro 4.2d0)))))
+		  (let ((z+ (- nf z-mm))
+			(z- (+ nf (- (* dz z) z-mm))))
+		    (gl:with-primitive :line-loop
+		      (gl:color .5 .5 .5)
+		      (vertex-v (make-vec 0d0 y-mm z+))
+		      (vertex-v (make-vec (* dx x) y-mm z+))
+		      (vertex-v (make-vec (* dx x) y-mm z-))
+		      (vertex-v (make-vec 0d0 y-mm z-)))
+		    (let* ((target :texture-rectangle-nv)
+			   (im (cross-section-xz *spheres-ub8*
+						 (vec-i-y (aref *centers* 0)))))
+		      (defparameter *obj* (first (gl:gen-textures 1)))
+		      (gl:bind-texture target *obj*)
+		      (gl:enable target)
+		      (gl:tex-parameter target :texture-min-filter :linear)
+		      (gl:tex-parameter target :texture-mag-filter :linear)
+		      (destructuring-bind (h w)
+			  (array-dimensions im)
+			(let* ((dat1 (sb-ext:array-storage-vector im)))
+			  (sb-sys:with-pinned-objects (im)
+			    (cffi:with-pointer-to-vector-data (ptr dat1)
+			      (gl:tex-image-2d target 0 :luminance w h
+					       0 :luminance :unsigned-byte ptr))))
+			(let ((texcoords (list (v)
+					       (make-vec (* 1d0 w) 0d0)
+					       (make-vec (* 1d0 w) (* 1d0 h))
+					       (make-vec 0d0 (* 1d0 h))))
+			      (vertexs (list (make-vec (* dx x) y-mm z-)
+					     (make-vec 0d0 y-mm z-)
+					     (make-vec 0d0 y-mm z+)
+					     (make-vec (* dx x) y-mm z+))))
+			  (gl:with-primitive :quads
+			    (dotimes (i (length vertexs))
+			      (tex-coord-v (elt texcoords i))
+			      (vertex-v (elt vertexs i)))))
+			(gl:disable target)))))
 
-		 #+nil(let* ((h+z (pixel (hit p+z)))
-			     (h-z (pixel (hit p-z)))
-			     (h+y (pixel (hit p+y)))
-			     (h-y (pixel (hit p-y)))
-			     (h+x (pixel (hit p+x)))
-			     (h-x (pixel (hit p-x)))
-			     ;; make a list of all the points
-			     (hlist (list h+z h-z h+y h-y h+x h-x))
-			     ;; throw away points that are nil or that contain
-			     ;; coordinates outside of the array dimensions
-			     (filtered-hlist
-			      (remove-if-not #'(lambda (v)
-						 (if v
-						     (and (< -1 (vec-i-x v) x)
-							  (< -1 (vec-i-y v) y)
-							  (< -1 (vec-i-z v) z))
-						     nil)) hlist))
-			     ;; sort best points by x
-			     (choice (sort filtered-hlist #'< :key (lambda (v) (vec-i-x v)))))
-			(debug-out h+z h-z)
-			(format t "~a~%" (list 'choice choice))
-			#+nil (scan-convert-line3
-			       (first choice)
-			       (second choice)
-			       *spheres-ub8*))))))))))
+		#+nil(let* ((h+z (pixel (hit p+z)))
+			    (h-z (pixel (hit p-z)))
+			    (h+y (pixel (hit p+y)))
+			    (h-y (pixel (hit p-y)))
+			    (h+x (pixel (hit p+x)))
+			    (h-x (pixel (hit p-x)))
+			    ;; make a list of all the points
+			    (hlist (list h+z h-z h+y h-y h+x h-x))
+			    ;; throw away points that are nil or that contain
+			    ;; coordinates outside of the array dimensions
+			    (filtered-hlist
+			     (remove-if-not #'(lambda (v)
+						(if v
+						    (and (< -1 (vec-i-x v) x)
+							 (< -1 (vec-i-y v) y)
+							 (< -1 (vec-i-z v) z))
+						    nil)) hlist))
+			    ;; sort best points by x
+			    (choice (sort filtered-hlist #'< :key (lambda (v) (vec-i-x v)))))
+		       (debug-out h+z h-z)
+		       (format t "~a~%" (list 'choice choice))
+		       #+nil (scan-convert-line3
+			      (first choice)
+			      (second choice)
+			      *spheres-ub8*))))))))))
 
 #+nil
 (destructuring-bind (z y x)
@@ -1498,24 +1502,28 @@ the bfp."
 				    (imagpart sample-pos)
 				    (realpart bfp-pos)
 				    (imagpart bfp-pos))
-	(let* ((exposure
-		(ray-spheres-intersection
-		 ;; shift by nf so that sample is in origin
-		 (v+ s
-		     (make-vec 0d0
-			       0d0
-			       (* 1.515d0 (lens:focal-length-from-magnification 63d0))))
-		 (normalize ro)
-		 spheres-c-r
-		 illuminated-sphere-index)))
-	  exposure)))))
+	(if ro
+	    (let* ((exposure
+		    (ray-spheres-intersection
+		     (v- s
+			 (let ((z-mm (vec-z center))
+			       (nf (* 1.515d0 
+				      (lens:focal-length-from-magnification 63d0))))
+			   (make-vec 0d0
+				     0d0
+				     (- nf z-mm))))
+		     (normalize ro)
+		     spheres-c-r
+		     illuminated-sphere-index)))
+	      exposure)
+	    0d0)))))
 
 #+nil
 (illuminate-ray *spheres-c-r* 20 :bottom
 		.1d0 .0d0
 		.01d0 :right)
 
-(defvar *bfp-window-radius* .0001d0)
+(defvar *bfp-window-radius* .1d0)
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
@@ -1525,7 +1533,7 @@ the bfp."
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
 			    :element-type 'double-float)))
-   (dotimes (*nucleus-index* 3  nn)
+   (dotimes (*nucleus-index* 3 nn)
      (dotimes (i n)
        (dotimes (j n)
 	 (let ((x (- (* 2d0 (/ i n)) 1d0))
