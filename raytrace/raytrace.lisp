@@ -115,7 +115,8 @@
 
 (defmethod print-object ((sphere sphere) stream)
   (with-slots (center radius) sphere
-   (format stream "#<sphere radius: ~4f center: ~a>" radius center)))
+   (format stream "#<sphere radius: ~4f center: <~4f ~4f ~4f>>" 
+	   radius (vec-x center) (vec-y center) (vec-z center))))
 
 #+nil
 (make-sphere :radius 3.1415d0 :center (v 1d0 2d0 3.032032d0)) 

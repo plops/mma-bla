@@ -1136,7 +1136,7 @@ numbers x+i y."
 	  (glut:wire-sphere (* 1.515d0 1.03 radius) 8 4)))))
   (destructuring-bind (z y x)
       *dims*
-    (let* ((cent (sphere-center (aref *spheres-c-r* 0)))
+    (let* ((cent (sphere-center (aref *spheres-c-r* 1)))
 	   (x-mm (vec-y cent))
 	   (y-mm (vec-x cent))
 	   (z-mm (vec-z cent))
