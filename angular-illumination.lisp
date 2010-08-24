@@ -1141,6 +1141,9 @@ numbers x+i y."
 ;;       ----+---------+-----------------   -f
 ;;           |	       |   back focal plane
 ;;	               |
+
+(* 1.515 (lens:focal-length-from-magnification 63d0))
+
 (defvar *obj* 0)
 (defvar *spheres-ub8* nil)
 (defun draw ()
@@ -1150,7 +1153,7 @@ numbers x+i y."
 	   (x-mm (vec-x cent))
 	   (y-mm (vec-y cent))
 	   (z-mm (vec-z cent))
-	   (bfp-ratio-x -.2d0 #+nil (random .9d0))
+	   (bfp-ratio-x .9d0 #+nil (random .9d0))
 	   (bfp-ratio-y 0d0)
 	   (f (lens:focal-length-from-magnification 63d0))
 	   (na 1.38d0)
@@ -1206,7 +1209,7 @@ numbers x+i y."
 	    (translate-v center)
 	    (glut:wire-sphere (* 1.08 radius) 8 4))))))
 
-      (debug-out f bfp-radius theta phi)
+      #+nil (debug-out f bfp-radius theta phi)
       (draw-disk (make-vec 0d0 0d0 (- f)) bfp-radius)
       (draw-disk (make-vec 0d0 0d0 0d0) bfp-radius)
       (macrolet ((plane (direction position)
@@ -1274,6 +1277,30 @@ numbers x+i y."
 		       (gl:color 0 .7 1 1)
 		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
 		       (vertex-v h-z))))
+		 (progn
+		   (dotimes (i (length *spheres-c-r*))
+		     (with-slots (center radius)
+			 (aref *spheres-c-r* i)
+		       (let ((ray-start s)
+			     (ray-direction nro))
+			 ;; (c-x)^2=r^2 defines the sphere, substitute x with the rays p+alpha a,
+			 ;; the raydirection should have length 1, solve the quadratic equation,
+			 ;; the distance between the two solutions is the distance that the ray
+			 ;; travelled through the sphere
+			 (let* ((l (v+ (v* ez (- nf z-mm)) (v- center ray-start)))
+				(c (- (v. l l) (* radius radius)))
+				(a ray-direction)
+				(b (* -2d0 (v. l a))))
+			   #+nil (format t "~a~%" (list i center ray-start ray-direction))
+			   (multiple-value-bind (x1 x2)
+			       (quadratic-roots 1d0 b c)
+			     (when x1
+			       (gl:color 1 0 0 1)
+			       (gl:point-size 12)
+			       (gl:with-primitive :points
+				 (vertex-v (v+ s (v* nro (- x1))))
+				 (vertex-v (v+ s (v* nro (- x2))))))))))))
+		 
 		 (progn
 		   (gl:color .8 1 .2 1)
 		   (gl:with-primitive :lines
