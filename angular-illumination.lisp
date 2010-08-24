@@ -1140,7 +1140,7 @@ numbers x+i y."
 	   (x-mm (vec-x cent))
 	   (y-mm (vec-y cent))
 	   (z-mm (vec-z cent))
-	   (bfp-ratio-x .9d0 #+nil (random .9d0))
+	   (bfp-ratio-x -.2d0 #+nil (random .9d0))
 	   (bfp-ratio-y 0d0)
 	   (f (lens:focal-length-from-magnification 63d0))
 	   (na 1.38d0)
@@ -1269,6 +1269,14 @@ numbers x+i y."
 		   (gl:with-primitive :lines
 		     (vertex-v s)
 		     (vertex-v (v+ s (v* nro 4.2d0)))))
+		 (let ((z+ (- nf z-mm))
+		       (z- (+ nf (- (* dz z) z-mm))))
+		   (gl:with-primitive :line-loop
+			 (gl:color .5 .5 .5)
+			 (vertex-v (make-vec 0d0 y-mm z+))
+			 (vertex-v (make-vec (* dx x) y-mm z+))
+			 (vertex-v (make-vec (* dx x) y-mm z-))
+			 (vertex-v (make-vec 0d0 y-mm z-))))
 		 #+nil(let* ((h+z (pixel (hit p+z)))
 			     (h-z (pixel (hit p-z)))
 			     (h+y (pixel (hit p+y)))
