@@ -1108,11 +1108,11 @@ numbers x+i y."
 (defun draw ()
   (destructuring-bind (z y x)
       *dims*
-    (let* ((cent (sphere-center (aref *spheres-c-r* 1)))
-	   (x-mm (vec-y cent))
-	   (y-mm (vec-x cent))
+    (let* ((cent (sphere-center (aref *spheres-c-r* 0)))
+	   (x-mm (vec-x cent))
+	   (y-mm (vec-y cent))
 	   (z-mm (vec-z cent))
-	   (bfp-ratio-x 0.99d0)
+	   (bfp-ratio-x (random 1d0))
 	   (bfp-ratio-y 0d0)
 	   (f (lens:focal-length-from-magnification 63d0))
 	   (na 1.38d0)
@@ -1155,7 +1155,8 @@ numbers x+i y."
       (gl:color 1 0 0 1) (gl:vertex 0 0 0) (gl:vertex 1 0 0)
       (gl:color 0 1 0 1) (gl:vertex 0 0 0) (gl:vertex 0 1 0)
       (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1))
-    (progn
+    (translate-v (v* ez (- nf)))
+    (gl:with-pushed-matrix
       (translate-v (v* ez nf))
       (gl:color 0 0 0 1)
       (dotimes (i (length *spheres-c-r*))
@@ -1215,12 +1216,12 @@ numbers x+i y."
 					    -1d0)
 				   's s
 				   's-new (v+ s (make-vec 0d0 0d0 (* dz shift-z)))))
-	    (setf s (v+ s (make-vec 0d0 0d0 (* dz shift-z))))
+	    #+nil (setf s (v+ s (make-vec 0d0 0d0 (* dz shift-z))))
 	    (gl:color 1 0 0 1)
 	    (gl:line-width 7)
 	    (gl:with-primitive :line-strip
 	      (vertex-v start)
-	      (vertex-v (v+ s (v* ez f)))
+	      (vertex-v s)
 	      (vertex-v (v+ (make-vec x-mm y-mm z-mm)
 			    (v* ez nf))))
 	    #+nil (let* ((nro (normalize ro)))
