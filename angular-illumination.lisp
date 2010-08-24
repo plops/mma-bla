@@ -535,8 +535,9 @@ back focal plane set BIG-WINDOW to true."
  (destructuring-bind (z y x)
      dims
    (declare (fixnum z y x))
-   (let* ((dx (* +one+ .2e-3))
-	  (dz (* +one+  1e-3))
+   (let* ((n 1.515d0)
+	  (dx (* +one+ n .2e-3))
+	  (dz (* +one+ n 1e-3))
 	  (xh (* +one+ .5d0 x))
 	  (yh (* +one+ .5d0 y))
 	  (zh (* +one+ .5d0 z))
@@ -1105,35 +1106,6 @@ numbers x+i y."
 
 
 (defun draw ()
-  
-  (progn
-    (gl:enable :depth-test)
-    (when (< 360 (incf *rot*))
-      (setf *rot* 0))
-    (gl:rotate *rot* 0 0 1)
-    (let ((s 200))
-      (gl:scale s s s))
-    (gl:disable :lighting)
-    (gl:line-width 3)
-    (gl:with-primitive :lines
-      (gl:color 1 0 0 1) (gl:vertex 0 0 0) (gl:vertex 1 0 0)
-      (gl:color 0 1 0 1) (gl:vertex 0 0 0) (gl:vertex 0 1 0)
-      (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1))
-    (gl:color 0 0 0 1)
-    (dotimes (i (length *spheres-c-r*))
-      (gl:with-pushed-matrix 
-	(with-slots (center radius)
-	    (aref *spheres-c-r* i)
-	  (translate-v (v* center 1.515d0))
-	  (glut:solid-sphere (* 1.515d0 radius) 8 4))))
-    (gl:color 1 1 1 1)
-    (gl:line-width 1)
-    (dotimes (i (length *spheres-c-r*))
-      (gl:with-pushed-matrix 
-	(with-slots (center radius)
-	    (aref *spheres-c-r* i)
-	  (translate-v (v* center 1.515d0))
-	  (glut:wire-sphere (* 1.515d0 1.03 radius) 8 4)))))
   (destructuring-bind (z y x)
       *dims*
     (let* ((cent (sphere-center (aref *spheres-c-r* 1)))
@@ -1146,7 +1118,7 @@ numbers x+i y."
 	   (na 1.38d0)
 	   (ri 1.515d0)
 	   (bfp-radius (lens:back-focal-plane-radius f na))
-	   (obj (lens:make-thin-objective :normal (v 0 0 -1)
+	   (obj (lens:make-thin-objective :normal (v 0 0 1)
 					  :center (v)
 					  :focal-length f
 					  :radius bfp-radius
@@ -1156,20 +1128,55 @@ numbers x+i y."
 	   (phi (atan y-mm x-mm))
 	   (start (make-vec (* bfp-radius bfp-ratio-x)
 			    (* bfp-radius bfp-ratio-y)
-		     f))
+		     (- f)))
 	   (dx .2d-3)
 	   (dz 1d-3)
 	   (cz (* .5d0 z)) ;; position that is in the center of front focal plane
 	   (cy (* .5d0 y))
 	   (cx (* .5d0 x))
 	   (nf (* ri f))
+	   (ez (v 0 0 1))
 	   (znf (make-vec 0d0 0d0 nf))
 	   (shift-z (-
 		     (/ (vec-z cent) dz)
 		     )))
+      
+      (progn
+	(gl:enable :depth-test)
+	(when (< 360 (incf *rot*))
+	  (setf *rot* 0))
+	(translate-v (v* ez (- nf)))
+    (gl:rotate *rot* 0 0 1)
+    (let ((s 1))
+      (gl:scale s s s))
+    (gl:disable :lighting)
+    (gl:line-width 3)
+    (gl:with-primitive :lines
+      (gl:color 1 0 0 1) (gl:vertex 0 0 0) (gl:vertex 1 0 0)
+      (gl:color 0 1 0 1) (gl:vertex 0 0 0) (gl:vertex 0 1 0)
+      (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1))
+    (progn
+      (translate-v (v* ez nf))
+      (gl:color 0 0 0 1)
+      (dotimes (i (length *spheres-c-r*))
+	(gl:with-pushed-matrix 
+	  (with-slots (center radius)
+	      (aref *spheres-c-r* i)
+	    (translate-v center)
+	    (glut:solid-sphere radius 8 4))))
+      (gl:color 1 1 1 1)
+      (gl:line-width 1)
+      
+      (dotimes (i (length *spheres-c-r*))
+	(gl:with-pushed-matrix 
+	  (with-slots (center radius)
+	      (aref *spheres-c-r* i)
+	    (translate-v center)
+	    (glut:wire-sphere (* 1.03 radius) 8 4))))))
+      
       (debug-out f bfp-radius theta phi)
-      (draw-disk (make-vec 0d0 0d0 (+ (* ri f) f)) bfp-radius)
-      (draw-disk (make-vec 0d0 0d0 (+ (* ri f))) bfp-radius)
+      (draw-disk (make-vec 0d0 0d0 (- f)) bfp-radius)
+      (draw-disk (make-vec 0d0 0d0 0d0) bfp-radius)
       (macrolet ((plane (direction position)
 		   ;; for defining a plane that is perpendicular to an
 		   ;; axis and crosses it at POSITION
@@ -1212,13 +1219,10 @@ numbers x+i y."
 	    (gl:color 1 0 0 1)
 	    (gl:line-width 7)
 	    (gl:with-primitive :line-strip
-	      (vertex-v (v+ start znf))
-	      (vertex-v (v+ s znf))
-	      (vertex-v (v+ (make-vec
-			     x-mm
-			     y-mm
-			     (- (- (* dz shift-z)) nf))
-			    znf)))
+	      (vertex-v start)
+	      (vertex-v (v+ s (v* ez f)))
+	      (vertex-v (v+ (make-vec x-mm y-mm z-mm)
+			    (v* ez nf))))
 	    #+nil (let* ((nro (normalize ro)))
 		    (debug-out nro)
 		    (macrolet ((hit (plane)
