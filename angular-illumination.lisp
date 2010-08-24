@@ -1015,13 +1015,6 @@ numbers x+i y."
 #+nil
 (sample-circle (complex 1d0 1d0) 1d0 :right)
 
-#+nil ;; prepare volume for drawing lines
-(progn
- (defparameter *spheres-ub8* (normalize-3-csf/ub8-realpart
-			      (resample-3-csf *spheres* .2 .2 1.0 .2 .2 .2)))
-
- (save-stack-ub8 "/home/martin/tmp/spheres-ub8" *spheres-ub8*)
- )
 #+buk
 (with-slots (center radius)
     (aref *spheres-c-r* 0)
@@ -1043,6 +1036,12 @@ numbers x+i y."
   (declare (vec vec)
            (values null &optional))
   (gl:vertex (vec-x vec) (vec-y vec) (vec-z vec))
+  nil)
+
+(defun tex-coord-v (vec)
+  (declare (vec vec)
+           (values null &optional))
+  (gl:tex-coord (vec-x vec) (vec-y vec) (vec-z vec))
   nil)
 
 (defun translate-v (vec)
@@ -1089,6 +1088,16 @@ numbers x+i y."
 #+nil
 (init-angular-model)
 
+#+nil ;; prepare volume for drawing lines
+(progn
+ (defparameter *spheres-ub8* (normalize-3-csf/ub8-realpart
+			      *spheres* #+nil
+			      (resample-3-csf *spheres* .2 .2 1.0 .2 .2 .2)))
+
+#+nil (save-stack-ub8 "/home/martin/tmp/spheres-ub8" *spheres-ub8*)
+ )
+
+
 #+nil
 (gui:with-gui
   (draw))
@@ -1109,7 +1118,7 @@ numbers x+i y."
 ;;
 ;; the objective sits below the sample. its (thin) lens has a distance
 ;; nf to the in-focus plane. z is directed from the objective towards
-;; the sample. the first slice of the stack is nearest to the
+;; the sample. the first slice of the stack is furthest from the
 ;; objective.
 ;;
 ;;     	               ^ z
@@ -1132,7 +1141,8 @@ numbers x+i y."
 ;;       ----+---------+-----------------   -f
 ;;           |	       |   back focal plane
 ;;	               |
-
+(defvar *obj* 0)
+(defvar *spheres-ub8* nil)
 (defun draw ()
   (destructuring-bind (z y x)
       *dims*
@@ -1272,11 +1282,40 @@ numbers x+i y."
 		 (let ((z+ (- nf z-mm))
 		       (z- (+ nf (- (* dz z) z-mm))))
 		   (gl:with-primitive :line-loop
-			 (gl:color .5 .5 .5)
-			 (vertex-v (make-vec 0d0 y-mm z+))
-			 (vertex-v (make-vec (* dx x) y-mm z+))
-			 (vertex-v (make-vec (* dx x) y-mm z-))
-			 (vertex-v (make-vec 0d0 y-mm z-))))
+		     (gl:color .5 .5 .5)
+		     (vertex-v (make-vec 0d0 y-mm z+))
+		     (vertex-v (make-vec (* dx x) y-mm z+))
+		     (vertex-v (make-vec (* dx x) y-mm z-))
+		     (vertex-v (make-vec 0d0 y-mm z-)))
+		   (let* ((target :texture-rectangle-nv)
+			(im (cross-section-xz *spheres-ub8*
+					      (vec-i-y (aref *centers* 0)))))
+		   (defparameter *obj* (first (gl:gen-textures 1)))
+		   (gl:bind-texture target *obj*)
+		   (gl:enable target)
+		   (gl:tex-parameter target :texture-min-filter :linear)
+		   (gl:tex-parameter target :texture-mag-filter :linear)
+		   (destructuring-bind (h w)
+		       (array-dimensions im)
+		     (let* ((dat1 (sb-ext:array-storage-vector im)))
+		       (sb-sys:with-pinned-objects (im)
+			 (cffi:with-pointer-to-vector-data (ptr dat1)
+			   (gl:tex-image-2d target 0 :luminance w h
+					 0 :luminance :unsigned-byte ptr))))
+		     (let ((texcoords (list (v)
+					    (make-vec (* 1d0 w) 0d0)
+					    (make-vec (* 1d0 w) (* 1d0 h))
+					    (make-vec 0d0 (* 1d0 h))))
+			   (vertexs (list (make-vec (* dx x) y-mm z-)
+					  (make-vec 0d0 y-mm z-)
+					  (make-vec 0d0 y-mm z+)
+					  (make-vec (* dx x) y-mm z+))))
+		       (gl:with-primitive :quads
+			 (dotimes (i (length vertexs))
+			   (tex-coord-v (elt texcoords i))
+			   (vertex-v (elt vertexs i)))))
+		     (gl:disable target)))))
+
 		 #+nil(let* ((h+z (pixel (hit p+z)))
 			     (h-z (pixel (hit p-z)))
 			     (h+y (pixel (hit p+y)))
@@ -1301,7 +1340,7 @@ numbers x+i y."
 			#+nil (scan-convert-line3
 			       (first choice)
 			       (second choice)
-			       *spheres-ub8*)))))))))))
+			       *spheres-ub8*))))))))))
 
 #+nil
 (destructuring-bind (z y x)
