@@ -1140,7 +1140,7 @@ numbers x+i y."
 	   (x-mm (vec-x cent))
 	   (y-mm (vec-y cent))
 	   (z-mm (vec-z cent))
-	   (bfp-ratio-x (random 1d0))
+	   (bfp-ratio-x .9d0 #+nil (random .9d0))
 	   (bfp-ratio-y 0d0)
 	   (f (lens:focal-length-from-magnification 63d0))
 	   (na 1.38d0)
@@ -1218,44 +1218,58 @@ numbers x+i y."
 	      #+nil (p-y (plane :y (* dx (- (- y cy)))))
 	      #+nil (p+x (plane :x (* dx (- x cx))))
 	      #+nil (p-x (plane :x (* dx (- (- x cx))))))
-	  (draw-disk (v* ez (- nf z-mm)) (* ri .01))
-	  (draw-disk (v* ez (+ nf (- (* dz z) z-mm)))
-		     (* ri .01))
+	  (draw-disk (v* ez (- nf z-mm))              (* ri .01))
+	  (draw-disk (v* ez (+ nf (- (* dz z) z-mm))) (* ri .01))
 	  (multiple-value-bind (ro s)
 	      (lens:thin-objective-ray obj
 				       start
-				       (v* (make-vec (* (cos phi) (sin theta))
-						     (* (sin phi) (sin theta))
-						     (cos theta))
-					   -1d0))
-	    (gl:color 1 0 0 1)
-	    (gl:line-width 7)
-	    (gl:with-primitive :line-strip
-	      (vertex-v start)
-	      (vertex-v (make-vec (vec-x s) (vec-y s) (- (vec-z s))))
-	      (vertex-v (v+ (make-vec x-mm y-mm 0d0)
-			    (v* ez nf))))
-	    #+nil (let* ((nro (normalize ro)))
-		    (debug-out nro)
-		    (macrolet ((hit (plane)
-				 ;; find intersection between plane and the ray
-				 `(multiple-value-bind (dir hit-point)
-				      (lens::plane-ray ,plane
-						       ;; shift start of vector a bit
-						       s
-						       nro)
-				    (declare (ignore dir))
-				    hit-point))
-			       (pixel (hit-expr)
-				 ;; convert coordinates from mm into integer pixel positions
-				 `(let ((h ,hit-expr))
-				    (declare (type (or null vec) h))
-				    (when h
-				      (make-vec-i
-				       :z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
-				       :y (floor (+ cy (/ (aref h 1) dx)))
-				       :x (floor (+ cx (/ (aref h 0) dx))))))))
-		      (let* ((h+z (pixel (hit p+z)))
+				       (make-vec (* (cos phi) (sin theta))
+						 (* (sin phi) (sin theta))
+						 (cos theta)))
+	    (when ro
+	     (let* ((nro (normalize ro)))
+	       (macrolet ((hit (plane)
+			    ;; find intersection between plane and the ray
+			    `(multiple-value-bind (dir hit-point)
+				 (lens::plane-ray ,plane
+						  s
+						  nro)
+			       (declare (ignore dir))
+			       hit-point))
+			  #+nil (pixel (hit-expr)
+				  ;; convert coordinates from mm into integer pixel positions
+				  `(let ((h ,hit-expr))
+				     (declare (type (or null vec) h))
+				     (when h
+				       (make-vec-i
+					:z (floor (+ cz (/ (+ (aref h 2) nf) dz)))
+					:y (floor (+ cy (/ (aref h 1) dx)))
+					:x (floor (+ cx (/ (aref h 0) dx))))))))
+		 (let ((h+z (hit p+z))
+		       (h-z (hit p-z)))
+		   (when (and h+z h-z)
+		     (gl:line-width 7)
+		     (gl:with-primitive :lines
+		       (gl:color 1 0 0 1)
+		       (vertex-v start)
+		       (vertex-v s)
+		       
+		       (vertex-v s)
+		       (vertex-v h+z)
+		       
+		       (gl:color 0 1 0 1)
+		       (vertex-v h+z)
+		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+
+		       (gl:color 0 .7 1 1)
+		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+		       (vertex-v h-z))))
+		 (progn
+		   (gl:color .8 1 .2 1)
+		   (gl:with-primitive :lines
+		     (vertex-v s)
+		     (vertex-v (v+ s (v* nro 4.2d0)))))
+		 #+nil(let* ((h+z (pixel (hit p+z)))
 			     (h-z (pixel (hit p-z)))
 			     (h+y (pixel (hit p+y)))
 			     (h-y (pixel (hit p-y)))
@@ -1279,7 +1293,7 @@ numbers x+i y."
 			#+nil (scan-convert-line3
 			       (first choice)
 			       (second choice)
-			       *spheres-ub8*))))))))))
+			       *spheres-ub8*)))))))))))
 
 #+nil
 (destructuring-bind (z y x)
