@@ -110,7 +110,7 @@
 		      (hlist (list h+z h-z h+y h-y h+x h-x))
 		      ;; throw away points that are nil or that contain
 		      ;; coordinates outside of the array dimensions
-		      (filtered-hlist 
+		      (filtered-hlist
 		       (remove-if-not #'(lambda (v)
 					  (if v
 					      (and (< -1 (vec-i-x v) x)
@@ -281,7 +281,7 @@
 				   pixel-size-z dz2))
 		     pixel-size-z)
 		   dz2)))
-     
+
      ;; electric field caps are only calculated upon first call FIXME: or
      ;; when parameters change (implemented via reinitialize argument)
      (when (or (null k0) (null k1) (null k2) initialize)
@@ -322,7 +322,7 @@
 	       (setf (aref kk0 k j i) (* (aref k0 k j i) (aref window j i))
 		     (aref kk1 k j i) (* (aref k1 k j i) (aref window j i))
 		     (aref kk2 k j i) (* (aref k2 k j i) (aref window j i))))
-	     (when debug 
+	     (when debug
 	       (write-pgm "/home/martin/tmp/cut-2psf-k-mul.pgm"
 			  (normalize-2-csf/ub8-abs (cross-section-xz kk0))))
 	     (let* ((e0 (ift (fftshift kk0)))
@@ -336,7 +336,7 @@
 			  (* (aref e1 k j i) (conjugate (aref e1 k j i)))
 			  (* (aref e2 k j i) (conjugate (aref e2 k j i))))))
 	       (when debug
-		 (write-pgm 
+		 (write-pgm
 		  "/home/martin/tmp/cut-3psf-intens.pgm"
 		  (normalize-2-csf/ub8-realpart (cross-section-xz intens)))
 		 (let ((k (fftshift (ft intens))))
@@ -415,7 +415,7 @@ diameter of the bfp.
 |                       |     2 rr                 |
 ||#
 
-(defun angular-intensity-psf-minimal-resolution 
+(defun angular-intensity-psf-minimal-resolution
     (&key
      (x-um #.(coerce 50 'my-float)) (y-um x-um) (z-um #.(coerce 40 'my-float))
      (window-radius #.(coerce .1 'my-float))
@@ -462,7 +462,7 @@ back focal plane set BIG-WINDOW to true."
 	     (kzextent (if store-cap
 			   ;; store the full cap without wrapping,
 			   ;; this way one can reuse the efields
-			   (- k (kz R)) 
+			   (- k (kz R))
 			   ;; just leave enough space to accommodate
 			   ;; the final donut, this improves
 			   ;; performance a lot for small windows
@@ -473,7 +473,7 @@ back focal plane set BIG-WINDOW to true."
 			   ;; fit in twice, to accommodate the full
 			   ;; donut
 			   (* +one+ 2 R)
-			   (* +one+ R))) 
+			   (* +one+ R)))
 	     (pif #.(coerce pi 'my-float))
 	     (dx (/ pif kxextent))
 	     (dz (/ pif kzextent)))
@@ -495,18 +495,18 @@ back focal plane set BIG-WINDOW to true."
 #+nil
 (time
  (multiple-value-bind (a dx dz)
-     (angular-intensity-psf-minimal-resolution 
+     (angular-intensity-psf-minimal-resolution
       :x-um (* +one+ 20)
       :z-um (* +one+ 40)
       :window-radius (* +one+ .14)
       :window-x (* +one+ .73)
-      :window-y (* +one+ 0) 
+      :window-y (* +one+ 0)
       :integrand-evaluations 180
       :initialize t
       :debug t)
    (write-pgm "/home/martin/tmp/cut-5resampled.pgm"
 	      (normalize-2-csf/ub8-realpart
-	       (cross-section-xz 
+	       (cross-section-xz
 		(resample-3-csf a dx dx dz .2 .2 .2))))
    (sb-ext:gc :full t)))
 
@@ -564,7 +564,7 @@ back focal plane set BIG-WINDOW to true."
     (defparameter *centers* c)
     (defparameter *dims* dims)
     (sb-ext:gc :full t))
-  (progn 
+  (progn
     (defparameter *dims* '(34 206 296))
     (let* ((result nil)
 	   (nx 10)
@@ -585,7 +585,7 @@ back focal plane set BIG-WINDOW to true."
       (defparameter *centers* (make-array (length result)
 					  :element-type 'vec-i
 					  :initial-contents result))))
-  
+
   (defparameter *spheres-c-r*
     (create-sphere-array *dims* *centers*))
   (let ((spheres
@@ -595,7 +595,7 @@ back focal plane set BIG-WINDOW to true."
     (setf *index-spheres* spheres)
     (write-pgm "/home/martin/tmp/angular-indexed-spheres-cut.pgm"
 	       (normalize-2-csf/ub8-realpart
-		(cross-section-xz *index-spheres* 
+		(cross-section-xz *index-spheres*
 				  (vec-i-y (elt *centers* 0)))))
     (sb-ext:gc :full t))
   (let ((spheres
@@ -607,14 +607,14 @@ back focal plane set BIG-WINDOW to true."
 		    (normalize-3-csf/ub8-realpart *spheres*))
     (write-pgm "/home/martin/tmp/angular-spheres-cut.pgm"
 	       (normalize-2-csf/ub8-realpart
-		(resample-2-csf 
-		 (cross-section-xz *spheres* 
+		(resample-2-csf
+		 (cross-section-xz *spheres*
 				   (vec-i-y (elt *centers* 0)))
 		 .2 1.0 .2 .2)))
     (sb-ext:gc :full t)))
 
 #+nil
-(time (init-angular-model)) 
+(time (init-angular-model))
 
 (defvar *rot* 0)
 #+nil
@@ -633,7 +633,7 @@ back focal plane set BIG-WINDOW to true."
     (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1))
   (gl:color 0 0 0 1)
   (dotimes (i (length *spheres-c-r*))
-    (gl:with-pushed-matrix 
+    (gl:with-pushed-matrix
      (with-slots (center radius)
 	 (aref *spheres-c-r* i)
        (gl:translate (aref center 0) (aref center 1) (aref center 2))
@@ -641,7 +641,7 @@ back focal plane set BIG-WINDOW to true."
   (gl:color 1 1 1 1)
   (gl:line-width 1)
   (dotimes (i (length *spheres-c-r*))
-    (gl:with-pushed-matrix 
+    (gl:with-pushed-matrix
      (with-slots (center radius)
 	 (aref *spheres-c-r* i)
        (gl:translate (aref center 0) (aref center 1) (aref center 2))
@@ -713,7 +713,7 @@ back focal plane set BIG-WINDOW to true."
 
 #+nil
 (time
- (loop for i below (array-dimension *index-spheres* 0) 
+ (loop for i below (array-dimension *index-spheres* 0)
     collect
     (list i (get-visible-nuclei i))))
 
@@ -729,7 +729,7 @@ back focal plane set BIG-WINDOW to true."
     (let ((vol (make-array (list z y x)
 			   :element-type '(complex my-float))))
       ;; only the current nucleus will be illuminated
-      ;; note that nucleus 0 has value 1 in index-spheres 
+      ;; note that nucleus 0 has value 1 in index-spheres
       (do-region ((j i) (y x))
 	(if (< (abs (- nucleus (1- (aref *index-spheres* k j i)))) .5)
 	    (setf (aref vol k j i) (aref *spheres* k j i))))
@@ -794,7 +794,7 @@ back focal plane set BIG-WINDOW to true."
 				  ;; set temperature bigger than the
 				  ;; maxima in the bfp but smaller
 				  ;; than border-value
-				  :start-temperature 2.4d0 
+				  :start-temperature 2.4d0
 				  :eps/m .02d0
 				  :itmax 1000
 				  :ftol 1d-3)
@@ -811,14 +811,14 @@ back focal plane set BIG-WINDOW to true."
        (dz 1d0)
        (r 100)
        (z (array-dimension *spheres* 0))
-       (psf (angular-psf :x r :y r :z (* 2 z) 
+       (psf (angular-psf :x r :y r :z (* 2 z)
 		:pixel-size-x dx :pixel-size-z dz
 		:window-radius *bfp-window-radius*
 		:window-x -.714d0
 		:window-y .16d0
 		:initialize t
 		:debug t
-		:integrand-evaluations 400))) 
+		:integrand-evaluations 400)))
    (save-stack-ub8 "/home/martin/tmp/psf" (normalize3-cdf/ub8-realpart psf))
    nil))
 
@@ -833,10 +833,10 @@ back focal plane set BIG-WINDOW to true."
 	 (psf (let ((dx .2d0)
 		    (dz 1d0)
 		    (r 100)
-		    (z (array-dimension *spheres* 0))) 
+		    (z (array-dimension *spheres* 0)))
 		(multiple-value-bind (h ddx ddz)
 		    (angular-intensity-psf-minimal-resolution
-				 :x-um (* r dx) :y-um (* r dx) :z-um (* 2 z dz) 
+				 :x-um (* r dx) :y-um (* r dx) :z-um (* 2 z dz)
 				 :window-radius *bfp-window-radius*
 				 :window-x (vec2-x bfp-pos)
 				 :window-y (vec2-y bfp-pos)
@@ -852,7 +852,7 @@ back focal plane set BIG-WINDOW to true."
       ;; light distribution in sample
       (defparameter *angular-light-field* conv)
       (defparameter *angular-light-field-start* conv-start)
-      (write-section (format nil "/home/martin/tmp/angular-2light-cut-~3,'0d.pgm" nucleus) 
+      (write-section (format nil "/home/martin/tmp/angular-2light-cut-~3,'0d.pgm" nucleus)
 		     conv
 		     (vec-i-y (aref *centers* nucleus)))
       (save-stack-ub8 (format nil "/home/martin/tmp/angular-2light-~3,'0d/" nucleus)
@@ -883,7 +883,7 @@ back focal plane set BIG-WINDOW to true."
 	      (format t "plane-result ~f ~f ~f~%" mplane mvol gamma))
 	    result))))))
 
-#+nil 
+#+nil
 (time
  (progn
   (with-open-file (*standard-output* "/home/martin/tmp/angular-stack.log"
@@ -906,11 +906,11 @@ back focal plane set BIG-WINDOW to true."
 #+nil ;; overlay lightfield and spheres
 (time
  (save-stack-ub8 "/home/martin/tmp/sphere-and-excite/"
-		 (normalize3-cdf/ub8-realpart 
+		 (normalize3-cdf/ub8-realpart
 		  (labels ((con (vol)
 			     (convert3-ub8/cdf-complex (normalize3-cdf/ub8-realpart vol))))
 		    (.+ (con *angular-light-field*)
-			(s* .7d0 (con *spheres*)) 
+			(s* .7d0 (con *spheres*))
 			*angular-light-field-start*)))))
 
 #+nil
@@ -1090,13 +1090,16 @@ numbers x+i y."
       (draw-circle))))
 
 #+nil
+(init-angular-model)
+
+#+nil
 (gui:with-gui
   (draw))
 
 #+nil ;; z slice of sphere
 (+ (floor (elt *dims* 0) 2)
    (/
-    (vec-x 
+    (vec-x
      (sphere-center
       (aref *spheres-c-r* 0)))
     .001))
@@ -1104,6 +1107,34 @@ numbers x+i y."
 (sphere-center
       (aref *spheres-c-r* 0))
 
+
+;; sketch of the coordinate system:
+;;
+;; the objective sits below the sample. its (thin) lens has a distance
+;; nf to the in-focus plane. z is directed from the objective towards
+;; the sample. the first slice of the stack is nearest to the
+;; objective.
+;;
+;;     	               ^ z
+;;                     |
+;;            	       |   /
+;;           	 +-----+-/----+
+;;       --------+-----/------+---------    nf
+;;           	 +---/-+------+
+;;            	    /  |
+;;     \          /-   |               /
+;;     	\       /-     |              /	principal
+;;     	 -\   /-       |            /-	  sphere
+;;         --/         |         /--
+;;     	     |---\     |     /---
+;;           | 	  -----+-----------------    0
+;;   	     | 	       |
+;;    	     | 	       |
+;;           | 	       |
+;;     	     |         |
+;;       ----+---------+-----------------   -f
+;;           |	       |   back focal plane
+;;	               |
 
 (defun draw ()
   (destructuring-bind (z y x)
@@ -1140,7 +1171,7 @@ numbers x+i y."
 	   (shift-z (-
 		     (/ (vec-z cent) dz)
 		     )))
-      
+
       (progn
 	(gl:enable :depth-test)
 	(when (< 360 (incf *rot*))
@@ -1160,21 +1191,21 @@ numbers x+i y."
       (translate-v (v* ez nf))
       (gl:color 0 0 0 1)
       (dotimes (i (length *spheres-c-r*))
-	(gl:with-pushed-matrix 
+	(gl:with-pushed-matrix
 	  (with-slots (center radius)
 	      (aref *spheres-c-r* i)
 	    (translate-v center)
 	    (glut:solid-sphere radius 8 4))))
       (gl:color 1 1 1 1)
       (gl:line-width 1)
-      
+
       (dotimes (i (length *spheres-c-r*))
-	(gl:with-pushed-matrix 
+	(gl:with-pushed-matrix
 	  (with-slots (center radius)
 	      (aref *spheres-c-r* i)
 	    (translate-v center)
 	    (glut:wire-sphere (* 1.03 radius) 8 4))))))
-      
+
       (debug-out f bfp-radius theta phi)
       (draw-disk (make-vec 0d0 0d0 (- f)) bfp-radius)
       (draw-disk (make-vec 0d0 0d0 0d0) bfp-radius)
@@ -1254,7 +1285,7 @@ numbers x+i y."
 			     (hlist (list h+z h-z h+y h-y h+x h-x))
 			     ;; throw away points that are nil or that contain
 			     ;; coordinates outside of the array dimensions
-			     (filtered-hlist 
+			     (filtered-hlist
 			      (remove-if-not #'(lambda (v)
 						 (if v
 						     (and (< -1 (vec-i-x v) x)
@@ -1354,7 +1385,7 @@ numbers x+i y."
 		      (hlist (list h+z h-z h+y h-y h+x h-x))
 		      ;; throw away points that are nil or that contain
 		      ;; coordinates outside of the array dimensions
-		      (filtered-hlist 
+		      (filtered-hlist
 		       (remove-if-not #'(lambda (v)
 					  (if v
 					      (and (< -1 (vec-i-x v) x)
@@ -1474,7 +1505,7 @@ the bfp."
 				       ;; set temperature bigger than the
 				       ;; maxima in the bfp but smaller
 				       ;; than border-value
-				       :start-temperature 2.4d0 
+				       :start-temperature 2.4d0
 				       :eps/m .02d0
 				       :itmax 1000
 				       :ftol 1d-3)
