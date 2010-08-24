@@ -623,7 +623,7 @@ back focal plane set BIG-WINDOW to true."
   (when (< 360 (incf *rot*))
     (setf *rot* 0))
   (gl:rotate *rot* 0 0 1)
-  (let ((s 200))
+  (let ((s 100))
    (gl:scale s s s))
   (gl:disable :lighting)
   (gl:line-width 3)
@@ -1252,7 +1252,7 @@ numbers x+i y."
 	    (gl:line-width 7)
 	    (gl:with-primitive :line-strip
 	      (vertex-v start)
-	      (vertex-v s)
+	      (vertex-v (make-vec (vec-x s) (vec-y s) (- (vec-z s))))
 	      (vertex-v (v+ (make-vec x-mm y-mm z-mm)
 			    (v* ez nf))))
 	    #+nil (let* ((nro (normalize ro)))
