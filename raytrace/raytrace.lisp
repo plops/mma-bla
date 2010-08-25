@@ -26,41 +26,39 @@
 
 (declaim (optimize (speed 2) (safety 3) (debug 3)))
 
-(declaim (ftype (function (double-float double-float double-float)
-			  (values (or null double-float) 
-				  &optional double-float))
-		quadratic-roots))
+(define-condition one-solution () ())
+(define-condition no-solution () ())
+
 (defun quadratic-roots (a b c)
+  (declare (double-float a b c)
+	   (values double-float double-float &optional))
   "Find the two roots of ax^2+bx+c=0 and return them as multiple
   values."
   ;; see numerical recipes sec 5.6, p. 251 on how to avoid roundoff
   ;; error
   (let ((det2 (- (* b b) (* 4 a c))))
-    #+nil (let ((tiny 1d-12))
-      (when (or (< (abs a) tiny)
-		(< (abs c) tiny) 
-		(< (abs b) tiny))
-       ;; i get division by zero when centered sphere
-	;; note: I didn't implement all the corner cases I think
-       (return-from quadratic-roots nil #+nil (values 0d0 0d0))))
-    (when (<= 0d0 det2) ;; we don't want complex results
-      (let* ((pdet2 det2)
-	     (q (* .5d0 (+ b (* (signum b) (sqrt pdet2)))))
-	     (x1 (/ q a))
-	     (x2 (/ c q)))
-	(declare ((double-float 0d0) pdet2)) ;; its positive
-	(values x1 x2)))))
+    (unless (<= 0d0 det2)
+      (error 'no-solution))
+    (let* ((q (* .5d0 (+ b (* (signum b) (sqrt det2)))))
+	   (aa (abs a))
+	   (aq (abs q)))
+      (cond ((and (< aq 1d-12) (< aa 1d-12)) (error 'no-solution))
+	    ((or (< aq 1d-12) (< aa 1d-12)) (error 'one-solution))
+	    (t (values (/ q a) (/ c q)))))))
 
-#+nil 
+#+nil ;; two solution
 (quadratic-roots 1d0 2d0 -3d0)
-#+nil
-(quadratic-roots 0d0 -0d0 0d0)
+#+nil ;; one solution
+(quadratic-roots 0d0 1d0 0d0)
+#+nil ;; no solution
+(quadratic-roots 0d0 -0d0 1d0)
 
 (declaim (ftype (function (vec vec vec double-float)
 			  (values (or null double-float) &optional))
 		ray-sphere-intersection-length))
 (defun ray-sphere-intersection-length 
     (ray-start ray-direction sphere-center sphere-radius)
+  (declare (values double-float &optional))
   ;; (c-x)^2=r^2 defines the sphere, substitute x with the rays p+alpha a,
   ;; the raydirection should have length 1, solve the quadratic equation,
   ;; the distance between the two solutions is the distance that the ray
@@ -69,32 +67,34 @@
 	 (c (- (v. l l) (* sphere-radius sphere-radius)))
 	 (a (normalize ray-direction))
 	 (b (* -2d0 (v. l a))))
-    (multiple-value-bind (x1 x2)
-	(quadratic-roots 1d0 b c)
-      (when x1
-	(abs (- x1 x2))))))
+    (handler-case
+	(multiple-value-bind (x1 x2)
+	    (quadratic-roots 1d0 b c)
+	  (abs (- x1 x2)))
+      (no-solution () 0d0)
+      (one-solution () 0d0))))
 
 #+nil
 (ray-sphere-intersection-length (v 0d0 .1d0 -12d0) (v 0d0 0d0 1d0) (v) 3d0)
 
 (defun direction (theta-degree phi-degree)
   "Convert spherical coordinates into cartesian."
+  (declare ((double-float 0d0 90d0) theta-degree)
+	   ((double-float 0d0 360d0) phi-degree)
+	   (values vec &optional))
   (let* ((theta (* theta-degree (/ pi 180d0)))
 	 (st (sin theta))
 	 (phi (* phi-degree (/ pi 180d0))))
-    #+nil    (declare ((double-float 0d0 #.pi) theta) ;; ranges were a bit complicated
-		      ((double-float 0d0 #.pi) phi))
     (make-vec (* st (cos phi))
 	      (* st (sin phi))
-	      (* (cos theta)))))
+	      (cos theta))))
 
 #+nil
-(direction 45 0)
+(direction 45d0 0d0)
 
-
-(defstruct sphere 
-  (center (v) :type vec)
-  (radius 0d0 :type double-float))
+(defclass sphere ()
+  ((center :accessor center :initarg :center :initform (v) :type vec)
+   (radius :accessor radius :initarg :radius :initform 1d0 :type double-float)))
 
 (declaim (ftype (function (vec vec (simple-array sphere 1) fixnum)
 			  (values double-float &optional))

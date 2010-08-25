@@ -13,7 +13,10 @@
    #:m #:rotation-matrix #:m*
    #:vec-i #:make-vec-i #:vec-i-x #:vec-i-y #:vec-i-z
    #:v.-i #:v+-i #:v--i #:v*-i #:norm-i
-   #:ray))
+   #:ray
+   #:ray-lost
+   #:direction-not-normalized
+   #:check-direction-norm))
 
 (in-package :vector)
 
@@ -273,6 +276,8 @@ result."
       (setf (aref result i) (* scalar (aref a i))))
     result))
 
+(define-condition ray-lost () ())
+(define-condition direction-not-normalized () ())
 
 (defclass ray ()
   ((start :accessor start :initarg :start
@@ -283,6 +288,12 @@ result."
 (defmethod print-object ((ray ray) stream)
   (with-slots (start direction) ray
    (format stream "#<ray start: ~a dir: ~a>" start direction)))
+
+(defmethod check-direction-norm ((ray ray))
+  (with-slots (direction)
+      ray
+    (unless (< (abs (- (norm direction) 1)) 1d-12)
+      (error 'direction-not-normalized))))
 
 #+nil
 (make-instance 'ray)
