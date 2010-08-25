@@ -1,2 +1,4 @@
 (asdf:defsystem raytrace
-  :components ((:module "raytrace" :components ((:file "raytrace")))))
+  :depends-on (:vector)
+  :components
+  ((:module "raytrace" :components ((:file "raytrace")))))

@@ -1,26 +1,10 @@
-#.(progn
-    (require :asdf)
-    (require :vector)
-#+nil    (require :simple-gl)
-    (require :simplex-anneal))
-
-;; for i in `cat raytrace.lisp|grep defun|grep -v '^;'|cut -d " " -f2`;
-;; do echo \#:$i ;done
-
-
 (defpackage :raytrace
-#+nil  (:shadowing-import-from :cl close get special)
-(:export #:quadratic-roots
-	 #:ray-sphere-intersection-length
-	 #:direction
-	 #:ray-spheres-intersection
-	 #:sphere
-	 #:center
-	 #:radius
-	 #:make-sphere
-	 #:sphere-center
-	 #:sphere-radius)
-(:use :cl #+nil :gl #+nil :glut :vector :simplex-anneal))
+  (:export #:quadratic-roots
+	   #:direction
+	   #:ray-sphere-intersection-length
+	   #:ray-spheres-intersection
+	   #:sphere)
+  (:use :cl :vector))
 
 (in-package :raytrace)
 
@@ -39,9 +23,11 @@
   (let ((det2 (- (* b b) (* 4 a c))))
     (unless (<= 0d0 det2)
       (error 'no-solution))
-    (let* ((q (* .5d0 (+ b (* (signum b) (sqrt det2)))))
+    (let* ((pdet2 det2)
+	   (q (* .5d0 (+ b (* (signum b) (sqrt pdet2)))))
 	   (aa (abs a))
 	   (aq (abs q)))
+      (declare ((double-float 0d0) pdet2))
       (cond ((and (< aq 1d-12) (< aa 1d-12)) (error 'no-solution))
 	    ((or (< aq 1d-12) (< aa 1d-12)) (error 'one-solution))
 	    (t (values (/ q a) (/ c q)))))))
@@ -52,6 +38,16 @@
 (quadratic-roots 0d0 1d0 0d0)
 #+nil ;; no solution
 (quadratic-roots 0d0 -0d0 1d0)
+
+(defclass sphere ()
+  ((center :accessor center :initarg :center :initform (v) :type vec)
+   (radius :accessor radius :initarg :radius :initform 1d0 :type double-float)))
+
+
+(defmethod print-object ((sphere sphere) stream)
+  (with-slots (center radius) sphere
+    (format stream "#<sphere radius: ~4f center: <~4f ~4f ~4f>>" 
+	    radius (vec-x center) (vec-y center) (vec-z center))))
 
 (defmethod ray-sphere-intersection-length ((ray ray) (sphere sphere))
   (declare (values double-float &optional))
@@ -75,6 +71,18 @@
 #+nil
 (ray-sphere-intersection-length (v 0d0 .1d0 -12d0) (v 0d0 0d0 1d0) (v) 3d0)
 
+(defmethod ray-spheres-intersection ((ray ray) spheres illuminated-sphere-index)
+  (declare ((simple-array sphere 1) spheres)
+	   (fixnum illuminated-sphere-index)
+	   (values double-float &optional))
+  (let ((sum 0d0))
+    (dotimes (i (length spheres))
+      (unless (eq i illuminated-sphere-index)
+	(incf sum (ray-sphere-intersection-length ray
+						  (aref spheres i)))))
+    sum))
+
+
 (defun direction (theta-degree phi-degree)
   "Convert spherical coordinates into cartesian."
   (declare ((double-float 0d0 90d0) theta-degree)
@@ -90,102 +98,3 @@
 #+nil
 (direction 45d0 0d0)
 
-(defclass sphere ()
-  ((center :accessor center :initarg :center :initform (v) :type vec)
-   (radius :accessor radius :initarg :radius :initform 1d0 :type double-float)))
-
-(defmethod print-object ((sphere sphere) stream)
-  (with-slots (center radius) sphere
-   (format stream "#<sphere radius: ~4f center: <~4f ~4f ~4f>>" 
-	   radius (vec-x center) (vec-y center) (vec-z center))))
-
-(defmethod ray-spheres-intersection ((ray ray) spheres illuminated-sphere-index)
-  (declare ((simple-array sphere 1) spheres)
-	   (fixnum illuminated-sphere-index)
-	   (values double-float &optional))
-  (let ((sum 0d0))
-    (dotimes (i (length spheres))
-      (unless (eq i illuminated-sphere-index)
-	(incf sum (ray-sphere-intersection-length ray
-						  (aref spheres i)))))
-    sum))
- 
-#+nil 
-(defparameter centers 
-  '(( 6 87 157) ( 7 69 111) ( 7 87 196) ( 7 88 66) ( 7 92 33) ( 7 137 224)
-    ( 7 144 149) ( 8 41 163) ( 8 61 201) ( 8 110 123)( 8 126 180)
-    ( 8 131 99)( 9 34 107) ( 9 81 238) ( 10 166 208)( 11 58 77)  ( 11 111 245)
-    ( 11 143 75)  ( 11 164 112)( 11 167 173)  ( 12 72 142) ( 12 99 76)
-    ( 12 100 156) ( 12 122 44)  ( 12 144 248) ( 13 108 200)   ( 13 136 137)
-    ( 14 138 221)   ( 15 50 219) ( 15 113 106)   ( 15 175 145)
-    ( 16 56 107)  ( 16 77 189) ( 17 37 140)   ( 17 45 179)
-    ( 17 89 51)   ( 17 162 187)( 18 88 240)    ( 18 129 171)
-    ( 18 130 64) ( 18 163 188)( 19 151 99) ( 20 61 68)
-    ( 21 81 139)  ( 21 86 97)( 21 136 210) ( 21 151 141)
-    ( 22 48 109)( 22 53 151) ( 22 99 219)  ( 23 67 206)
-    ( 23 98 187)   ( 23 107 72)( 25 107 146)( 25 113 111)))
-#+nil 
-(progn
- (defparameter *central-sphere* 22)
- (defparameter *spheres* 
-   (make-array (length centers)
-	       :element-type 'sphere
-	       :initial-contents
-	       (let* ((q (elt centers *central-sphere*))
-		      (s (/ 70d0))
-		      (cen (make-vec (* s (third q))
-				     (* s (second q))
-				     (* 5d0 s (first q)))))
-		 (loop for c in centers collect
-		      (make-sphere :center
-				   (v- (v (* s (third c))
-					  (* s (second c))
-					  (* 5d0 s (first c)))
-				       cen)
-				   :radius (* s 22d0)))))
-   "center diameter"))
-
-
-#+nil
-(progn
-   (declaim (ftype (function ((array double-float (2)))
-			     (values double-float &optional))
-		   merit-function))
-   (defun merit-function (vec)
-     (ray-spheres-intersection 
-      (v .1d0 .2d0 0d0) 
-      (normalize (direction (aref vec 0) (aref vec 1)))
-      *spheres*
-      *central-sphere*)))
-
-#+nil
-(let ((start (make-array 2 :element-type 'double-float
-			 :initial-contents (list 100d0 100d0))))
-  (with-open-file (*standard-output* "/dev/shm/anneal.log"
-				     :direction :output
-				     :if-exists :supersede)
-    (anneal (make-simplex start 1d0)
-	    #'merit-function
-	    :start-temperature 12d0)))
-
-;; scan over the full parameters space
-#+nil
-(progn
- (with-open-file (s "/dev/shm/o.dat" :direction :output :if-exists :supersede)
-   (let ((ntheta 60)
-	 (nphi 90))
-     (dotimes (theta ntheta)
-       (dotimes (phi  nphi)
-	 (let ((a (* 90 (/ theta ntheta)))
-	       (b (* 180 (/ phi nphi))))
-	  (format s "~f ~f ~f~%" a b
-		  (ray-spheres-intersection (v) (direction a b)))))
-      (terpri s))))
- (with-open-file (s "/dev/shm/p1.gp" :direction :output
-		    :if-exists :supersede)
-   (format s "set term posts; set outp \"/dev/shm/p~2,'0d.ps\";set hidden
-set title \"nucleus nr. ~d\"
-unset key
-splot \"/dev/shm/o.dat\" u 1:2:3 w l
-#pause -1
-" *central-sphere* *central-sphere*)))

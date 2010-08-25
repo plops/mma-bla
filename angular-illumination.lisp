@@ -547,8 +547,9 @@ back focal plane set BIG-WINDOW to true."
 			  (* dx (vec-i-y point))
 			  (* dz (vec-i-z point)))))
        (dotimes (i n)
-	 (push (make-sphere :center (convert-point (aref centers i))
-			    :radius (* dx 12d0))
+	 (push (make-instance 'sphere 
+			      :center (convert-point (aref centers i))
+			      :radius (* dx 12d0))
 	       result-l))
        (make-array (length result-l) :element-type 'sphere
 		   :initial-contents (nreverse result-l))))))
