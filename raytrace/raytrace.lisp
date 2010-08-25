@@ -53,26 +53,24 @@
 #+nil ;; no solution
 (quadratic-roots 0d0 -0d0 1d0)
 
-(declaim (ftype (function (vec vec vec double-float)
-			  (values (or null double-float) &optional))
-		ray-sphere-intersection-length))
-(defun ray-sphere-intersection-length 
-    (ray-start ray-direction sphere-center sphere-radius)
+(defmethod ray-sphere-intersection-length ((ray ray) (sphere sphere))
   (declare (values double-float &optional))
   ;; (c-x)^2=r^2 defines the sphere, substitute x with the rays p+alpha a,
   ;; the raydirection should have length 1, solve the quadratic equation,
   ;; the distance between the two solutions is the distance that the ray
   ;; travelled through the sphere
-  (let* ((l (v- sphere-center ray-start))
-	 (c (- (v. l l) (* sphere-radius sphere-radius)))
-	 (a (normalize ray-direction))
-	 (b (* -2d0 (v. l a))))
-    (handler-case
-	(multiple-value-bind (x1 x2)
-	    (quadratic-roots 1d0 b c)
-	  (abs (- x1 x2)))
-      (no-solution () 0d0)
-      (one-solution () 0d0))))
+  (check-direction-norm ray)
+  (destructuring-bind (start direction) ray
+    (destructuring-bind (center radius) sphere
+      (let* ((l (v- center start))
+	     (c (- (v. l l) (* radius radius)))
+	     (b (* -2d0 (v. l direction))))
+       (handler-case
+	   (multiple-value-bind (x1 x2)
+	       (quadratic-roots 1d0 b c)
+	     (abs (- x1 x2)))
+	 (no-solution () 0d0)
+	 (one-solution () 0d0))))))
 
 #+nil
 (ray-sphere-intersection-length (v 0d0 .1d0 -12d0) (v 0d0 0d0 1d0) (v) 3d0)
@@ -96,30 +94,21 @@
   ((center :accessor center :initarg :center :initform (v) :type vec)
    (radius :accessor radius :initarg :radius :initform 1d0 :type double-float)))
 
-(declaim (ftype (function (vec vec (simple-array sphere 1) fixnum)
-			  (values double-float &optional))
-		ray-spheres-intersection))
-(defun ray-spheres-intersection (ray-position ray-dir spheres
-				 illuminated-sphere-index)
- (let ((sum 0d0))
-   (dotimes (i (length spheres))
-     (unless (eq i illuminated-sphere-index)
-       (with-slots (center radius)
-	   (aref spheres i)
-	(let ((len (ray-sphere-intersection-length
-		    ray-position ray-dir
-		    center radius)))
-	  (when len
-	    (incf sum len))))))
-   sum))
-
 (defmethod print-object ((sphere sphere) stream)
   (with-slots (center radius) sphere
    (format stream "#<sphere radius: ~4f center: <~4f ~4f ~4f>>" 
 	   radius (vec-x center) (vec-y center) (vec-z center))))
 
-#+nil
-(make-sphere :radius 3.1415d0 :center (v 1d0 2d0 3.032032d0)) 
+(defmethod ray-spheres-intersection ((ray ray) spheres illuminated-sphere-index)
+  (declare ((simple-array sphere 1) spheres)
+	   (fixnum illuminated-sphere-index)
+	   (values double-float &optional))
+  (let ((sum 0d0))
+    (dotimes (i (length spheres))
+      (unless (eq i illuminated-sphere-index)
+	(incf sum (ray-sphere-intersection-length ray
+						  (aref spheres i)))))
+    sum))
  
 #+nil 
 (defparameter centers 
