@@ -55,8 +55,8 @@
   ;; the distance between the two solutions is the distance that the ray
   ;; travelled through the sphere
   (check-direction-norm ray)
-  (destructuring-bind (start direction) ray
-    (destructuring-bind (center radius) sphere
+  (with-slots ((start vector::start) (direction vector::direction)) ray
+    (with-slots (center radius) sphere
       (let* ((l (v- center start))
 	     (c (- (v. l l) (* radius radius)))
 	     (b (* -2d0 (v. l direction))))

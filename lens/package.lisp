@@ -9,4 +9,5 @@
 	   #:back-focal-plane-radius
 	   #:focal-length-from-magnification
 	   #:make-objective
-	   #:find-inverse-ray-angle))
+	   #:find-inverse-ray-angle
+	   #:get-ray-behind-objective))

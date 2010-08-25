@@ -380,7 +380,7 @@ back focal plane set BIG-WINDOW to true."
 				     ;; coordinates
 			)
 	  collect
-	    `(defparameter ,i nil))))
+	    `(defvar ,i nil))))
 
 (defstuff)
 
@@ -529,7 +529,7 @@ back focal plane set BIG-WINDOW to true."
   (save-stack-ub8 "/home/martin/tmp/angular-0lcos" (normalize-3-csf/ub8-realpart vol)))
 
 ;; the parameter params contains state in the following list
-;; (objective window-radius nucleus-index spheres-c-r)
+;; params: (objective window-radius nucleus-index spheres-c-r)
 (defun merit-function (vec2 params)
   (declare ((simple-array double-float (2)) vec2)
 	   (cons params)
@@ -563,22 +563,22 @@ back focal plane set BIG-WINDOW to true."
   (declare (fixnum nucleus)
 	   (cons params)
 	   (values vec2 &optional))
-  (let ((*nucleus-index* nucleus))
-    (loop
-       (multiple-value-bind (min point)
-	   (simplex-anneal:anneal (simplex-anneal:make-simplex
-				   (make-vec2 :x -1d0 :y -1d0) 1d0)
-				  #'merit-function
-				  ;; set temperature bigger than the
-				  ;; maxima in the bfp but smaller
-				  ;; than border-value
-				  :start-temperature 2.4d0
-				  :eps/m .02d0
-				  :itmax 1000
-				  :ftol 1d-3
-				  :params params)
-	 (when (< min 100d0)
-	   (return-from find-optimal-bfp-window-center point))))))
+  (setf (elt params 2) nucleus)
+  (loop
+     (multiple-value-bind (min point)
+	 (simplex-anneal:anneal (simplex-anneal:make-simplex
+				 (make-vec2 :x -1d0 :y -1d0) 1d0)
+				#'merit-function
+				;; set temperature bigger than the
+				;; maxima in the bfp but smaller
+				;; than border-value
+				:start-temperature 2.4d0
+				:eps/m .02d0
+				:itmax 1000
+				:ftol 1d-3
+				:params params)
+       (when (< min 100d0)
+	 (return-from find-optimal-bfp-window-center point)))))
 
 #+nil
 (find-optimal-bfp-window-center 0)
@@ -730,26 +730,6 @@ back focal plane set BIG-WINDOW to true."
 ;; Possibly I shouldn't call it merit function as I try to minimize
 ;; its result.
 
-(defmethod get-ray-behind-objective ((obj lens::objective)
-				     x-mm y-mm bfp-ratio-x bfp-ratio-y)
-  "Take a point on the back focal plane and a point in the sample and
- calculate the ray direction ro that leaves the objective. So its the
- same calculation that is used for draw-ray-into-vol."
-  (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
-	   (values ray &optional))
-  (with-slots ((bfp lens::bfp-radius)
-	       (f lens::focal-length)) obj
-    (let* ((theta (lens:find-inverse-ray-angle obj x-mm y-mm))
-	   (phi (atan y-mm x-mm)))
-      (lens:refract (make-instance 'ray 
-				   :start (make-vec (* bfp-ratio-x bfp)
-						    (* bfp-ratio-y bfp)
-						    (- f))
-				   :direction (v-spherical theta phi))
-		    obj))))
-
-#+nil
-(get-ray-behind-objective .1d0 .1d0 0d0 0d0)
 
 ;; In *spheres-c-r* I stored the coordinates of all the nuclei
 ;; relative to the center of the initial stack of images. It also
@@ -804,7 +784,7 @@ numbers x+i y."
 
 (defmethod illuminate-ray ((objective lens::objective) spheres-c-r 
 			   illuminated-sphere-index sample-position 
-			   window-radius-ratio bfp-ratio-x bfp-ratio-y
+			   bfp-ratio-x bfp-ratio-y window-radius-ratio 
 			   bfp-position)
   "Trace a ray from a point in the back focal plane through the disk
 that encompasses the nucleus with index
@@ -822,7 +802,7 @@ returned. "
 	   ((simple-array sphere 1) spheres-c-r)
 	   (values double-float &optional))
   (with-slots ((center raytrace::center)
-	       (radius raytrace::center))
+	       (radius raytrace::radius))
       (aref spheres-c-r illuminated-sphere-index)
     (with-slots ((bfp-radius lens::bfp-radius)
 		 (ri lens::immersion-index)
@@ -832,8 +812,9 @@ returned. "
 			      (complex (vec-x center) (vec-y center))
 			      radius sample-position))
 		 (bfp-pos (sample-circle (complex bfp-ratio-x bfp-ratio-y)
-					 window-radius-ratio bfp-position))
-		 (ray1 (get-ray-behind-objective 
+					 window-radius-ratio	 
+					 bfp-position))
+		 (ray1 (lens:get-ray-behind-objective 
 			objective
 			(realpart sample-pos) (imagpart sample-pos)
 			(realpart bfp-pos)    (imagpart bfp-pos)))
@@ -845,31 +826,37 @@ returned. "
 				      0d0
 				      (- (* ri f) (vec-z center))))
 			:direction (normalize (vector::direction ray1))))
-		 (exposure (ray-spheres-intersection ray2
-						     spheres-c-r
-						     illuminated-sphere-index)))
+		 (exposure (raytrace:ray-spheres-intersection 
+			    ray2 spheres-c-r
+			    illuminated-sphere-index)))
 	    exposure)
-	(ray-lost () 100d0)))))
+	(ray-lost () 0d0)))))
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
- (let* ((n 100)
+ (let* ((n 30)
 	(a (make-array (list n n) :element-type 'double-float))
 	(nn (length *spheres-c-r*))
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
-			    :element-type 'double-float)))
-   (dotimes (*nucleus-index* 3 nn)
-     (dotimes (i n)
-       (dotimes (j n)
-	 (let ((x (- (* 2d0 (/ i n)) 1d0))
-	       (y (- (* 2d0 (/ j n)) 1d0)))
-	   (setf (aref a j i)
-		 (merit-function
-		  (make-vec2 :x x :y y))))))
+			    :element-type 'double-float))
+	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
+	(window-radius .05d0))
+   (dotimes (nucleus-index nn)
+     (let ((params (list obj
+			 window-radius
+			 nucleus-index
+			 *spheres-c-r*)))
+      (dotimes (i n)
+	(dotimes (j n)
+	  (let ((x (- (* 2d0 (/ i n)) 1d0))
+		(y (- (* 2d0 (/ j n)) 1d0)))
+	    (setf (aref a j i)
+		  (merit-function (make-vec2 :x x :y y)
+				  params))))))
      (do-region ((j i) (n n))
-       (let ((x (mod *nucleus-index* mosaicx))
-	     (y (floor *nucleus-index* mosaicx)))
+       (let ((x (mod nucleus-index mosaicx))
+	     (y (floor nucleus-index mosaicx)))
 	 (setf (aref mosaic (+ (* n y) j) (+ (* n x) i))
 	       (aref a j i)))))
    (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-2-df/ub8 mosaic))))
