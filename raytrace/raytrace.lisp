@@ -1,6 +1,5 @@
 (defpackage :raytrace
   (:export #:quadratic-roots
-	   #:direction
 	   #:ray-sphere-intersection-length
 	   #:ray-spheres-intersection
 	   #:sphere)
@@ -83,18 +82,6 @@
     sum))
 
 
-(defun direction (theta-degree phi-degree)
-  "Convert spherical coordinates into cartesian."
-  (declare ((double-float 0d0 90d0) theta-degree)
-	   ((double-float 0d0 360d0) phi-degree)
-	   (values vec &optional))
-  (let* ((theta (* theta-degree (/ pi 180d0)))
-	 (st (sin theta))
-	 (phi (* phi-degree (/ pi 180d0))))
-    (make-vec (* st (cos phi))
-	      (* st (sin phi))
-	      (cos theta))))
 
-#+nil
-(direction 45d0 0d0)
+
 

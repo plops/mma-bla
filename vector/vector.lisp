@@ -6,6 +6,7 @@
    #:vec 
    #:make-vec 
    #:v
+   #:v-spherical
    #:vec-x #:vec-y #:vec-z
    #:v. #:v+ #:v- #:v* 
    #:norm #:normalize
@@ -82,6 +83,16 @@
   `(make-vec ,@(mapcar #'(lambda (x)
 			   (coerce x 'double-float))
 		       args)))
+
+(defun v-spherical (theta phi)
+  "Convert spherical coordinates into cartesian."
+  (declare ((double-float 0d0 #.(/ pi 4)) theta)
+	   ((double-float 0d0 #.(* 2 pi)) phi)
+	   (values vec &optional))
+  (let* ((st (sin theta)))
+    (make-vec (* st (cos phi))
+	      (* st (sin phi))
+	      (cos theta))))
 
 (defun v. (a b)
   "Dot product between two vectors."
