@@ -270,11 +270,12 @@ the coordinates. Return the centroid."
 
 
 (defun amoeba (simplex funk &key (itmax 500) (ftol 1d-5) (temperature 1000d0) 
-	       (simplex-min-size .1d0))
+	       (simplex-min-size .1d0) (params nil))
   (declare ((simple-array double-float 2) simplex)
 	   (function funk)
 	   (fixnum itmax)
 	   (double-float ftol temperature simplex-min-size)
+	   (cons params)
 	   (values double-float 
 		   (simple-array double-float 1)
 		   double-float
@@ -295,7 +296,7 @@ the coordinates. Return the centroid."
      ;; evaluate function on all vertices
      (dotimes (i nr-points)
        (setf (aref vals i)
-	     (funcall funk (displace simplex i))))
+	     (funcall funk (displace simplex i) params)))
      (tagbody
       label1
 	(incf iteration)
@@ -379,11 +380,12 @@ the coordinates. Return the centroid."
 	      (go label1))))))))
 
 (defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0)
-	       (eps/m .02d0) (simplex-min-size .1d0))
+	       (eps/m .02d0) (simplex-min-size .1d0) (params nil))
   (declare ((simple-array double-float 2) simplex)
 	   (function funk)
 	   (fixnum itmax)
 	   (double-float ftol start-temperature eps/m simplex-min-size)
+	   (cons params)
 	   (values double-float (simple-array double-float 1) &optional))
   (let* ((m 30)
 	 (eps (* eps/m m))
@@ -392,7 +394,8 @@ the coordinates. Return the centroid."
 	(())
       (multiple-value-bind (value point rtol best-ever-value best-ever)
 	  (amoeba simplex funk :itmax m :ftol ftol 
-		  :temperature temp :simplex-min-size simplex-min-size)
+		  :temperature temp :simplex-min-size simplex-min-size
+		  :params params)
 	(declare (ignore best-ever-value
 			 best-ever))
 	(when (or (< itmax count)

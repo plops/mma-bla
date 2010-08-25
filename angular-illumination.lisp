@@ -384,31 +384,27 @@ back focal plane set BIG-WINDOW to true."
 
 (defstuff)
 
-(defun create-sphere-array (dims centers)
-  (declare (cons dims)
-	   ((simple-array vec-i 1) centers)
+(defun create-sphere-array (centers)
+  (declare ((simple-array vec-i 1) centers)
 	   (values (simple-array sphere 1) &optional))
- (destructuring-bind (z y x)
-     dims
-   (declare (fixnum z y x))
-   (let* ((ri 1.515d0)
-	  (dx (* +one+ ri .2e-3))
-	  (dz (* +one+ ri 1e-3))
-	  (n (length centers))
-	  (result-l nil))
-     (labels ((convert-point (point)
-		(declare (vec-i point)
-			 (values vec &optional))
-		(make-vec (* dx (vec-i-x point))
-			  (* dx (vec-i-y point))
-			  (* dz (vec-i-z point)))))
-       (dotimes (i n)
-	 (push (make-instance 'sphere 
-			      :center (convert-point (aref centers i))
-			      :radius (* dx 12d0))
-	       result-l))
-       (make-array (length result-l) :element-type 'sphere
-		   :initial-contents (nreverse result-l))))))
+  (let* ((ri 1.515d0)
+	 (dx (* +one+ ri .2e-3))
+	 (dz (* +one+ ri 1e-3))
+	 (n (length centers))
+	 (result-l nil))
+    (labels ((convert-point (point)
+	       (declare (vec-i point)
+			(values vec &optional))
+	       (make-vec (* dx (vec-i-x point))
+			 (* dx (vec-i-y point))
+			 (* dz (vec-i-z point)))))
+      (dotimes (i n)
+	(push (make-instance 'sphere 
+			     :center (convert-point (aref centers i))
+			     :radius (* dx 12d0))
+	      result-l))
+      (make-array (length result-l) :element-type 'sphere
+		  :initial-contents (nreverse result-l)))) )
 
 (defun init-angular-model ()
   ;; find the centers of the nuclei and store into *centers*
@@ -441,7 +437,7 @@ back focal plane set BIG-WINDOW to true."
 					  :initial-contents result))))
 
   (defparameter *spheres-c-r*
-    (create-sphere-array *dims* *centers*))
+    (create-sphere-array *centers*))
   (let ((spheres
 	 (destructuring-bind (z y x)
 	     *dims*
@@ -532,40 +528,40 @@ back focal plane set BIG-WINDOW to true."
   (write-section "/home/martin/tmp/angular-0lcos-cut.pgm" vol)
   (save-stack-ub8 "/home/martin/tmp/angular-0lcos" (normalize-3-csf/ub8-realpart vol)))
 
-
-(defvar *nucleus-index* 0)
-(defvar *bfp-window-radius* .08d0)
-
-;; the following global variable contain state for merit-function:
-;; *bfp-window-radius* *nucleus-index* *spheres-c-r*
-(defun merit-function (vec2)
+;; the parameter params contains state in the following list
+;; (objective window-radius nucleus-index spheres-c-r)
+(defun merit-function (vec2 params)
   (declare ((simple-array double-float (2)) vec2)
+	   (cons params)
 	   (values double-float &optional))
-  (let* ((border-value 0d0) ;; value to return when outside of bfp
-	 ;; this has to be considerably bigger than the maxima on the bfp
-	 (border-width *bfp-window-radius*) ;; in this range to the
-	 ;; border of the bfp
-	 ;; enforce bad merit
-	 ;; function
-	 (sum 0d0)
-	 (radius (norm2 vec2)))
-    (if (< radius (- .99d0 border-width))
-	;; inside
-	(loop for dirs in '((:right :left)
-			    (:top :bottom)) do
-	     (loop for dir in dirs do
-		  (loop for bfp-dir in dirs do
-		       (incf sum
-			     (illuminate-ray *spheres-c-r* *nucleus-index* dir
-					     (vec2-x vec2) (vec2-y vec2)
-					     *bfp-window-radius*
-					     bfp-dir)))))
-	;; in the border-width or outside of bfp
-	(incf sum border-value))
-    sum))
+  (destructuring-bind (objective window-radius nucleus-index spheres-c-r)
+      params
+   (let* ((border-value 0d0) ;; value to return when outside of bfp
+	  ;; this has to be considerably bigger than the maxima on the bfp
+	  (border-width window-radius) ;; in this range to the
+	  ;; border of the bfp
+	  ;; enforce bad merit
+	  ;; function
+	  (sum 0d0)
+	  (radius (norm2 vec2)))
+     (if (< radius (- .99d0 border-width))
+	 ;; inside
+	 (loop for dirs in '((:right :left)
+			     (:top :bottom)) do
+	      (loop for dir in dirs do
+		   (loop for bfp-dir in dirs do
+			(incf sum
+			      (illuminate-ray objective
+					      spheres-c-r nucleus-index dir
+					      (vec2-x vec2) (vec2-y vec2)
+					      window-radius bfp-dir)))))
+	 ;; in the border-width or outside of bfp
+	 (incf sum border-value))
+     sum)))
 
-(defun find-optimal-bfp-window-center (nucleus)
+(defun find-optimal-bfp-window-center (nucleus params)
   (declare (fixnum nucleus)
+	   (cons params)
 	   (values vec2 &optional))
   (let ((*nucleus-index* nucleus))
     (loop
@@ -579,7 +575,8 @@ back focal plane set BIG-WINDOW to true."
 				  :start-temperature 2.4d0
 				  :eps/m .02d0
 				  :itmax 1000
-				  :ftol 1d-3)
+				  :ftol 1d-3
+				  :params params)
 	 (when (< min 100d0)
 	   (return-from find-optimal-bfp-window-center point))))))
 
@@ -733,18 +730,17 @@ back focal plane set BIG-WINDOW to true."
 ;; Possibly I shouldn't call it merit function as I try to minimize
 ;; its result.
 
-(defun get-ray-behind-objective (x-mm y-mm bfp-ratio-x bfp-ratio-y)
+(defmethod get-ray-behind-objective ((obj lens::objective)
+				     x-mm y-mm bfp-ratio-x bfp-ratio-y)
   "Take a point on the back focal plane and a point in the sample and
  calculate the ray direction ro that leaves the objective. So its the
  same calculation that is used for draw-ray-into-vol."
   (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
 	   (values ray &optional))
-  (let* ((obj (lens:make-objective :normal (v 0 0 1)
-				   :center (v)))
-	 (theta (lens:find-inverse-ray-angle obj x-mm y-mm))
-	 (phi (atan y-mm x-mm)))
-    (with-slots ((bfp lens::bfp-radius)
-		 (f lens::focal-length)) obj
+  (with-slots ((bfp lens::bfp-radius)
+	       (f lens::focal-length)) obj
+    (let* ((theta (lens:find-inverse-ray-angle obj x-mm y-mm))
+	   (phi (atan y-mm x-mm)))
       (lens:refract (make-instance 'ray 
 				   :start (make-vec (* bfp-ratio-x bfp)
 						    (* bfp-ratio-y bfp)
@@ -787,7 +783,7 @@ numbers x+i y."
    (+ center (* radius (exp (complex 0d0 phi))))))
 
 #+nil
-(sample-circle (complex 1d0 1d0) 1d0 :right)
+(sample-unit-circle (complex 1d0 1d0) :right)
 
 #+buk
 (with-slots (center radius)
@@ -806,52 +802,54 @@ numbers x+i y."
 #+nil
 (init-angular-model)
 
-(defun illuminate-ray (spheres-c-r illuminated-sphere-index
-		       sample-position
-		       bfp-center-x bfp-center-y
-		       bfp-radius bfp-position)
+(defmethod illuminate-ray ((objective lens::objective) spheres-c-r 
+			   illuminated-sphere-index sample-position 
+			   window-radius-ratio bfp-ratio-x bfp-ratio-y
+			   bfp-position)
   "Trace a ray from a point in the back focal plane through the disk
 that encompasses the nucleus with index
 ILLUMINATED-SPHERE-INDEX. SAMPLE-POSITION and BFP-POSITION can assume
 one of the four values :LEFT, :RIGHT, :TOP and :BOTTOM indicating
 which point on the periphery of the correspondi2ng circle is meant
-Coordinates in the back focal plane are ratios, e.g. bfp-center-x=1 is
-on the border and a window with bfp-radius=1 passes all light through
-the bfp."
+Coordinates in the back focal plane are ratios, e.g. bfp-ratio-x=-1
+and 1 are on the border and a window with window-radius-ratio=1 passes
+all light through the bfp. When the ray gets lost in the
+objective (shouldn't happen if you stay inside the bfp) a big value is
+returned. "
   (declare (fixnum illuminated-sphere-index)
 	   (direction sample-position bfp-position)
-	   (double-float bfp-center-x bfp-center-y bfp-radius)
+	   (double-float bfp-ratio-x bfp-ratio-y window-radius-ratio)
 	   ((simple-array sphere 1) spheres-c-r)
 	   (values double-float &optional))
   (with-slots ((center raytrace::center)
-	       (radius raytrace::center)) (aref spheres-c-r illuminated-sphere-index)
-    (handler-case
-	(let* ((sample-pos (sample-circle (complex (vec-x center) (vec-y center))
-					  radius
-					  sample-position))
-	       (bfp-pos (sample-circle (complex bfp-center-x bfp-center-y)
-				       bfp-radius
-				       bfp-position))
-	       (ray1 (get-ray-behind-objective (realpart sample-pos) (imagpart sample-pos)
-					       (realpart bfp-pos)    (imagpart bfp-pos)))
-	       (ray2 (make-instance 'ray
-				    :start
-				    (v- (vector::start ray1)
-					(let ((z-mm (vec-z center))
-					      (nf (* 1.515d0 
-						     (lens:focal-length-from-magnification
-						      63d0))))
-					  (make-vec 0d0
-						    0d0
-						    (- nf z-mm))))
-				    :direction (normalize (vector::direction ray1))))
-	       (exposure (ray-spheres-intersection ray2
-						   spheres-c-r
-						   illuminated-sphere-index)))
-	  exposure)
-      (ray-lost () 100d0))))
-
-(defvar *bfp-window-radius* .1d0)
+	       (radius raytrace::center))
+      (aref spheres-c-r illuminated-sphere-index)
+    (with-slots ((bfp-radius lens::bfp-radius)
+		 (ri lens::immersion-index)
+		 (f lens::focal-length)) objective
+      (handler-case
+	  (let* ((sample-pos (sample-circle
+			      (complex (vec-x center) (vec-y center))
+			      radius sample-position))
+		 (bfp-pos (sample-circle (complex bfp-ratio-x bfp-ratio-y)
+					 window-radius-ratio bfp-position))
+		 (ray1 (get-ray-behind-objective 
+			objective
+			(realpart sample-pos) (imagpart sample-pos)
+			(realpart bfp-pos)    (imagpart bfp-pos)))
+		 (ray2 (make-instance 
+			'ray
+			:start
+			(v- (vector::start ray1)
+			    (make-vec 0d0
+				      0d0
+				      (- (* ri f) (vec-z center))))
+			:direction (normalize (vector::direction ray1))))
+		 (exposure (ray-spheres-intersection ray2
+						     spheres-c-r
+						     illuminated-sphere-index)))
+	    exposure)
+	(ray-lost () 100d0)))))
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
