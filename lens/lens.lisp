@@ -284,11 +284,6 @@ of the radius return nil and the intersection."
 (deftype optical-component ()
   `(or disk mirror lens thin-objective))
 
-
-(defstruct ray
-  (start (v) :type vec)
-  (direction (v) :type vec))
-
 (defstruct disk
   (normal (v 0d0 0d0 1d0) :type vec)
   (center (v) :type vec)

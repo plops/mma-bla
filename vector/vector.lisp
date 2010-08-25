@@ -3,13 +3,17 @@
   (:export 
    #:vec2 #:make-vec2 #:vec2-x #:vec2-y :v2. :v2*
    #:norm2 #:x #:y #:z
-   #:vec #:make-vec #:v #:vec-x #:vec-y #:vec-z
-   #:v. #:v+ #:v- #:v* #:norm #:normalize
+   #:vec 
+   #:make-vec 
+   #:v
+   #:vec-x #:vec-y #:vec-z
+   #:v. #:v+ #:v- #:v* 
+   #:norm #:normalize
    #:cross
    #:m #:rotation-matrix #:m*
    #:vec-i #:make-vec-i #:vec-i-x #:vec-i-y #:vec-i-z
    #:v.-i #:v+-i #:v--i #:v*-i #:norm-i
-   #:make-vec))
+   #:ray))
 
 (in-package :vector)
 
@@ -268,3 +272,17 @@ result."
     (dotimes (i 3)
       (setf (aref result i) (* scalar (aref a i))))
     result))
+
+
+(defclass ray ()
+  ((start :accessor start :initarg :start
+          :initform (v) :type vec)
+   (direction :accessor direction :initarg :direction
+	      :initform (v 0 0 1) :type vec)))
+
+(defmethod print-object ((ray ray) stream)
+  (with-slots (start direction) ray
+   (format stream "#<ray start: ~a dir: ~a>" start direction)))
+
+#+nil
+(make-instance 'ray)
