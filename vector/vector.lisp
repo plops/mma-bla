@@ -16,7 +16,8 @@
    #:ray
    #:ray-lost
    #:direction-not-normalized
-   #:check-direction-norm))
+   #:check-direction-norm
+   #:check-unit-norm))
 
 (in-package :vector)
 
@@ -294,6 +295,12 @@ result."
       ray
     (unless (< (abs (- (norm direction) 1)) 1d-12)
       (error 'direction-not-normalized))))
+
+(defun check-unit-norm (vec)
+  (declare (vec vec)
+	   (values null &optional))
+  (unless (< (abs (- (norm vec) 1)) 1d-12)
+    (error 'direction-not-normalized)))
 
 #+nil
 (make-instance 'ray)
