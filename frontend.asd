@@ -5,5 +5,6 @@
 			:components ((:file "package")
 				     (:file "draw")
 				     (:file "angular-psf")
+				     (:file "model")
 				     (:file "simulate-angular")
 				     (:file "merit")))))

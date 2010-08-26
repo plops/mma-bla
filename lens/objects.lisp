@@ -18,13 +18,13 @@
   ;; to prevent spurious RAY-LOST when dispatching to lens refract
   ((immersion-index :accessor immersion-index :initarg :immersion-index
                     :initform (alexandria:required-argument)
-                    :type vec-float)
+                    :type double-float)
    (numerical-aperture :accessor numerical-aperture :initarg :numerical-aperture
 		       :initform (alexandria:required-argument)
-		       :type vec-float)
+		       :type double-float)
    (bfp-radius :accessor bfp-radius :initarg :bfp-radius
 	       :initform (alexandria:required-argument)
-	       :type vec-float)))
+	       :type double-float)))
 
 (defmethod print-object ((objective objective) stream)
   (with-slots (immersion-index numerical-aperture focal-length bfp-radius) objective

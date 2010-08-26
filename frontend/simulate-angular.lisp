@@ -1,68 +1,48 @@
 (in-package :frontend)
 
-(defmacro defstuff ()
-  `(progn
-     ,@(loop for i in '(*dims*    ;; dimensions of the input stack in
-				  ;; pixels and slices
-			*centers* ;; integral center coordinates of
-				  ;; the nuclei (0 .. dim-x) ...
-			*index-spheres* ;; each nuclei is drawn with its index
-			*spheres-c-r* ;; scaled (isotropic axis, in
-				     ;; mm) and shifted (so that
-				     ;; origin in center of volume)
-				     ;; coordinates
-			)
-	  collect
-	    `(defvar ,i nil))))
-
-(defstuff)
-
-(defun get-visible-nuclei (k)
+(defmethod get-visible-nuclei ((model sphere-model-angular) k)
   "Find all the nuclei in slice K."
   (declare (fixnum k)
 	   (values list &optional))
-  (destructuring-bind (z y x)
-      (array-dimensions *index-spheres*)
-    (unless (< k z)
-      (error "slice k isn't contained in array *index-spheres*."))
-    ;; use bit-vector to store which nuclei are contained
-    (let* ((n (length *centers*))
-	   (result (make-array n
-			       :element-type 'boolean
-			       :initial-element nil)))
-      (do-region ((j i) (y x))
-	(let ((v (round (realpart (aref *index-spheres* k j i)))))
-	  (when (< 0 v n)
-	   (setf (aref result v) t))))
-      (loop for i from 1 below n
-	 when (aref result i)
-	 collect
-	 (1- i)))))
+  (with-slots (dimensions centers index-spheres) model
+   (destructuring-bind (z y x) dimensions
+     (unless (< k z)
+       (error "slice k isn't contained in array *index-spheres*."))
+     ;; use bit-vector to store which nuclei are contained
+     (let* ((n (length centers))
+	    (result (make-array n
+				:element-type 'boolean
+				:initial-element nil)))
+       (do-region ((j i) (y x))
+	 (let ((v (round (realpart (aref index-spheres k j i)))))
+	   (when (< 0 v n)
+	     (setf (aref result v) t))))
+       (loop for i from 1 below n
+	  when (aref result i)
+	  collect
+	  (1- i))))))
 #+nil
-(get-visible-nuclei 25)
-
-#+nil
-(time
- (loop for i below (array-dimension *index-spheres* 0)
-    collect
-    (list i (get-visible-nuclei i))))
+(let ((m (make-test-model)))
+  (with-slots (dimensions) m
+    (loop for i below (first dimensions) do
+	 (format t "~a~%" (get-visible-nuclei m i)))))
 
 ;; create a volume containing just the current slice
-(defun get-lcos-volume (k nucleus)
+(defmethod get-lcos-volume ((model sphere-model-angular) k nucleus)
   (declare (fixnum k)
 	   (values (simple-array (complex my-float) 3) &optional))
-  (destructuring-bind (z y x)
-      (array-dimensions *index-spheres*)
-    (unless (< 0 k z)
-      (error "slice index k out of range."))
-    (let ((vol (make-array (list z y x)
-			   :element-type '(complex my-float))))
-      ;; only the current nucleus will be illuminated
-      ;; note that nucleus 0 has value 1 in index-spheres
-      (do-region ((j i) (y x))
-	(if (< (abs (- nucleus (1- (aref *index-spheres* k j i)))) .5)
-	    (setf (aref vol k j i) (aref *spheres* k j i))))
-      vol)))
+  (with-slots (dimensions spheres index-spheres) model
+   (destructuring-bind (z y x) dimensions
+     (unless (< 0 k z)
+       (error "slice index k out of range."))
+     (let ((vol (make-array (list z y x)
+			    :element-type '(complex my-float))))
+       ;; only the current nucleus will be illuminated
+       ;; note that nucleus 0 has value 1 in index-spheres
+       (do-region ((j i) (y x))
+	 (if (< (abs (- nucleus (1- (aref index-spheres k j i)))) .5)
+	     (setf (aref vol k j i) (aref spheres k j i))))
+       vol))))
 
 (defun write-section (fn vol &optional (y (floor (array-dimension vol 1) 2)))
   (declare (simple-string fn)
