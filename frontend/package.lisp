@@ -1,3 +1,3 @@
 (defpackage :frontend
-  (:use :cl :vector :vector :raytrace :bresenham)
+  (:use :cl :vector :raytrace :bresenham :psf :vol)
   (:export))

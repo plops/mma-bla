@@ -4,7 +4,10 @@
 	   #:intensity-psf
 	   #:electric-field-psf
 	   #:get-uv
-	   #:abs2))
+	   #:abs2
+	   #:my-float
+	   #:my-float-helper
+	   #:+one+))
 
 (in-package :psf)
 

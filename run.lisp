@@ -1,30 +1,9 @@
-#.(progn
-   (require :vol)
-   (require :simplex-anneal)
-   (require :raytrace)
-   (require :lens)
-   (require :bresenham)
-   (require :psf))
-(defpackage :run
-  (:use :cl :vector :vol :raytrace :bresenham))
-(in-package :run)
+#.(require :frontend)
+(in-package :frontend)
 
-(deftype my-float-helper ()
-  `single-float)
 
-(deftype my-float (&optional (low '*) (high '*))
-  `(single-float ,(if (eq low '*)
-		      '*
-		      (coerce low 'my-float-helper)) 
-		 ,(if (eq high '*)
-		      '*
-		      (coerce high 'my-float-helper))))
-
-(defconstant +one+ #.(coerce 1 'my-float))
 
 #+nil
-(init-ft)
-
 (defmacro defstuff ()
   `(progn
      ,@(loop for i in '(*centers* *dims* *spheres* *psf* *conv-l* *conv-l-s*
@@ -32,7 +11,7 @@
 			Lf L-plane*f)
 	  collect
 	    `(defparameter ,i nil))))
-
+#+nil
 (defstuff)
 
 

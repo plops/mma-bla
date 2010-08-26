@@ -104,8 +104,6 @@
 	  (values c ch dims))))))
 
 #+nil
-(sb-ext:gc :full t)
-#+nil
 (time
  (progn 
    (format t "~a~%" (multiple-value-list (find-centers)))
