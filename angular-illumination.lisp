@@ -834,32 +834,33 @@ returned. "
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
- (let* ((n 30)
-	(a (make-array (list n n) :element-type 'double-float))
+ (let* ((n 10)
 	(nn (length *spheres-c-r*))
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
 			    :element-type 'double-float))
 	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
-	(window-radius .05d0))
-   (dotimes (nucleus-index nn)
-     (let ((params (list obj
-			 window-radius
-			 nucleus-index
-			 *spheres-c-r*)))
-      (dotimes (i n)
-	(dotimes (j n)
-	  (let ((x (- (* 2d0 (/ i n)) 1d0))
-		(y (- (* 2d0 (/ j n)) 1d0)))
-	    (setf (aref a j i)
-		  (merit-function (make-vec2 :x x :y y)
-				  params))))))
-     (do-region ((j i) (n n))
-       (let ((x (mod nucleus-index mosaicx))
-	     (y (floor nucleus-index mosaicx)))
-	 (setf (aref mosaic (+ (* n y) j) (+ (* n x) i))
-	       (aref a j i)))))
+	(window-radius .05d0)
+	(threads (loop for nucleus-index below nn collect
+		      (sb-thread:make-thread 
+		       #'(lambda ()
+			   (let* ((current nucleus-index)
+				  (params (list obj
+					       window-radius
+					       current
+					       *spheres-c-r*))
+				  (px (* n (mod current mosaicx)))
+				  (py (* n (floor current mosaicx))))
+			     (do-region ((j i) (n n))
+			       (let ((x (- (* 2d0 (/ i n)) 1d0))
+				     (y (- (* 2d0 (/ j n)) 1d0)))
+				 (setf (aref mosaic (+ px j) (+ py i))
+				       (merit-function (make-vec2 :x x :y y)
+						       params))))))
+		       :name (format nil "~a" nucleus-index)))))
+   (mapcar #'sb-thread:join-thread threads)
    (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-2-df/ub8 mosaic))))
+
 
 #+nil
 (let ((vol (make-array dims :element-type '(unsigned-byte 8))))
