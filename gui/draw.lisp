@@ -43,3 +43,31 @@
     (scale radius radius radius)
     (with-primitive :triangle-fan
       (draw-circle))))
+
+(defclass texture-3-luminance-ub8 ()
+  ((dimensions :accessor dimensions :initarg :dimensions :initform '(0 0 0)
+	       :type cons)
+   (object :accessor object :initarg :object :initform 0 :type fixnum)
+   (target :accessor target :initarg :target 
+	   :initform :texture-rectangle-nv :type fixnum)))
+
+(defmethod initialize-instance :after ((tex texture-3-luminance-ub8) &key data)
+  (declare ((simple-array (unsigned-byte 8) 3) data))
+  (with-slots (dimensions object target) tex
+    (setf object (first (gen-textures 1))
+	  dimensions (array-dimensions data))
+    (destructuring-bind (z y x) dimensions
+      (bind-texture target object)
+      (tex-parameter target :texture-min-filter :linear)
+      (tex-parameter target :texture-mag-filter :linear)
+      (sb-sys:with-pinned-objects (data)
+	(let* ((data1 (sb-ext:array-storage-vector data))
+	       (data-sap (sb-sys:vector-sap data1)))
+	 (tex-image-3d target 0 :luminance z y x 0 :luminance
+		       :unsigned-byte data-sap))))))
+
+(defmethod destroy ((tex texture-3-luminance-ub8))
+  (delete-textures (list (object tex))))
+
+(defmethod bind-tex ((tex texture-3-luminance-ub8))
+  (bind-texture (target tex) (object tex)))

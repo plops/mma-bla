@@ -7,4 +7,7 @@
 	   #:TEX-COORD-V
 	   #:TRANSLATE-V
 	   #:NORMAL-V
-	   #:SCALE-V))
+	   #:SCALE-V
+	   #:texture-3-luminance-ub8
+	   #:destroy
+	   #:bind-tex))
