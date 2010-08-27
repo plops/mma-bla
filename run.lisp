@@ -11,10 +11,11 @@
 #+nil
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
-
+#+nil
 (defun draw-all ()
-    (draw *model*))
+    (draw *model* :nucleus 0))
 
+#+nil
 (with-gui
   (draw-all))
 

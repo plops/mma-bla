@@ -4,13 +4,14 @@
   (with-slots (centers-mm radii-mm) model
     (gl:with-pushed-matrix
       (gl:line-width 1)
-      (loop for c in centers-mm and r in radii-mm do
-	   (gl:with-pushed-matrix
-	     (translate-v c)
-	     (gl:color 0 0 0 1)
-	     (glut:solid-sphere r 8 4)
-	     (gl:color 1 1 1 1)
-	     (glut:wire-sphere (* 1.08 r) 8 4))))))
+      (let ((n 4))
+       (loop for c in centers-mm and r in radii-mm do
+	    (gl:with-pushed-matrix
+	      (translate-v c)
+	      (gl:color 0 0 0)
+	      #+nil(glut:solid-sphere r (* 2 n) n)
+	      (gl:color .7 .7 .7)
+	      (glut:wire-sphere (* 1.08 r) (* 2 n) n)))))))
 
 ;; sketch of the coordinate system:
 ;;
@@ -47,7 +48,7 @@
 						 :center (v))))
   (declare (fixnum nucleus)
 	   (lens:objective objective))
-  (with-slots (dimensions spheres centers-mm dx dy dz) model
+  (with-slots (dimensions spheres centers-mm centers dx dy dz) model
     (with-slots ((f lens::focal-length)
 		 (bfp-radius lens::bfp-radius)
 		 (na lens::numerical-aperture)
@@ -58,7 +59,7 @@
 	      (x-mm (vec-x cent))
 	      (y-mm (vec-y cent))
 	      (z-mm (vec-z cent))
-	      (bfp-ratio-x .2d0 #+nil (- (random 2d0) 1d0))
+	      (bfp-ratio-x -.98d0 #+nil (- (random 2d0) 1d0))
 	      (bfp-ratio-y 0d0)
 	      (theta (lens:find-inverse-ray-angle objective x-mm y-mm))
 	      (phi (atan y-mm x-mm))
@@ -83,8 +84,9 @@
 	 (let ((lens (make-instance 'lens:disk :center (v) :radius bfp-radius))
 	       (bfp (make-instance 'lens:disk :center (make-vec 0d0 0d0 (- f))
 				    :radius bfp-radius)))
-	  (gui::draw lens)
-	  (gui::draw bfp))
+	   (gl:color .1 .1 .1)
+	   (gui::draw lens)
+	   (gui::draw bfp))
 	 (macrolet ((plane (direction position)
 		      ;; for defining a plane that is perpendicular to an
 		      ;; axis and crosses it at POSITION
@@ -102,7 +104,7 @@
 					  :normal outer-normal
 					  :center center)))))
 	   (let ((p+z (plane :z (- nf z-mm)))
-		 (p-z (plane :z (+ nf (* 1d-3 dz z)
+		 (p-z (plane :z (+ nf (* 1d-3 ri dz z)
 				   (- z-mm)))))
 	     (gui::draw p+z)
 	     (gui::draw p-z)
@@ -115,59 +117,59 @@
 					   :start (vector::start ro)
 					   :direction (normalize 
 						       (vector::direction ro)))))
+		   ;; draw light ray from back focal plane through sample
 		   (let ((h+z (lens:intersect nro p+z))
 			 (h-z (lens:intersect nro p-z)))
 		     (gl:line-width 7)
 		     (gl:with-primitive :lines
-		       (gl:color 1 0 0 1)
+		       (gl:color .8 .3 .3)
 		       (vertex-v start)
 		       (vertex-v (vector::start ro))
 		       
 		       (vertex-v (vector::start ro))
 		       (vertex-v h+z)
 		       
-		       (gl:color 0 1 0 1)
+		       (gl:color .3 .8 .3)
 		       (vertex-v h+z)
 		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
 
-		       (gl:color 0 .7 1 1)
+		       (gl:color .3 .6 .8)
 		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
 		       (vertex-v h-z))))
 	       (ray-lost () nil))
-	     #+NIL (multiple-value-bind (ro s)
-		 (lens:thin-objective-ray obj
-					  start
-					  (make-vec (* (cos phi) (sin theta))
-						    (* (sin phi) (sin theta))
-						    (cos theta)))
-	       (when ro
-		 (let* ((nro (normalize ro)))
-		   
-
-		   #+nil(let* ((h+z (pixel (hit p+z)))
-			       (h-z (pixel (hit p-z)))
-			       (h+y (pixel (hit p+y)))
-			       (h-y (pixel (hit p-y)))
-			       (h+x (pixel (hit p+x)))
-			       (h-x (pixel (hit p-x)))
-			       ;; make a list of all the points
-			       (hlist (list h+z h-z h+y h-y h+x h-x))
-			       ;; throw away points that are nil or that contain
-			       ;; coordinates outside of the array dimensions
-			       (filtered-hlist
-				(remove-if-not #'(lambda (v)
-						   (if v
-						       (and (< -1 (vec-i-x v) x)
-							    (< -1 (vec-i-y v) y)
-							    (< -1 (vec-i-z v) z))
-						       nil)) hlist))
-			       ;; sort best points by x
-			       (choice (sort filtered-hlist #'< :key (lambda (v) (vec-i-x v)))))
-			  (debug-out h+z h-z)
-			  (format t "~a~%" (list 'choice choice))
-			  #+nil (scan-convert-line3
-				 (first choice)
-				 (second choice)
-				 *spheres-ub8*))))))))))))
-
+	     
+	     (let* ((z+ (- nf z-mm))
+		    (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
+		    (cy (/ (* 1d0 (vec-i-y (elt centers 0)))
+			   y))
+		    (x+ (* 1d-3 ri dx x))
+		    (texcoords (list (make-vec cy 0d0 0d0) (make-vec cy 0d0 1d0)
+				     (make-vec cy 1d0 1d0) (make-vec cy 1d0 0d0)))
+		    (vertexs (list (make-vec x+ y-mm z-)
+				   (make-vec 0d0 y-mm z-)
+				   (make-vec 0d0 y-mm z+)
+				   (make-vec x+ y-mm z+))))
+	       ;; draw rectangle
+	       (gl:with-primitive :line-loop
+		 (gl:color .5 .5 .5)
+		 (dolist (v vertexs)
+		       (vertex-v v)))
+	       (progn ;; load and display the 3d texture
+		 (gl:color 1 1 1 1)	
+		 #+nil (when *tex*
+		   (destroy *tex*)
+		   (setf *tex* nil))
+		 (unless *tex*
+		   (setf *tex* (make-instance 'texture-3-luminance-ub8
+					      :data (normalize-3-csf/ub8-realpart
+						     spheres))))
+		 (with-slots ((target gui::target)) *tex*
+		   (bind-tex *tex*)
+		   (gl:enable target)
+		   (gl:with-primitive :quads
+		     (loop for v in vertexs and c in texcoords do
+			  (tex-coord-v c) (vertex-v v)))
+		   (format t "~a~%" (list *rot* (* 1d0 x) (vec-i-x (elt centers 0))
+					  (/ 200 360d0)) )
+		   (gl:disable target)))))))))))
 

@@ -48,7 +48,7 @@
 	       :type cons)
    (object :accessor object :initarg :object :initform 0 :type fixnum)
    (target :accessor target :initarg :target 
-	   :initform :texture-rectangle-nv :type fixnum)))
+	   :initform :texture-3d :type fixnum)))
 
 (defmethod initialize-instance :after ((tex texture-3-luminance-ub8) &key data)
   (declare ((simple-array (unsigned-byte 8) 3) data))
@@ -62,7 +62,7 @@
       (sb-sys:with-pinned-objects (data)
 	(let* ((data1 (sb-ext:array-storage-vector data))
 	       (data-sap (sb-sys:vector-sap data1)))
-	 (tex-image-3d target 0 :luminance z y x 0 :luminance
+	 (tex-image-3d target 0 :luminance x y z 0 :luminance
 		       :unsigned-byte data-sap))))))
 
 (defmethod destroy ((tex texture-3-luminance-ub8))
