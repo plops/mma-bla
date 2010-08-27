@@ -28,23 +28,12 @@
 (time 
  (defparameter *conv*
    (destructuring-bind (z y x) (dimensions *model*)
-    (convolve-nocirc (spheres *model*) (fftshift (draw-oval-csf 2s0 5 5 5))))))
-
-(defun convolve-nocirc (vola kernel)
-  (multiple-value-bind (vol start-i) 
-      (convolve-nocrop vola kernel)
-    (let*((start (convert-1-fix/df-mul start-i)) ;; bbox needs double vector
-	  (dims (make-array 3 :element-type 'double-float
-			    :initial-contents ;; z y x -> x y z, and increase
-			    (mapcar #'(lambda (x) (* 1d0 (1- x))) 
-				    (reverse (dimensions *model*)))))
-	  (bbox (make-bbox :start start :end (v+ start dims))))
-      (extract-bbox vol bbox))))
+    (convolve-circ (spheres *model*) (fftshift (draw-oval-csf 2s0 z y x))))))
 
 #+nil
 (write-pgm "/home/martin/tmp/conv-cut.pgm"
 	   (normalize-2-csf/ub8-realpart 
-	    (cross-section-xz *conv* #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))
+	    (cross-section-xz #+nil (spheres *model*)  *conv* #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))
 #+nil
 (time
  (progn

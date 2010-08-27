@@ -13,8 +13,6 @@
 	  ,(format
 	    nil
 	    "~a expects both input arrays to have the same dimensions." name)))
-       
-       
        ;; fta and ftb are both already divided by n, the following ift
        ;; will introduce will not divide by n so i have to do that
        (ift (s* (/ ,(coerce 1 (ecase type (csf 'single-float) (cdf 'double-float)))
@@ -41,9 +39,6 @@
 		(t (error "The given type can't be handled with a generic ~a function." ',name)))))))
 
 (def-convolve-circ-functions (2 3) (csf cdf))
-
-
-
 
 
 (defun front (i) ;; extra size needed to accommodate kernel overlap
@@ -128,16 +123,15 @@ VOLA in RESULT."
 (def-convolve-nocrop-functions (2 3) (csf cdf))
 
 (defun convolve (vola volb)
-  (multiple-value-bind (conv start)
-      (convolve-nocrop vola volb)
+  (multiple-value-bind (conv start) (convolve-nocrop vola volb)
     (let ((s (convert-1-fix/df-mul start))
 	  (b (convert-1-fix/df-mul 
 	      (make-array 3 :element-type 'fixnum
 			  :initial-contents
 			  (reverse (array-dimensions volb))))))
-      (extract-bbox  conv 
-		     (make-bbox :start s
-				:end (v+ s b))))))
+      (extract-bbox conv 
+		    (make-bbox :start s
+			       :end (v- (v+ s b) (v 1 1 1)))))))
 
 #+nil
 (let ((a (make-array (list 20 40 30)

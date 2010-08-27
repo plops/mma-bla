@@ -106,7 +106,7 @@
 		      cases))))
     (store-new-function name)
     `(progn ,@specifics
-	    (defun ,name (a &key forward)
+	    (defun ,name (a &key (forward t))
 	       (etypecase a
 		 ,@cases
 		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
