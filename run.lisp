@@ -12,6 +12,9 @@
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
 #+nil
+(defparameter *psf* 
+  (angular-intensity-psf-minimal-resolution :x-um 100s0 :z-um (* 2 34s0)))
+#+nil
 (defun draw-all ()
     (draw *model* :nucleus 0))
 

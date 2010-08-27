@@ -8,8 +8,8 @@
        (loop for c in centers-mm and r in radii-mm do
 	    (gl:with-pushed-matrix
 	      (translate-v c)
-	      (gl:color 0 0 0)
-	      #+nil(glut:solid-sphere r (* 2 n) n)
+	      (gl:color 0 0 0 .2)
+	      (glut:solid-sphere r (* 2 n) n)
 	      (gl:color .7 .7 .7)
 	      (glut:wire-sphere (* 1.08 r) (* 2 n) n)))))))
 
@@ -41,6 +41,8 @@
 ;;           |	       |   back focal plane
 ;;	               |
 
+(defvar *new-tex* nil) ;; set this to a ub3 volume, draw will upload
+		       ;; it next time it's called
 (defvar *rot* 0)
 (defvar *tex* nil)
 (defmethod draw ((model sphere-model) &key (nucleus 0)
@@ -143,8 +145,8 @@
 		    (cy (/ (* 1d0 (vec-i-y (elt centers 0)))
 			   y))
 		    (x+ (* 1d-3 ri dx x))
-		    (texcoords (list (make-vec cy 0d0 0d0) (make-vec cy 0d0 1d0)
-				     (make-vec cy 1d0 1d0) (make-vec cy 1d0 0d0)))
+		    (texcoords (list (make-vec 0d0 cy 0d0) (make-vec 1d0 cy 0d0)
+				     (make-vec 1d0 cy 1d0) (make-vec 0d0 cy 1d0)))
 		    (vertexs (list (make-vec x+ y-mm z-)
 				   (make-vec 0d0 y-mm z-)
 				   (make-vec 0d0 y-mm z+)
@@ -156,9 +158,10 @@
 		       (vertex-v v)))
 	       (progn ;; load and display the 3d texture
 		 (gl:color 1 1 1 1)	
-		 #+nil (when *tex*
-		   (destroy *tex*)
-		   (setf *tex* nil))
+		 (when *new-tex*
+		   (when *tex*
+		     (destroy *tex*)
+		     (setf *tex* nil)))
 		 (unless *tex*
 		   (setf *tex* (make-instance 'texture-3-luminance-ub8
 					      :data (normalize-3-csf/ub8-realpart
@@ -169,7 +172,5 @@
 		   (gl:with-primitive :quads
 		     (loop for v in vertexs and c in texcoords do
 			  (tex-coord-v c) (vertex-v v)))
-		   (format t "~a~%" (list *rot* (* 1d0 x) (vec-i-x (elt centers 0))
-					  (/ 200 360d0)) )
 		   (gl:disable target)))))))))))
 
