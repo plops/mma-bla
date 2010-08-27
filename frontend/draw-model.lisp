@@ -158,14 +158,17 @@
 		       (vertex-v v)))
 	       (progn ;; load and display the 3d texture
 		 (gl:color 1 1 1 1)	
-		 (when *new-tex*
-		   (when *tex*
-		     (destroy *tex*)
-		     (setf *tex* nil)))
+		 (when (and *new-tex* *tex*)
+		   (destroy *tex*)
+		   (setf *tex* nil))
 		 (unless *tex*
 		   (setf *tex* (make-instance 'texture-3-luminance-ub8
-					      :data (normalize-3-csf/ub8-realpart
-						     spheres))))
+					      :data (if *new-tex*
+							*new-tex*
+							(normalize-3-csf/ub8-realpart
+							 spheres))))
+		   (when *new-tex*
+		     (setf *new-tex* nil)))
 		 (with-slots ((target gui::target)) *tex*
 		   (bind-tex *tex*)
 		   (gl:enable target)

@@ -12,8 +12,45 @@
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
 #+nil
-(defparameter *psf* 
-  (angular-intensity-psf-minimal-resolution :x-um 100s0 :z-um (* 2 34s0)))
+(time
+ (defparameter *psf* 
+   (multiple-value-bind (conv dx dz)
+       (angular-intensity-psf-minimal-resolution :x-um 40s0 :z-um (* 2 34s0)
+						 :window-radius .2 :window-x .4 :window-y 0s0
+						 :debug t :initialize t
+						 :integrand-evaluations 300)
+     (resample-3-csf conv dx dx dz .2 .2 1.0))))
+#+nil
+(write-pgm "/home/martin/tmp/psf-cut.pgm"
+	   (normalize-2-csf/ub8-realpart (cross-section-xz *psf*)))
+
+#+nil
+(time 
+ (defparameter *conv*
+   (destructuring-bind (z y x) (dimensions *model*)
+    (convolve-nocirc (spheres *model*) (fftshift (draw-oval-csf 2s0 5 5 5))))))
+
+(defun convolve-nocirc (vola kernel)
+  (multiple-value-bind (vol start-i) 
+      (convolve-nocrop vola kernel)
+    (let*((start (convert-1-fix/df-mul start-i)) ;; bbox needs double vector
+	  (dims (make-array 3 :element-type 'double-float
+			    :initial-contents ;; z y x -> x y z, and increase
+			    (mapcar #'(lambda (x) (* 1d0 (1- x))) 
+				    (reverse (dimensions *model*)))))
+	  (bbox (make-bbox :start start :end (v+ start dims))))
+      (extract-bbox vol bbox))))
+
+#+nil
+(write-pgm "/home/martin/tmp/conv-cut.pgm"
+	   (normalize-2-csf/ub8-realpart 
+	    (cross-section-xz *conv* #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))
+#+nil
+(time
+ (progn
+   (setf *new-tex* (normalize-3-csf/ub8-realpart *conv*))
+   nil))
+
 #+nil
 (defun draw-all ()
     (draw *model* :nucleus 0))

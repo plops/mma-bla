@@ -289,7 +289,8 @@ distance is chosen. Set INITIALIZE to nil if the e-field can be reused
 from a previous calculation. In that case you may need to set
 STORE-CAP to true for all evaluations and use a lot more memory. Only
 if the window diameter is going to be bigger than the radius of the
-back focal plane set BIG-WINDOW to true."
+back focal plane set BIG-WINDOW to true. Multiple values are returned:
+the volume, dx in um and dz in um."
   (declare ((my-float 0 1) window-radius)
 	   ((my-float -1 1) window-x window-y)
 	   (my-float wavelength numerical-aperture immersion-index

@@ -18,8 +18,8 @@
        ;; fta and ftb are both already divided by n, the following ift
        ;; will introduce will not divide by n so i have to do that
        (ift (s* (/ ,(coerce 1 (ecase type (csf 'single-float) (cdf 'double-float)))
-		   (array-total-size vola))
-		(.* (ft vola) (ft volb)))))))
+		  (array-total-size vola))
+	       (.* (ft vola) (ft (fftshift volb))))))))
 
 (defmacro def-convolve-circ-functions (ranks types)
   (let* ((specifics nil)
@@ -84,7 +84,7 @@ VOLA in RESULT."
 	       (do-region ((j i) (yb xb))
 		 (setf (aref bigb (+ j fya) (+ i fxa))
 		       (aref volb j i)))
-	       (values (convolve-circ biga (fftshift bigb)) start)))))
+	       (values (convolve-circ biga bigb) start)))))
      (3 `(destructuring-bind (za ya xa) (array-dimensions vola)
 	   (destructuring-bind (zb yb xb) (array-dimensions volb)
 	     (let* ((biga (make-array (list (+ za zb) (+ ya yb) (+ xa xb))
@@ -104,7 +104,7 @@ VOLA in RESULT."
 	       (do-region ((k j i) (zb yb xb))
 		 (setf (aref bigb (+ k fza) (+ j fya) (+ i fxa))
 		       (aref volb k j i)))
-	       (values (convolve-circ biga (fftshift bigb)) start))))))))
+	       (values (convolve-circ biga bigb) start))))))))
 
 (defmacro def-convolve-nocrop-functions (ranks types)
   (let* ((specifics nil)
