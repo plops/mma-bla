@@ -10,4 +10,5 @@
 	   #:SCALE-V
 	   #:texture-3-luminance-ub8
 	   #:destroy
-	   #:bind-tex))
+	   #:bind-tex
+	   #:draw-axes))

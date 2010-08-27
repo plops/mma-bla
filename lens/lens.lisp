@@ -13,7 +13,7 @@
       (let* ((hess-dist (v. center normal)) ;; distance of plane to origin
 	     (div (v. normal dir)))
 	(when (< (abs div) 1d-12) ;; plane and ray are parallel
-	  (error 'lost-ray))
+	  (error 'ray-lost))
 	(let ((eta (/ (- hess-dist (v. normal start))
 		      ;; scaling along ray to hit exactly on plane
 		      div)))

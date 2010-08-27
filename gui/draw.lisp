@@ -34,15 +34,14 @@
     (vertex-v (aref circle-points i)))
   nil)
 
-(defun draw-disk (center radius)
-  (declare (vec center)
-	   (double-float radius)
-	   (values null &optional))
-  (with-pushed-matrix
-    (translate-v center)
-    (scale radius radius radius)
-    (with-primitive :triangle-fan
-      (draw-circle))))
+(defmethod draw ((disk lens:disk))
+  (declare (values null &optional))
+  (with-slots ((c lens::center) (r lens::radius)) disk
+   (with-pushed-matrix
+     (translate-v c)
+     (scale r r r)
+     (with-primitive :triangle-fan
+       (draw-circle)))))
 
 (defclass texture-3-luminance-ub8 ()
   ((dimensions :accessor dimensions :initarg :dimensions :initform '(0 0 0)
@@ -71,3 +70,12 @@
 
 (defmethod bind-tex ((tex texture-3-luminance-ub8))
   (bind-texture (target tex) (object tex)))
+
+(defun draw-axes ()
+  (gl:line-width 3)
+  (gl:with-primitive :lines
+    (gl:color 1 0 0 1) (gl:vertex 0 0 0) (gl:vertex 1 0 0)
+    (gl:color 0 1 0 1) (gl:vertex 0 0 0) (gl:vertex 0 1 0)
+    (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1)))
+
+

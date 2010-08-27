@@ -2,12 +2,21 @@
 (in-package :frontend)
 
 #+nil
-(defparameter *model* (make-instance 'sphere-model-angular)#+nil (make-test-model))
+(defparameter *model* (make-instance 'sphere-model-angular))
+
+#+nil
+(time
+ (defparameter *model* (make-test-model)))
 
 #+nil
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
 
+(defun draw-all ()
+    (draw *model*))
+
+(with-gui
+  (draw-all))
 
 #+nil
 (defmacro defstuff ()
@@ -19,8 +28,6 @@
 	    `(defparameter ,i nil))))
 #+nil
 (defstuff)
-
-
 
 #+nil
 (write-pgm "/home/martin/tmp/fftw.pgm"
