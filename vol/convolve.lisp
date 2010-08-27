@@ -121,14 +121,20 @@ VOLA in RESULT."
 		 (t (error "The given type can't be handled with a generic ~a function." ',name)))))))
 
 (def-convolve-nocrop-functions (2 3) (csf cdf))
+(let ((l '(x)))
+ (push '(z y) l))
 
 (defun convolve (vola volb)
   (multiple-value-bind (conv start) (convolve-nocrop vola volb)
     (let ((s (convert-1-fix/df-mul start))
+	  (d (array-dimensions volb)) ;; z y x, y x or x
+	  (dims (ecase (length d)     ;; ensure 3 entries
+		  (1 (push 0 d) (push 0 d))
+		  (2 (push 0 d))
+		  (3 d)))
 	  (b (convert-1-fix/df-mul 
-	      (make-array 3 :element-type 'fixnum
-			  :initial-contents
-			  (reverse (array-dimensions volb))))))
+	      (make-array 3 :element-type 'fixnum ;; z y x -> x y z
+			  :initial-contents (reverse dims)))))
       (extract-bbox conv 
 		    (make-bbox :start s
 			       :end (v- (v+ s b) (v 1 1 1)))))))

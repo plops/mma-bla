@@ -13,8 +13,7 @@
     (dolist (c centers)
       (setf (aref points (* 5 (vec-i-z c)) (vec-i-y c) (vec-i-x c))
 	    (complex +one+)))
-    (convolve-circ points 
-		   (fftshift (draw-sphere-csf radius z y x)))))
+    (convolve-circ points (draw-sphere-csf radius z y x))))
 
 (defun draw-ovals (radius centers z y x)
   (declare (single-float radius)
@@ -28,7 +27,7 @@
     (dolist (c centers)
       (setf (aref points (vec-i-z c) (vec-i-y c) (vec-i-x c))
 	    (complex +one+)))
-    (convolve-circ points (fftshift (draw-oval-csf radius z y x)))))
+    (convolve-circ points (draw-oval-csf radius z y x))))
 
 
 (defun draw-indexed-ovals (radius centers z y x)
@@ -46,7 +45,6 @@
       (incf i)
       (setf (aref points (vec-i-z c) (vec-i-y c) (vec-i-x c))
 	    (complex (+ +one+ i))))
-    (convolve-circ points
-		   (fftshift (draw-oval-csf radius z y x)))))
+    (convolve-circ points (draw-oval-csf radius z y x))))
 
 

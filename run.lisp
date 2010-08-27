@@ -23,17 +23,26 @@
 #+nil
 (write-pgm "/home/martin/tmp/psf-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz *psf*)))
-
 #+nil
-(time 
- (defparameter *conv*
-   (destructuring-bind (z y x) (dimensions *model*)
-    (convolve-circ (spheres *model*) (fftshift (draw-oval-csf 2s0 z y x))))))
-
+(labels ((out (n a)
+	   (write-pgm (format nil "/dev/shm/~2,'0d.pgm" n)
+		      (normalize-2-csf/ub8-realpart a))))
+  (let ((a (draw-disk-csf 100.0 300 300))
+	(b (draw-disk-csf 20.0 300 300)))
+    (out 1 a)
+    (out 2 b)
+    (out 3 (convolve a b))))
 #+nil
-(write-pgm "/home/martin/tmp/conv-cut.pgm"
-	   (normalize-2-csf/ub8-realpart 
-	    (cross-section-xz #+nil (spheres *model*)  *conv* #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))
+(time (progn 
+	#+nil (defparameter *conv*
+	  (destructuring-bind (z y x) (dimensions *model*)
+	    (convolve-circ (spheres *model*) (draw-oval-csf 2s0 z y x))))
+	(write-pgm "/home/martin/tmp/conv-cut.pgm"
+		   (normalize-2-csf/ub8-realpart 
+		    (cross-section-xz (spheres *model*)
+				     #+nil *conv*
+				      #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))))
+
 #+nil
 (time
  (progn

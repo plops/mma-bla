@@ -454,6 +454,6 @@
 #:CONVERT-3-CDF/UB8-IMAGPART
 #:CONVERT-3-CDF/UB8-ABS
 #:CONVERT-3-CDF/UB8-PHASE
-))
+#:convolve))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done

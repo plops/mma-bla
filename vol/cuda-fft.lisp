@@ -169,7 +169,7 @@
 		      cases))))
     (store-new-function name)
     `(progn ,@specifics
-	    (defun ,name (a &key forward)
+	    (defun ,name (a &key (forward t))
 	       (etypecase a
 		 ,@cases)))))
 
