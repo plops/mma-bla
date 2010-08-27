@@ -1,11 +1,13 @@
 #.(require :frontend)
 (in-package :frontend)
 
-
+#+nil
 (defparameter *model* (make-instance 'sphere-model-angular)#+nil (make-test-model))
 
+#+nil
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
+
 
 #+nil
 (defmacro defstuff ()

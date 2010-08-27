@@ -7,4 +7,5 @@
 				     (:file "angular-psf")
 				     (:file "model")
 				     (:file "simulate-angular")
-				     (:file "merit")))))
+				     (:file "merit")
+				     (:file "draw-model")))))
