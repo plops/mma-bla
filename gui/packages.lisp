@@ -8,7 +8,7 @@
 	   #:TRANSLATE-V
 	   #:NORMAL-V
 	   #:SCALE-V
-	   #:texture-3-luminance-ub8
+	   #:texture-luminance-ub8
 	   #:destroy
 	   #:bind-tex
 	   #:draw-axes

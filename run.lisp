@@ -15,10 +15,11 @@
 (time
  (defparameter *psf* 
    (multiple-value-bind (conv dx dz)
-       (angular-intensity-psf-minimal-resolution :x-um 10s0 :z-um 24s0
-						 :window-radius .2 :window-x .4 :window-y 0s0
-						 :debug t :initialize t
-						 :integrand-evaluations 300)
+       (angular-intensity-psf-minimal-resolution
+	:x-um 10s0 :z-um 24s0
+	:window-radius .2 :window-x .4 :window-y 0s0
+	:debug t :initialize t
+	:integrand-evaluations 300)
      (resample-3-csf conv dx dx dz .2 .2 1.0))))
 #+nil
 (write-pgm "/home/martin/tmp/psf-cut.pgm"
@@ -30,19 +31,24 @@
 	  (convolve (spheres *model*) *psf*))
 	(write-pgm "/home/martin/tmp/conv-cut.pgm"
 		   (normalize-2-csf/ub8-realpart 
-		    (cross-section-xz #+nil (spheres *model*)
-				       *conv*
-				      #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))))
+		    (cross-section-xz
+		     #+nil (spheres *model*)
+		     *conv*
+		     #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))))
 #+nil
 (write-pgm "/home/martin/tmp/conv-cut.pgm"
 	   (normalize-2-sf/ub8 
-	    (cross-section-xz (.- (normalize-3-csf/sf-realpart *conv*) 
-				  (normalize-3-csf/sf-realpart (spheres *model*))))))
+	    (cross-section-xz 
+	     (.- (normalize-3-csf/sf-realpart *conv*) 
+		 (normalize-3-csf/sf-realpart (spheres *model*))))))
 
 #+nil
 (time
  (progn
-   (setf *new-tex* (normalize-3-csf/ub8-realpart *conv*))
+   (setf *new-tex* 
+	 #+nil (normalize-3-csf/ub8-realpart *conv*)
+	 (normalize-2-csf/ub8-realpart
+	  (cross-section-xz *conv* (vec-i-y (first (centers *model*))))))
    nil))
 
 #+nil

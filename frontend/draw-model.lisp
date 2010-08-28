@@ -152,16 +152,13 @@
 		   (setf *tex* nil))
 		 (unless *tex*
 		   (setf *tex* (make-instance 
-				'texture-3-luminance-ub8
-				:data (if *new-tex*
-					  *new-tex*
-					  (normalize-3-csf/ub8-realpart
-					   spheres))))
+				'texture-luminance-ub8
+				:data *new-tex*))
 		   (when *new-tex*
 		     (setf *new-tex* nil)))
-		 (draw-xz *tex* x+ x- z+ z- :ty ty :y y-mm))
+		 (draw-xz *tex* x+ 0d0 z+ z- :ty ty :y y-mm))
 	       ;; draw rectangle
-	       (gl:with-primitive :line-loop
+	       #+nil (gl:with-primitive :line-loop
 		 (gl:color .5 .5 .5)
 		 (dolist (v vertexs)
 		   (vertex-v v)))))))))))
