@@ -15,7 +15,7 @@
 (time
  (defparameter *psf* 
    (multiple-value-bind (conv dx dz)
-       (angular-intensity-psf-minimal-resolution :x-um 40s0 :z-um (* 2 34s0)
+       (angular-intensity-psf-minimal-resolution :x-um 10s0 :z-um 34s0
 						 :window-radius .2 :window-x .4 :window-y 0s0
 						 :debug t :initialize t
 						 :integrand-evaluations 300)
@@ -23,25 +23,20 @@
 #+nil
 (write-pgm "/home/martin/tmp/psf-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz *psf*)))
-#+nil
-(labels ((out (n a)
-	   (write-pgm (format nil "/dev/shm/~2,'0d.pgm" n)
-		      (normalize-2-csf/ub8-realpart a))))
-  (let ((a (draw-disk-csf 100.0 300 300))
-	(b (draw-disk-csf 20.0 300 300)))
-    (out 1 a)
-    (out 2 b)
-    (out 3 (convolve a b))))
+
 #+nil
 (time (progn 
-	#+nil (defparameter *conv*
-	  (destructuring-bind (z y x) (dimensions *model*)
-	    (convolve-circ (spheres *model*) (draw-oval-csf 2s0 z y x))))
+	(defparameter *conv*
+	  (convolve-nocrop (spheres *model*) *psf*))
 	(write-pgm "/home/martin/tmp/conv-cut.pgm"
 		   (normalize-2-csf/ub8-realpart 
-		    (cross-section-xz (spheres *model*)
-				     #+nil *conv*
+		    (cross-section-xz #+nil (spheres *model*)
+				       *conv*
 				      #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))))
+
+(write-pgm "/home/martin/tmp/conv-cut.pgm"
+	   (normalize-2-csf/ub8-realpart 
+	    (cross-section-xz (.- *conv* (vol::s* 1s-13 (spheres *model*))))))
 
 #+nil
 (time
