@@ -43,33 +43,75 @@
      (with-primitive :triangle-fan
        (draw-circle)))))
 
-(defclass texture-3-luminance-ub8 ()
+(defclass texture-luminance-ub8 ()
   ((dimensions :accessor dimensions :initarg :dimensions :initform '(0 0 0)
 	       :type cons)
    (object :accessor object :initarg :object :initform 0 :type fixnum)
    (target :accessor target :initarg :target 
 	   :initform :texture-3d :type fixnum)))
 
-(defmethod initialize-instance :after ((tex texture-3-luminance-ub8) &key data)
-  (declare ((simple-array (unsigned-byte 8) 3) data))
-  (with-slots (dimensions object target) tex
-    (setf object (first (gen-textures 1))
-	  dimensions (array-dimensions data))
-    (destructuring-bind (z y x) dimensions
+(defmethod initialize-instance :after ((tex texture-luminance-ub8) &key data)
+  (let ((rank (etypecase data
+		((simple-array (unsigned-byte 8) 2) 2)
+		((simple-array (unsigned-byte 8) 3) 3))))
+    (with-slots (dimensions object target) tex
+      (setf object (first (gen-textures 1))
+	    dimensions (array-dimensions data)
+	    target (ecase rank
+		     (2 :texture-rectangle-nv)
+		     (3 :texture-3d)))
       (bind-texture target object)
       (tex-parameter target :texture-min-filter :linear)
       (tex-parameter target :texture-mag-filter :linear)
       (sb-sys:with-pinned-objects (data)
 	(let* ((data1 (sb-ext:array-storage-vector data))
 	       (data-sap (sb-sys:vector-sap data1)))
-	 (tex-image-3d target 0 :luminance x y z 0 :luminance
-		       :unsigned-byte data-sap))))))
+	  (ecase rank
+	    (2 (tex-image-2d target 0 :luminance 
+			     (array-dimension data 1) ;; x
+			     (array-dimension data 0) 0 :luminance
+			     :unsigned-byte data-sap))
+	    (3 (tex-image-3d target 0 :luminance
+			     (array-dimension data 2) ;; x
+			     (array-dimension data 1) ;; y
+			     (array-dimension data 0) 0 :luminance
+			     :unsigned-byte data-sap))))))))
 
-(defmethod destroy ((tex texture-3-luminance-ub8))
+(defmethod destroy ((tex texture-luminance-ub8))
   (delete-textures (list (object tex))))
 
-(defmethod bind-tex ((tex texture-3-luminance-ub8))
+(defmethod bind-tex ((tex texture-luminance-ub8))
   (bind-texture (target tex) (object tex)))
+
+(defmethod draw-xz ((tex texture-luminance-ub8) x+ x- z+ z-
+		    &key (y 0d0) (ty 0d0))
+  "Draw a quad with a texture. If the texture is 3d, an xz-plane at y
+  is selected. The parameter x+, x-, z+, z- and y define vertex
+  positions of the quad. In case of a 3d texture ty choses the y
+  texture coordinate with value from 0 .. 1."
+  (with-slots (target dimensions) tex
+    (bind-tex tex)
+    (gl:enable target)
+    (let* ((texcoords 
+	    (ecase target
+	      (:texture-rectangle-nv
+	       (destructuring-bind (yy xx) dimensions
+		 (let ((y (* 1d0 yy)) 
+		       (x (* 1d0 xx)))
+		   (list (make-vec x y)     (make-vec 0d0 y)
+			 (make-vec 0d0 0d0) (make-vec x 0d0)))))
+	      (:texture-3d (list (make-vec 1d0 ty 1d0) (make-vec 0d0 ty 1d0)
+				 (make-vec 0d0 ty 0d0) (make-vec 1d0 ty 0d0)))))
+	   (vertexs (list (make-vec x+ y z-)
+			  (make-vec x- y z-)
+			  (make-vec x- y z+)
+			  (make-vec x+ y z+))))
+      (gl:with-primitive :quads
+	(loop for v in vertexs and c in texcoords do
+	   (tex-coord-v c) (vertex-v v))))
+    (gl:disable target)))
+
+
 
 (defun draw-axes ()
   (gl:line-width 3)

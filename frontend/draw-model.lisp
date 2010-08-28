@@ -142,38 +142,27 @@
 	     
 	     (let* ((z+ (- nf z-mm))
 		    (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
-		    (cy (/ (* 1d0 (vec-i-y (elt centers 0)))
+		    (ty (/ (* 1d0 (vec-i-y (elt centers 0)))
 			   y))
-		    (x+ (* 1d-3 ri dx x))
-		    (texcoords (list (make-vec 1d0 cy 1d0) (make-vec 0d0 cy 1d0)
-				     (make-vec 0d0 cy 0d0) (make-vec 1d0 cy 0d0)))
-		    (vertexs (list (make-vec x+ y-mm z-)
-				   (make-vec 0d0 y-mm z-)
-				   (make-vec 0d0 y-mm z+)
-				   (make-vec x+ y-mm z+))))
-	       ;; draw rectangle
-	       (gl:with-primitive :line-loop
-		 (gl:color .5 .5 .5)
-		 (dolist (v vertexs)
-		       (vertex-v v)))
+		    (x+ (* 1d-3 ri dx x)))
 	       (progn ;; load and display the 3d texture
 		 (gl:color 1 1 1 1)	
 		 (when (and *new-tex* *tex*)
 		   (destroy *tex*)
 		   (setf *tex* nil))
 		 (unless *tex*
-		   (setf *tex* (make-instance 'texture-3-luminance-ub8
-					      :data (if *new-tex*
-							*new-tex*
-							(normalize-3-csf/ub8-realpart
-							 spheres))))
+		   (setf *tex* (make-instance 
+				'texture-3-luminance-ub8
+				:data (if *new-tex*
+					  *new-tex*
+					  (normalize-3-csf/ub8-realpart
+					   spheres))))
 		   (when *new-tex*
 		     (setf *new-tex* nil)))
-		 (with-slots ((target gui::target)) *tex*
-		   (bind-tex *tex*)
-		   (gl:enable target)
-		   (gl:with-primitive :quads
-		     (loop for v in vertexs and c in texcoords do
-			  (tex-coord-v c) (vertex-v v)))
-		   (gl:disable target)))))))))))
+		 (draw-xz *tex* x+ x- z+ z- :ty ty :y y-mm))
+	       ;; draw rectangle
+	       (gl:with-primitive :line-loop
+		 (gl:color .5 .5 .5)
+		 (dolist (v vertexs)
+		   (vertex-v v)))))))))))
 

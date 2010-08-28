@@ -11,4 +11,5 @@
 	   #:texture-3-luminance-ub8
 	   #:destroy
 	   #:bind-tex
-	   #:draw-axes))
+	   #:draw-axes
+	   #:draw-xz))

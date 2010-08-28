@@ -15,7 +15,7 @@
 (time
  (defparameter *psf* 
    (multiple-value-bind (conv dx dz)
-       (angular-intensity-psf-minimal-resolution :x-um 20s0 :z-um 44s0
+       (angular-intensity-psf-minimal-resolution :x-um 10s0 :z-um 24s0
 						 :window-radius .2 :window-x .4 :window-y 0s0
 						 :debug t :initialize t
 						 :integrand-evaluations 300)
