@@ -61,7 +61,7 @@
 	      (x-mm (vec-x cent))
 	      (y-mm (vec-y cent))
 	      (z-mm (vec-z cent))
-	      (bfp-ratio-x -.98d0 #+nil (- (random 2d0) 1d0))
+	      (bfp-ratio-x .4d0 #+nil (- (random 2d0) 1d0))
 	      (bfp-ratio-y 0d0)
 	      (theta (lens:find-inverse-ray-angle objective x-mm y-mm))
 	      (phi (atan y-mm x-mm))
