@@ -168,8 +168,8 @@
 			     :element-type '(complex my-float))))
 	     ;; 2d window
 	     (do-region ((j i) (y x))
-	       (let* ((xx (- (* sx (* 4 (- (* i (/ +one+ x)) .5))) cx))
-		      (yy (- (* sx (* 4 (- (* j (/ +one+ y)) .5))) cy))
+	       (let* ((xx (+ (* sx (* 4 (- (* i (/ +one+ x)) .5))) cx))
+		      (yy (+ (* sx (* 4 (- (* j (/ +one+ y)) .5))) cy))
 		      (r2 (+ (* xx xx) (* yy yy))))
 		 (when (< r2 cr2)
 		   (setf (aref window j i) +one+))))

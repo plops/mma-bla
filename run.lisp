@@ -15,7 +15,7 @@
 (time
  (defparameter *psf* 
    (multiple-value-bind (conv dx dz)
-       (angular-intensity-psf-minimal-resolution :x-um 10s0 :z-um 34s0
+       (angular-intensity-psf-minimal-resolution :x-um 20s0 :z-um 44s0
 						 :window-radius .2 :window-x .4 :window-y 0s0
 						 :debug t :initialize t
 						 :integrand-evaluations 300)
@@ -26,17 +26,18 @@
 
 #+nil
 (time (progn 
-	(defparameter *conv*
-	  (convolve-nocrop (spheres *model*) *psf*))
+	 (defparameter *conv*
+	  (convolve (spheres *model*) *psf*))
 	(write-pgm "/home/martin/tmp/conv-cut.pgm"
 		   (normalize-2-csf/ub8-realpart 
 		    (cross-section-xz #+nil (spheres *model*)
 				       *conv*
 				      #+nil (.- *conv* (vol::s* 1e11 (spheres *model*))))))))
-
+#+nil
 (write-pgm "/home/martin/tmp/conv-cut.pgm"
-	   (normalize-2-csf/ub8-realpart 
-	    (cross-section-xz (.- *conv* (vol::s* 1s-13 (spheres *model*))))))
+	   (normalize-2-sf/ub8 
+	    (cross-section-xz (.- (normalize-3-csf/sf-realpart *conv*) 
+				  (normalize-3-csf/sf-realpart (spheres *model*))))))
 
 #+nil
 (time
