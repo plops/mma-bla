@@ -96,6 +96,10 @@
 		(format t "min ~a~%" (list min ix iy))))))))
    (write-pgm "/home/martin/tmp/scan-mosaic-max.pgm" mosaic)))
 
+
+#+nil
+(illuminate-ray (lens:make-objective) *model* 0 :left .4d0 0d0 .2d0 :right)
+
 #+nil
 (defmacro defstuff ()
   `(progn

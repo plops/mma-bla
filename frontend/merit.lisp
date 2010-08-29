@@ -20,12 +20,14 @@
 			     (:top :bottom)) do
 	      (loop for dir in dirs do
 		   (loop for bfp-dir in dirs do
-			(incf sum
-			      (illuminate-ray objective
-					      model
-					      nucleus-index dir
-					      (vec2-x vec2) (vec2-y vec2)
-					      window-radius bfp-dir)))))
+			(let ((ray (make-ray objective
+					     model
+					     nucleus-index dir
+					     (vec2-x vec2) (vec2-y vec2)
+					     window-radius bfp-dir)))
+			  (incf sum
+				(raytrace:ray-spheres-intersection 
+				 ray model nucleus-index))))))
 	 ;; in the border-width or outside of bfp
 	 (incf sum border-value))
      sum)))
