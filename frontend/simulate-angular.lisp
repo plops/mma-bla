@@ -79,7 +79,7 @@
 ;; focal plane from where the ray originates.
 
 (deftype direction ()
-  `(member :left :right :top :bottom))
+  `(member :left :right :top :bottom :center))
 
 (defun sample-circle (center radius direction)
   "Given a circle CENTER and RADIUS return the point in the left,
@@ -89,12 +89,15 @@ numbers x+i y."
 	   (double-float radius)
 	   (direction direction)
 	   (values (complex double-float) &optional))
-  (let ((phi (ecase direction
+  (let ((phi (case direction
 	       (:right 0d0)
 	       (:top (* .5d0 pi))
 	       (:left pi)
-	       (:bottom (* 1.5d0 pi)))))
-   (+ center (* radius (exp (complex 0d0 phi))))))
+	       (:bottom (* 1.5d0 pi))
+	       (t 0d0))))
+   (case direction
+     (:center center)
+     (t (+ center (* radius (exp (complex 0d0 phi))))))))
 
 #+nil
 (sample-unit-circle (complex 1d0 1d0) :right)

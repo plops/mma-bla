@@ -8,10 +8,15 @@
        (loop for c in centers-mm and r in radii-mm do
 	    (gl:with-pushed-matrix
 	      (translate-v c)
-	      (gl:color 0 0 0 .2)
+	      (let ((c .13))
+	       (gl:color c c c))
 	      (glut:solid-sphere r (* 2 n) n)
-	      (gl:color .7 .7 .7)
-	      (glut:wire-sphere (* 1.08 r) (* 2 n) n)))))))
+	      (gl:color .2 .2 .2)
+	      (gl:line-width 5)
+	      (glut:wire-sphere (* 1.06 r) (* 2 n) n)
+	      (gl:color .5 .5 .5)
+	      (gl:line-width 1)
+	      (glut:wire-sphere (* 1.12 r) (* 2 n) n)))))))
 
 ;; sketch of the coordinate system:
 ;;
@@ -43,7 +48,8 @@
 
 (let ((rot 0)
       (tex nil)
-      (new-tex nil))
+      (new-tex nil)
+      (scale '(300)))
   ;; call update-tex from anywhere to upload image data, the closure
   ;; stores the data until ensure-uptodate-tex is called from within
   ;; an opengl context
@@ -56,6 +62,16 @@
 	(setf tex nil))
       (setf tex (make-instance 'texture-luminance-ub8 :data new-tex))
       (setf new-tex nil)))
+  (defun update-scale (target-value &optional (steps 10))
+    (let* ((current (car scale))
+	   (exponent (if (< target-value current)
+			 .01d0
+			 7d0))) 
+      (setf scale
+	    (loop for i from 1 upto steps collect
+		(let* ((x (/ (* 1d0 i) steps))
+		       (y (expt x exponent)))
+		  (+ (* (- 1 y) current) (* y target-value)))))))
   (defmethod draw ((model sphere-model) &key (nucleus 0)
 		  (objective (lens:make-objective :normal (v 0 0 1)
 						  :center (v)))
@@ -82,8 +98,10 @@
 					      (1+ (sin (* 2 pi 
 							  (/ rot 360)))))
 					   3.3))) 0 0 1)
-	     (gl:translate -14 -6 (- nf))
-	     (let ((s 300))
+	     (gl:translate 0 0 (- nf))
+	     (let ((s (if (cdr scale)
+			  (pop scale)
+			  (car scale))))
 	       (gl:scale s s s))
 	     (draw-axes)
 	     (translate-v (v* ez (- nf)))
@@ -93,7 +111,7 @@
 	   (let ((lens (make-instance 'lens:disk :center (v) :radius bfp-radius))
 		 (bfp (make-instance 'lens:disk :center (make-vec 0d0 0d0 (- f))
 				     :radius bfp-radius)))
-	     (gl:color .1 .1 .1)
+	     (gl:color .4 .4 .4)
 	     (gui::draw lens)
 	     (gui::draw bfp))
 	   (macrolet ((plane (direction position)
@@ -114,14 +132,15 @@
 					    :center center)))))
 	     (let ((p+z (plane :z (- nf z-mm)))
 		   (p-z (plane :z (+ nf (* 1d-3 ri dz z)
-				     (- z-mm)))))
+				     (- z-mm))))
+		   (bfps '(:left :left :right :right :top :top :bottom :bottom
+			   :left :right :bottom :top))
+		   (samples '(:left :right :right :left :bottom :top :bottom :top
+			      :center :center :center :center)))
 	       (gui::draw p+z)
-	       (gui::draw p-z)
+	       (gui::draw p-z) 
 	       (handler-case
-		   (loop for bfp-pos in 
-			'(:left :left :right :right :top :top :bottom :bottom) and
-			sample-pos in 
-			'(:left :right :right :left :bottom :top :bottom :top) do
+		   (loop for bfp-pos in bfps and sample-pos in samples do
 			(multiple-value-bind (exit enter)
 			    (make-ray objective model
 				      nucleus sample-pos
