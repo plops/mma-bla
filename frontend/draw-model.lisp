@@ -130,15 +130,22 @@
 					    :radius (* ri .01)
 					    :normal outer-normal
 					    :center center)))))
-	     (let ((p+z (plane :z (- nf z-mm)))
-		   (p-z (plane :z (+ nf (* 1d-3 ri dz z)
-				     (- z-mm))))
-		   (bfps '(:left :left :right :right :top :top :bottom :bottom
-			   :left :right :bottom :top))
-		   (samples '(:left :right :right :left :bottom :top :bottom :top
-			      :center :center :center :center)))
-	       (gui::draw p+z)
-	       (gui::draw p-z) 
+	     (let* ((z+ (- nf z-mm))
+		    (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
+		    (x+ (* 1d-3 ri dx x))
+		    (y+ (* 1d-3 ri dy x))
+		    (p+z (plane :z z+))
+		    (p-z (plane :z z-))
+		    (bfps '(:left :left :right :right :top :top :bottom :bottom
+			    :left :right :bottom :top))
+		    (samples '(:left :right :right :left :bottom :top :bottom :top
+			       :center :center :center :center)))
+	       #+nil(gui::draw p+z)
+	       #+nil(gui::draw p-z)
+	       (let* ((start (make-vec 0d0 0d0 z+))
+		      (dim (make-vec x+ y+ (* 1d-3 ri dz z))))
+		 (gl:color .6 .6 .6)
+		 (draw-wire-box start (v+ start dim)))
 	       (handler-case
 		   (loop for bfp-pos in bfps and sample-pos in samples do
 			(multiple-value-bind (exit enter)
@@ -164,11 +171,8 @@
 			      (vertex-v h-z)))))
 		 (ray-lost () nil))
 	     
-	       (let* ((z+ (- nf z-mm))
-		      (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
-		      (ty (/ (* 1d0 (vec-i-y (elt centers 0)))
-			     y))
-		      (x+ (* 1d-3 ri dx x)))
+	       (let* ((ty (/ (* 1d0 (vec-i-y (elt centers 0)))
+			     y)))
 		 (progn ;; load and display the 3d texture
 		   (gl:color 1 1 1 1)
 		   (ensure-uptodate-tex)

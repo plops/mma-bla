@@ -121,3 +121,9 @@
     (gl:color 0 0 1 1) (gl:vertex 0 0 0) (gl:vertex 0 0 1)))
 
 
+(defun draw-wire-box (start end)
+  (gl:with-pushed-matrix
+    (translate-v start)
+    (scale-v (v- end start))
+    (gl:translate .5 .5 .5)
+    (glut:wire-cube 1)))

@@ -12,4 +12,5 @@
 	   #:destroy
 	   #:bind-tex
 	   #:draw-axes
-	   #:draw-xz))
+	   #:draw-xz
+	   #:draw-wire-box))
