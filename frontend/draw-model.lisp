@@ -60,14 +60,9 @@
      (destructuring-bind (z y x)
 	 dimensions
        (let* ((cent (elt centers-mm nucleus))
-	      (x-mm (vec-x cent))
 	      (y-mm (vec-y cent))
 	      (z-mm (vec-z cent))
-	      (theta (lens:find-inverse-ray-angle objective x-mm y-mm))
-	      (phi (atan y-mm x-mm))
-	      (start (make-vec (* bfp-radius bfp-ratio-x)
-			       (* bfp-radius bfp-ratio-y)
-			       (- f)))
+	      
 	      (nf (* ri f))
 	      (ez (v 0 0 1)))
 	 (progn
@@ -111,40 +106,31 @@
 	     (gui::draw p+z)
 	     (gui::draw p-z)
 	     (handler-case
-		 (let*
-		     ((nro (make-ray objective model
-				     nucleus :right
-				     bfp-ratio-x
-				     bfp-ratio-y 
-				     .0d0 :right)))
-		  #+nil ((ro (lens:refract (make-instance 
-					 'ray :start start
-					 :direction (v-spherical theta phi))
-					objective))
-		      (nro (make-instance 'ray 
-					  :start (vector::start ro)
-					  :direction (normalize 
-						      (vector::direction ro)))))
-		   ;; draw light ray from back focal plane through sample
-		   (let ((h+z (lens:intersect nro p+z))
-			 (h-z (lens:intersect nro p-z)))
-		     (gl:line-width 7)
-		     (gl:with-primitive :lines
-		       (gl:color .8 .3 .3)
-		       (vertex-v start)
-		       (vertex-v (vector::start nro))
+		 (loop for bfp-pos in 
+		      '(:left :left :right :right :top :top :bottom :bottom) and
+		    sample-pos in 
+		      '(:left :right :right :left :bottom :top :bottom :top) do
+		      (multiple-value-bind (exit enter)
+			  (make-ray objective model
+				    nucleus sample-pos
+				    bfp-ratio-x
+				    bfp-ratio-y 
+				    .1d0 bfp-pos)
+		    ;; draw light ray from back focal plane through sample
+		    (let ((h+z (lens:intersect exit p+z))
+			  (h-z (lens:intersect exit p-z)))
+		      (gl:line-width 7)
+		      (gl:with-primitive :lines
+			(gl:color .8 .3 .3)
+			(vertex-v (vector::start enter))
+			(vertex-v (vector::start exit))
 		       
-		       (vertex-v (vector::start nro))
-		       (vertex-v h+z)
+			(vertex-v (vector::start exit))
+			(vertex-v h+z)
 		       
-		       (gl:color .3 .8 .3)
-		       #+nil(vertex-v h+z)
-		       #+nil(vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
-
-		       (gl:color .3 .6 .8)
-		       #+nil(vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
-		       (vertex-v h+z)
-		       (vertex-v h-z))))
+			(gl:color .3 .8 .3)
+			(vertex-v h+z)
+			(vertex-v h-z)))))
 	       (ray-lost () nil))
 	     
 	     (let* ((z+ (- nf z-mm))

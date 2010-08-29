@@ -57,20 +57,27 @@
 (defmethod get-ray-behind-objective ((obj objective)
 				     x-mm y-mm bfp-ratio-x bfp-ratio-y)
   "Take a point on the back focal plane and a point in the sample and
- calculate the ray direction ro that leaves the objective. So its the
- same calculation that is used for draw-ray-into-vol."
+ calculate the ray direction ro that leaves the objective. The return
+ values are the exiting ray with normalized direction from the
+ principal plane and the entering ray from the bfp."
   (declare (double-float x-mm y-mm bfp-ratio-x bfp-ratio-y)
-	   (values ray &optional))
-  (with-slots ((bfp bfp-radius)
+	   (values ray ray &optional))
+  (with-slots (bfp-radius
 	       (f focal-length)) obj
     (let* ((theta (find-inverse-ray-angle obj x-mm y-mm))
-	   (phi (atan y-mm x-mm)))
-      (refract (make-instance 'ray 
-			      :start (make-vec (* bfp-ratio-x bfp)
-					       (* bfp-ratio-y bfp)
-					       (- f))
-			      :direction (v-spherical theta phi))
-	       obj))))
+	   (phi (atan y-mm x-mm))
+	   (start (make-vec (* bfp-radius bfp-ratio-x)
+			    (* bfp-radius bfp-ratio-y)
+			    (- f)))
+	   (enter (make-instance 'ray  
+				 :start start
+				 :direction (v-spherical theta phi)))
+	   (exit (refract enter obj))
+	   (norm-exit (make-instance 
+		       'ray
+		       :start (vector::start exit)
+		       :direction (normalize (vector::direction exit)))))
+      (values norm-exit enter))))
 
 #+nil
 (get-ray-behind-objective .1d0 .1d0 0d0 0d0)

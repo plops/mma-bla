@@ -110,12 +110,12 @@ one of the four values :LEFT, :RIGHT, :TOP and :BOTTOM indicating
 which point on the periphery of the correspondi2ng circle is meant
 Coordinates in the back focal plane are ratios, e.g. bfp-ratio-x=-1
 and 1 are on the border and a window with window-radius-ratio=1 passes
-all light through the bfp. The ray exiting from the objective towards
-the sample is returned."
+all light through the bfp. The return values are the ray exiting the
+principal sphere and the ray entering the bfp."
   (declare (fixnum illuminated-sphere-index)
 	   (direction sample-position bfp-position)
 	   (double-float bfp-ratio-x bfp-ratio-y window-radius-ratio)
-	   (values ray &optional))
+	   (values ray ray &optional))
   (with-slots (centers-mm
 	       radii-mm) model
     (let ((center (elt centers-mm illuminated-sphere-index))
@@ -128,20 +128,11 @@ the sample is returned."
 			    radius sample-position))
 	       (bfp-pos (sample-circle (complex bfp-ratio-x bfp-ratio-y)
 				       window-radius-ratio	 
-				       bfp-position))
-	       (ray1 (lens:get-ray-behind-objective 
-		      objective
-		      (realpart sample-pos) (imagpart sample-pos)
-		      (realpart bfp-pos)    (imagpart bfp-pos)))
-	       (ray2 (make-instance 
-		      'ray
-		      :start (vector::start ray1)
-		      #+nil (v- (vector::start ray1)
-			  (make-vec 0d0
-				    0d0
-				    (- (* ri f) (vec-z center))))
-		      :direction (normalize (vector::direction ray1)))))
-	  ray2)))))
+				       bfp-position)))
+	  (lens:get-ray-behind-objective 
+	   objective
+	   (realpart sample-pos) (imagpart sample-pos)
+	   (realpart bfp-pos)    (imagpart bfp-pos)))))))
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
