@@ -111,14 +111,20 @@
 	     (gui::draw p+z)
 	     (gui::draw p-z)
 	     (handler-case
-		 (let* ((ro (lens:refract (make-instance 
-					   'ray :start start
-					   :direction (v-spherical theta phi))
-					  objective))
-		       (nro (make-instance 'ray 
-					   :start (vector::start ro)
-					   :direction (normalize 
-						       (vector::direction ro)))))
+		 (let*
+		     ((nro (make-ray objective model
+				     nucleus :right
+				     bfp-ratio-x
+				     bfp-ratio-y 
+				     .0d0 :right)))
+		  #+nil ((ro (lens:refract (make-instance 
+					 'ray :start start
+					 :direction (v-spherical theta phi))
+					objective))
+		      (nro (make-instance 'ray 
+					  :start (vector::start ro)
+					  :direction (normalize 
+						      (vector::direction ro)))))
 		   ;; draw light ray from back focal plane through sample
 		   (let ((h+z (lens:intersect nro p+z))
 			 (h-z (lens:intersect nro p-z)))
@@ -126,17 +132,18 @@
 		     (gl:with-primitive :lines
 		       (gl:color .8 .3 .3)
 		       (vertex-v start)
-		       (vertex-v (vector::start ro))
+		       (vertex-v (vector::start nro))
 		       
-		       (vertex-v (vector::start ro))
+		       (vertex-v (vector::start nro))
 		       (vertex-v h+z)
 		       
 		       (gl:color .3 .8 .3)
-		       (vertex-v h+z)
-		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+		       #+nil(vertex-v h+z)
+		       #+nil(vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
 
 		       (gl:color .3 .6 .8)
-		       (vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+		       #+nil(vertex-v (v+ (make-vec x-mm y-mm 0d0) (v* ez nf)))
+		       (vertex-v h+z)
 		       (vertex-v h-z))))
 	       (ray-lost () nil))
 	     

@@ -135,8 +135,8 @@ the sample is returned."
 		      (realpart bfp-pos)    (imagpart bfp-pos)))
 	       (ray2 (make-instance 
 		      'ray
-		      :start
-		      (v- (vector::start ray1)
+		      :start (vector::start ray1)
+		      #+nil (v- (vector::start ray1)
 			  (make-vec 0d0
 				    0d0
 				    (- (* ri f) (vec-z center))))
