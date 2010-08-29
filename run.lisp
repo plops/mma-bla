@@ -1,27 +1,6 @@
 #.(require :frontend)
 (in-package :frontend)
 
-(defun compare-normalize (in &optional (one 1d0))
-  (let* ((a (mapcar #'(lambda (x) (* one x)) in))
-	 (m (reduce #'max a))
-	 (n (reduce #'min a))
-	 (s (- m n))
-	 (s/2 (* one .5 s))
-	 (255/s (/ (* one 255s0) s))
-	 (new (mapcar #'(lambda (x) (+ (* one 127.5) (* 255/s (- x (+ n s/2))))) a))
-	 (old (mapcar #'(lambda (x) (* 255/s (- x n))) a)))
-    (values new old)))
-
-(let ((a (loop for i below 300 collect (- (random 1s0) .5s0))))
- (multiple-value-bind (nd od)
-     (compare-normalize a 1d0)
-   (multiple-value-bind (ns os)
-       (compare-normalize a 1s0)
-     (labels ((err (a b)
-		(reduce #'+ (mapcar #'(lambda (x y) (let ((q (- x y)))
-						 (* q q))) a b))))
-       (list (/ (err os od) (err ns nd)))))))
-
 #+nil
 (defparameter *model* (make-instance 'sphere-model-angular))
 
@@ -37,10 +16,10 @@
  (defparameter *psf* 
    (multiple-value-bind (conv dx dz)
        (angular-intensity-psf-minimal-resolution
-	:x-um 10s0 :z-um 24s0
+	:x-um 8s0 :z-um 12s0
 	:window-radius .2 :window-x .4 :window-y 0s0
 	:debug t :initialize t
-	:integrand-evaluations 300)
+	:integrand-evaluations 100)
      (resample-3-csf conv dx dx dz .2 .2 1.0))))
 #+nil
 (write-pgm "/home/martin/tmp/psf-cut.pgm"
