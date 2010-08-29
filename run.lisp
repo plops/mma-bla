@@ -17,7 +17,7 @@
    (multiple-value-bind (conv dx dz)
        (angular-intensity-psf-minimal-resolution
 	:x-um 8s0 :z-um 12s0
-	:window-radius .2 :window-x .6 :window-y 0s0
+	:window-radius .2 :window-x -.1 :window-y 0s0
 	:debug t :initialize t
 	:integrand-evaluations 100)
      (resample-3-csf conv dx dx dz .2 .2 1.0))))
@@ -48,12 +48,12 @@
    (setf *new-tex* 
 	 #+nil (normalize-3-csf/ub8-realpart *conv*)
 	 (normalize-2-csf/ub8-realpart
-	  (cross-section-xz *conv* (vec-i-y (first (centers *model*))))))
+	  (cross-section-xz *conv* (vec-i-y (elt (centers *model*) 0)))))
    nil))
 
 #+nil
 (defun draw-all ()
-    (draw *model* :nucleus 0 :bfp-ratio-x .6d0))
+  (draw *model* :nucleus 0 :bfp-ratio-x -.1d0))
 
 #+nil
 (with-gui

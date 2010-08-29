@@ -67,11 +67,14 @@
 	      (ez (v 0 0 1)))
 	 (progn
 	   (gl:enable :depth-test)
-	   (when (< 360 (incf *rot*))
+	   
+	   (when (< 180 (incf *rot* 10))
 	     (setf *rot* 0))
-	   (translate-v (v* ez (- nf)))
-	   (gl:rotate *rot* 0 0 1)
-	   (let ((s 100))
+  
+	   (gl:rotate (+ 120 (* 5 (sin (* pi (/ *rot* 180))))) 0 0 1)
+	   (gl:translate -14 -6 (- nf))
+
+	   (let ((s 300))
 	     (gl:scale s s s))
 	   (draw-axes)
 	   (translate-v (v* ez (- nf)))
@@ -115,7 +118,7 @@
 				    nucleus sample-pos
 				    bfp-ratio-x
 				    bfp-ratio-y 
-				    .1d0 bfp-pos)
+				    .02d0 bfp-pos)
 		    ;; draw light ray from back focal plane through sample
 		    (let ((h+z (lens:intersect exit p+z))
 			  (h-z (lens:intersect exit p-z)))
