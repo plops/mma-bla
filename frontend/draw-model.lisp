@@ -98,8 +98,8 @@
 					      (1+ (sin (* 2 pi 
 							  (/ rot 360)))))
 					   3.3))) 0 0 1)
-	     (gl:translate 0 0 (- nf))
-	     (let ((s (if (cdr scale)
+	     #+nil(gl:translate 0 0 (- nf))
+	     #+nil(let ((s (if (cdr scale)
 			  (pop scale)
 			  (car scale))))
 	       (gl:scale s s s))

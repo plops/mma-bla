@@ -13,4 +13,5 @@
 	   #:bind-tex
 	   #:draw-axes
 	   #:draw-xz
-	   #:draw-wire-box))
+	   #:draw-wire-box
+	   #:set-view-center))

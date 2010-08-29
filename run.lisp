@@ -61,6 +61,14 @@
 (update-scale 1 40)
 
 
+#+nil 
+(let* ((obj (lens:make-objective))
+       (n (lens::immersion-index obj))
+       (f (lens::focal-length obj)))
+  (gui:set-view-center (list 
+			(v+ (first (centers-mm *model*))
+			    (make-vec 0d0 0d0 (* n f))))))
+
 #+nil
 (with-gui
   (draw-all))
