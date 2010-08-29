@@ -17,7 +17,7 @@
    (multiple-value-bind (conv dx dz)
        (angular-intensity-psf-minimal-resolution
 	:x-um 8s0 :z-um 12s0
-	:window-radius .2 :window-x .4 :window-y 0s0
+	:window-radius .2 :window-x .6 :window-y 0s0
 	:debug t :initialize t
 	:integrand-evaluations 100)
      (resample-3-csf conv dx dx dz .2 .2 1.0))))
@@ -53,11 +53,48 @@
 
 #+nil
 (defun draw-all ()
-    (draw *model* :nucleus 0))
+    (draw *model* :nucleus 0 :bfp-ratio-x .6d0))
 
 #+nil
 (with-gui
   (draw-all))
+
+#+nil
+(time
+ (let* ((n 100)
+	(a (make-array (list n n) :element-type '(unsigned-byte 8)))
+	(nn (length *spheres-c-r*))
+	(mosaicx (ceiling (sqrt nn)))
+	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
+			    :element-type '(unsigned-byte 8))))
+   (with-open-file (*standard-output* "/dev/shm/a"
+				      :direction :output
+				      :if-exists :supersede)
+     (dotimes (*nucleus-index* nn)
+       (dotimes (i 10)
+	 (tagbody again
+	    (multiple-value-bind (min point)
+		(simplex-anneal:anneal (simplex-anneal:make-simplex
+					(make-vec2 :x -1d0 :y -1d0) 1d0)
+				       #'merit-function
+				       ;; set temperature bigger than the
+				       ;; maxima in the bfp but smaller
+				       ;; than border-value
+				       :start-temperature 2.4d0
+				       :eps/m .02d0
+				       :itmax 1000
+				       :ftol 1d-3)
+	      (unless (<= min 100d0)
+		(go again))
+	      (let* ((x (aref point 0))
+		     (y (aref point 1))
+		     (ix (floor (* n (+ x 1)) 2))
+		     (iy (floor (* n (+ y 1)) 2))
+		     (mx (mod *nucleus-index* mosaicx))
+		     (my (floor *nucleus-index* mosaicx)))
+		(incf (aref mosaic (+ (* n my) iy) (+ (* n mx) ix)))
+		(format t "min ~a~%" (list min ix iy))))))))
+   (write-pgm "/home/martin/tmp/scan-mosaic-max.pgm" mosaic)))
 
 #+nil
 (defmacro defstuff ()

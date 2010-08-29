@@ -1,31 +1,22 @@
 (in-package :frontend)
 
-(defclass sphere-model ()
-  (;; pixel dimensions in um
-   (dx :accessor dx :initarg :dx :initform .2d0 :type double-float)
-   (dy :accessor dy :initarg :dy :initform .2d0 :type double-float)
-   (dz :accessor dz :initarg :dz :initform 1d0 :type double-float)
-   (immersion-index :accessor immersion-index :initarg :immersion-index
-		    :initform 1.515d0 :type double-float)
-   ;; size of the input stack
-   (dimensions :accessor dimensions :initarg :dimensions 
-	       :initform nil :type cons)
-   ;; integral center coordinates of the nuclei, vec-i
-   (centers :accessor centers :initarg :centers :initform nil :type cons)
-   ;; radii of the nuclei in mm, double-float
-   (radii-mm :accessor radii-mm :initarg :radii-mm :initform nil :type cons)
-   ;; center positions of the nuclei in mm, double-float
-   (centers-mm :accessor centers-mm :initarg :centers-mm :initform nil :type cons)
-   ;; each nucleus drawn as a sphere
-   (spheres :accessor spheres :initarg :index-spheres
-	    :initform (make-array (list 0 0 0) :element-type 'my-float)
-	    :type (simple-array my-float 3))))
+(defclass sphere-model (raytrace:sphere-algebraic-model)
+  ((spheres :accessor spheres :initarg :index-spheres
+	    :initform (make-array (list 0 0 0)
+				  :element-type '(complex psf:my-float))
+	    :type (simple-array (complex psf:my-float) 3))))
 
 (defmethod initialize-instance :after ((model sphere-model) 
 				       &key (filename-glob "/home/martin/tmp/xa*.pgm") (radius-pixels 12d0))
   (let ((radius-sf (coerce radius-pixels 'single-float)))
-   (with-slots (dx dy dz immersion-index dimensions
-		   centers radii-mm centers-mm spheres) model
+   (with-slots ((dx raytrace::dx)
+		(dy raytrace::dy)
+		(dz raytrace::dz)
+		(immersion-index raytrace::immersion-index)
+		(dimensions raytrace::dimensions)
+		(centers raytrace::centers)
+		(radii-mm raytrace::radii-mm)
+		(centers-mm raytrace::centers-mm) spheres) model
      (unless centers ;; read from files if centers aren't given
        (let* ((stack-byte (read-stack filename-glob))
 	      (dims (array-dimensions stack-byte))

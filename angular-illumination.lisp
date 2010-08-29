@@ -136,7 +136,7 @@
    (with-open-file (*standard-output* "/dev/shm/a"
 				      :direction :output
 				      :if-exists :supersede)
-     (dotimes (*nucleus-index* nn)
+     (dotimes (*nucleus-index* 1 nn)
        (dotimes (i 10)
 	 (tagbody again
 	    (multiple-value-bind (min point)
@@ -149,7 +149,8 @@
 				       :start-temperature 2.4d0
 				       :eps/m .02d0
 				       :itmax 1000
-				       :ftol 1d-3)
+				       :ftol 1d-3
+				       :params )
 	      (unless (<= min 100d0)
 		(go again))
 	      (let* ((x (aref point 0))

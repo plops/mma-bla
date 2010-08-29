@@ -99,7 +99,7 @@ numbers x+i y."
 #+nil
 (sample-unit-circle (complex 1d0 1d0) :right)
 
-(defmethod illuminate-ray ((objective lens::objective) spheres-c-r 
+(defmethod illuminate-ray ((objective lens::objective) (model sphere-model)
 			   illuminated-sphere-index sample-position 
 			   bfp-ratio-x bfp-ratio-y window-radius-ratio 
 			   bfp-position)
@@ -116,38 +116,37 @@ returned. "
   (declare (fixnum illuminated-sphere-index)
 	   (direction sample-position bfp-position)
 	   (double-float bfp-ratio-x bfp-ratio-y window-radius-ratio)
-	   ((simple-array sphere 1) spheres-c-r)
 	   (values double-float &optional))
-  (with-slots ((center raytrace::center)
-	       (radius raytrace::radius))
-      (aref spheres-c-r illuminated-sphere-index)
-    (with-slots ((bfp-radius lens::bfp-radius)
-		 (ri lens::immersion-index)
-		 (f lens::focal-length)) objective
-      (handler-case
-	  (let* ((sample-pos (sample-circle
-			      (complex (vec-x center) (vec-y center))
-			      radius sample-position))
-		 (bfp-pos (sample-circle (complex bfp-ratio-x bfp-ratio-y)
-					 window-radius-ratio	 
-					 bfp-position))
-		 (ray1 (lens:get-ray-behind-objective 
-			objective
-			(realpart sample-pos) (imagpart sample-pos)
-			(realpart bfp-pos)    (imagpart bfp-pos)))
-		 (ray2 (make-instance 
-			'ray
-			:start
-			(v- (vector::start ray1)
-			    (make-vec 0d0
-				      0d0
-				      (- (* ri f) (vec-z center))))
-			:direction (normalize (vector::direction ray1))))
-		 (exposure (raytrace:ray-spheres-intersection 
-			    ray2 spheres-c-r
-			    illuminated-sphere-index)))
-	    exposure)
-	(ray-lost () 0d0)))))
+  (with-slots (centers-mm
+	       radii-mm) model
+    (let ((center (elt centers-mm illuminated-sphere-index))
+	  (radius (elt radii-mm illuminated-sphere-index)))
+      (with-slots ((bfp-radius lens::bfp-radius)
+		   (ri lens::immersion-index)
+		   (f lens::focal-length)) objective
+	(handler-case
+	    (let* ((sample-pos (sample-circle
+				(complex (vec-x center) (vec-y center))
+				radius sample-position))
+		   (bfp-pos (sample-circle (complex bfp-ratio-x bfp-ratio-y)
+					   window-radius-ratio	 
+					   bfp-position))
+		   (ray1 (lens:get-ray-behind-objective 
+			  objective
+			  (realpart sample-pos) (imagpart sample-pos)
+			  (realpart bfp-pos)    (imagpart bfp-pos)))
+		   (ray2 (make-instance 
+			  'ray
+			  :start
+			  (v- (vector::start ray1)
+			      (make-vec 0d0
+					0d0
+					(- (* ri f) (vec-z center))))
+			  :direction (normalize (vector::direction ray1))))
+		   (exposure (raytrace:ray-spheres-intersection 
+			      ray2 model illuminated-sphere-index)))
+	      exposure)
+	  (ray-lost () 0d0))))))
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time

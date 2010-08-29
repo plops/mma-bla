@@ -1,12 +1,10 @@
 (in-package :frontend)
 
-;; the parameter params contains state in the following list
-;; params: (objective window-radius nucleus-index spheres-c-r)
 (defun merit-function (vec2 params)
   (declare ((simple-array double-float (2)) vec2)
 	   (cons params)
 	   (values double-float &optional))
-  (destructuring-bind (objective window-radius nucleus-index spheres-c-r)
+  (destructuring-bind (objective model nucleus-index window-radius)
       params
    (let* ((border-value 0d0) ;; value to return when outside of bfp
 	  ;; this has to be considerably bigger than the maxima on the bfp
@@ -24,7 +22,8 @@
 		   (loop for bfp-dir in dirs do
 			(incf sum
 			      (illuminate-ray objective
-					      spheres-c-r nucleus-index dir
+					      model
+					      nucleus-index dir
 					      (vec2-x vec2) (vec2-y vec2)
 					      window-radius bfp-dir)))))
 	 ;; in the border-width or outside of bfp

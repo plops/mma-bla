@@ -1,10 +1,3 @@
-(defpackage :raytrace
-  (:export #:quadratic-roots
-	   #:ray-sphere-intersection-length
-	   #:ray-spheres-intersection
-	   #:sphere)
-  (:use :cl :vector))
-
 (in-package :raytrace)
 
 (declaim (optimize (speed 2) (safety 3) (debug 3)))
@@ -48,38 +41,39 @@
     (format stream "#<sphere radius: ~4f center: <~4f ~4f ~4f>>" 
 	    radius (vec-x center) (vec-y center) (vec-z center))))
 
-(defmethod ray-sphere-intersection-length ((ray ray) (sphere sphere))
-  (declare (values double-float &optional))
+(defmethod ray-sphere-intersection-length ((ray ray) center radius)
+  (declare (vec center)
+	   (double-float radius)
+	   (values double-float &optional))
   ;; (c-x)^2=r^2 defines the sphere, substitute x with the rays p+alpha a,
   ;; the raydirection should have length 1, solve the quadratic equation,
   ;; the distance between the two solutions is the distance that the ray
   ;; travelled through the sphere
   (check-direction-norm ray)
   (with-slots ((start vector::start) (direction vector::direction)) ray
-    (with-slots (center radius) sphere
-      (let* ((l (v- center start))
-	     (c (- (v. l l) (* radius radius)))
-	     (b (* -2d0 (v. l direction))))
-       (handler-case
-	   (multiple-value-bind (x1 x2)
-	       (quadratic-roots 1d0 b c)
-	     (abs (- x1 x2)))
-	 (no-solution () 0d0)
-	 (one-solution () 0d0))))))
+    (let* ((l (v- center start))
+	   (c (- (v. l l) (* radius radius)))
+	   (b (* -2d0 (v. l direction))))
+      (handler-case
+	  (multiple-value-bind (x1 x2)
+	      (quadratic-roots 1d0 b c)
+	    (abs (- x1 x2)))
+	(no-solution () 0d0)
+	(one-solution () 0d0)))))
 
 #+nil
 (ray-sphere-intersection-length (v 0d0 .1d0 -12d0) (v 0d0 0d0 1d0) (v) 3d0)
 
-(defmethod ray-spheres-intersection ((ray ray) spheres illuminated-sphere-index)
-  (declare ((simple-array sphere 1) spheres)
-	   (fixnum illuminated-sphere-index)
+(defmethod ray-spheres-intersection ((ray ray) (model sphere-algebraic-model)
+				     illuminated-sphere-index)
+  (declare (fixnum illuminated-sphere-index)
 	   (values double-float &optional))
-  (let ((sum 0d0))
-    (dotimes (i (length spheres))
-      (unless (eq i illuminated-sphere-index)
-	(incf sum (ray-sphere-intersection-length ray
-						  (aref spheres i)))))
-    sum))
+  (with-slots (centers-mm radii-mm) model
+    (let ((sum 0d0))
+      (loop for c in centers-mm and r in radii-mm and i from 0 do
+	   (unless (eq i illuminated-sphere-index)
+	    (incf sum (ray-sphere-intersection-length ray c r))))
+      sum)))
 
 
 

@@ -379,6 +379,7 @@ the coordinates. Return the centroid."
 		  (setf (aref vals i) (funcall funk (displace simplex i)))))
 	      (go label1))))))))
 
+;; look at merit-function for format of params
 (defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0)
 	       (eps/m .02d0) (simplex-min-size .1d0) (params nil))
   (declare ((simple-array double-float 2) simplex)
