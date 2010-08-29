@@ -1,0 +1,2 @@
+find . -type f | grep \\.fasl$ |xargs rm
+find . -type f | grep \\.lisp~$ | xargs rm

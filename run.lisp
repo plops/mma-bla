@@ -45,11 +45,11 @@
 #+nil
 (time
  (progn
-   (setf *new-tex* 
-	 #+nil (normalize-3-csf/ub8-realpart *conv*)
-	 (normalize-2-csf/ub8-realpart
-	  (cross-section-xz *conv* (vec-i-y (elt (centers *model*) 0)))))
-   nil))
+  (update-tex
+   #+nil (normalize-3-csf/ub8-realpart *conv*)
+   (normalize-2-csf/ub8-realpart
+    (cross-section-xz *conv* (vec-i-y (elt (centers *model*) 0)))))
+  nil))
 
 #+nil
 (defun draw-all ()

@@ -41,121 +41,118 @@
 ;;           |	       |   back focal plane
 ;;	               |
 
-(defvar *new-tex* nil) ;; set this to a ub3 volume, draw will upload
-		       ;; it next time it's called
-(defvar *rot* 0)
-(defvar *tex* nil)
-(defmethod draw ((model sphere-model) &key (nucleus 0)
-		 (objective (lens:make-objective :normal (v 0 0 1)
-						 :center (v)))
-		 (bfp-ratio-x 0d0)
-		 (bfp-ratio-y 0d0))
-  (declare (fixnum nucleus)
-	   (lens:objective objective))
-  (with-slots (dimensions spheres centers-mm centers dx dy dz) model
-    (with-slots ((f lens::focal-length)
-		 (bfp-radius lens::bfp-radius)
-		 (na lens::numerical-aperture)
-		 (ri lens::immersion-index)) objective
-     (destructuring-bind (z y x)
-	 dimensions
-       (let* ((cent (elt centers-mm nucleus))
-	      (y-mm (vec-y cent))
-	      (z-mm (vec-z cent))
-	      
-	      (nf (* ri f))
-	      (ez (v 0 0 1)))
-	 (progn
-	   (gl:enable :depth-test)
-	   
-	   (when (< 180 (incf *rot* 10))
-	     (setf *rot* 0))
-  
-	   (gl:rotate (+ 120 (* 5 (sin (* pi (/ *rot* 180))))) 0 0 1)
-	   (gl:translate -14 -6 (- nf))
-
-	   (let ((s 300))
-	     (gl:scale s s s))
-	   (draw-axes)
-	   (translate-v (v* ez (- nf)))
-	   (gl:with-pushed-matrix
-	     (translate-v (v* ez (- nf z-mm)))
-	     (draw-hidden-spheres model)))
-	 (let ((lens (make-instance 'lens:disk :center (v) :radius bfp-radius))
-	       (bfp (make-instance 'lens:disk :center (make-vec 0d0 0d0 (- f))
-				    :radius bfp-radius)))
-	   (gl:color .1 .1 .1)
-	   (gui::draw lens)
-	   (gui::draw bfp))
-	 (macrolet ((plane (direction position)
-		      ;; for defining a plane that is perpendicular to an
-		      ;; axis and crosses it at POSITION
-		      (declare (type (member :x :y :z) direction))
-		      (let* ((normal (ecase direction
-				       (:x (v 1))
-				       (:y (v 0 1))
-				       (:z (v 0 0 1)))))
-			`(let* ((pos ,position)
-				(center (v* ,normal pos))
-				(outer-normal (normalize center)))
-			   (declare (type double-float pos))
-			   (make-instance 'lens:disk
-					  :radius (* ri .01)
-					  :normal outer-normal
-					  :center center)))))
-	   (let ((p+z (plane :z (- nf z-mm)))
-		 (p-z (plane :z (+ nf (* 1d-3 ri dz z)
-				   (- z-mm)))))
-	     (gui::draw p+z)
-	     (gui::draw p-z)
-	     (handler-case
-		 (loop for bfp-pos in 
-		      '(:left :left :right :right :top :top :bottom :bottom) and
-		    sample-pos in 
-		      '(:left :right :right :left :bottom :top :bottom :top) do
-		      (multiple-value-bind (exit enter)
-			  (make-ray objective model
-				    nucleus sample-pos
-				    bfp-ratio-x
-				    bfp-ratio-y 
-				    .02d0 bfp-pos)
-		    ;; draw light ray from back focal plane through sample
-		    (let ((h+z (lens:intersect exit p+z))
-			  (h-z (lens:intersect exit p-z)))
-		      (gl:line-width 7)
-		      (gl:with-primitive :lines
-			(gl:color .8 .3 .3)
-			(vertex-v (vector::start enter))
-			(vertex-v (vector::start exit))
+(let ((rot 0)
+      (tex nil)
+      (new-tex nil))
+  ;; call update-tex from anywhere to upload image data, the closure
+  ;; stores the data until ensure-uptodate-tex is called from within
+  ;; an opengl context
+  (defun update-tex (data)
+    (setf new-tex data))
+  (defun ensure-uptodate-tex ()
+    (when new-tex
+      (when tex
+	(destroy tex)
+	(setf tex nil))
+      (setf tex (make-instance 'texture-luminance-ub8 :data new-tex))
+      (setf new-tex nil)))
+  (defmethod draw ((model sphere-model) &key (nucleus 0)
+		  (objective (lens:make-objective :normal (v 0 0 1)
+						  :center (v)))
+		  (bfp-ratio-x 0d0)(bfp-ratio-y 0d0))
+   (declare (fixnum nucleus)
+	    (lens:objective objective))
+   (with-slots (dimensions spheres centers-mm centers dx dy dz) model
+     (with-slots ((f lens::focal-length)
+		  (bfp-radius lens::bfp-radius)
+		  (na lens::numerical-aperture)
+		  (ri lens::immersion-index)) objective
+       (destructuring-bind (z y x)
+	   dimensions
+	 (let* ((cent (elt centers-mm nucleus))
+		(y-mm (vec-y cent))
+		(z-mm (vec-z cent))   
+		(nf (* ri f))
+		(ez (v 0 0 1)))
+	   (progn
+	     (gl:enable :depth-test)
+	     (when (< 360 (incf rot 10))
+	       (setf rot 0))
+	     (gl:rotate (+ 120 (* 15 (expt (* .5 
+					      (1+ (sin (* 2 pi 
+							  (/ rot 360)))))
+					   3.3))) 0 0 1)
+	     (gl:translate -14 -6 (- nf))
+	     (let ((s 300))
+	       (gl:scale s s s))
+	     (draw-axes)
+	     (translate-v (v* ez (- nf)))
+	     (gl:with-pushed-matrix
+	       (translate-v (v* ez (- nf z-mm)))
+	       (draw-hidden-spheres model)))
+	   (let ((lens (make-instance 'lens:disk :center (v) :radius bfp-radius))
+		 (bfp (make-instance 'lens:disk :center (make-vec 0d0 0d0 (- f))
+				     :radius bfp-radius)))
+	     (gl:color .1 .1 .1)
+	     (gui::draw lens)
+	     (gui::draw bfp))
+	   (macrolet ((plane (direction position)
+			;; for defining a plane that is perpendicular to an
+			;; axis and crosses it at POSITION
+			(declare (type (member :x :y :z) direction))
+			(let* ((normal (ecase direction
+					 (:x (v 1))
+					 (:y (v 0 1))
+					 (:z (v 0 0 1)))))
+			  `(let* ((pos ,position)
+				  (center (v* ,normal pos))
+				  (outer-normal (normalize center)))
+			     (declare (type double-float pos))
+			     (make-instance 'lens:disk
+					    :radius (* ri .01)
+					    :normal outer-normal
+					    :center center)))))
+	     (let ((p+z (plane :z (- nf z-mm)))
+		   (p-z (plane :z (+ nf (* 1d-3 ri dz z)
+				     (- z-mm)))))
+	       (gui::draw p+z)
+	       (gui::draw p-z)
+	       (handler-case
+		   (loop for bfp-pos in 
+			'(:left :left :right :right :top :top :bottom :bottom) and
+			sample-pos in 
+			'(:left :right :right :left :bottom :top :bottom :top) do
+			(multiple-value-bind (exit enter)
+			    (make-ray objective model
+				      nucleus sample-pos
+				      bfp-ratio-x
+				      bfp-ratio-y 
+				      .02d0 bfp-pos)
+			  ;; draw light ray from back focal plane through sample
+			  (let ((h+z (lens:intersect exit p+z))
+				(h-z (lens:intersect exit p-z)))
+			    (gl:line-width 7)
+			    (gl:with-primitive :lines
+			      (gl:color .8 .3 .3)
+			      (vertex-v (vector::start enter))
+			      (vertex-v (vector::start exit))
 		       
-			(vertex-v (vector::start exit))
-			(vertex-v h+z)
+			      (vertex-v (vector::start exit))
+			      (vertex-v h+z)
 		       
-			(gl:color .3 .8 .3)
-			(vertex-v h+z)
-			(vertex-v h-z)))))
-	       (ray-lost () nil))
+			      (gl:color .3 .8 .3)
+			      (vertex-v h+z)
+			      (vertex-v h-z)))))
+		 (ray-lost () nil))
 	     
-	     (let* ((z+ (- nf z-mm))
-		    (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
-		    (ty (/ (* 1d0 (vec-i-y (elt centers 0)))
-			   y))
-		    (x+ (* 1d-3 ri dx x)))
-	       (progn ;; load and display the 3d texture
-		 (gl:color 1 1 1 1)	
-		 (when (and *new-tex* *tex*)
-		   (destroy *tex*)
-		   (setf *tex* nil))
-		 (unless *tex*
-		   (setf *tex* (make-instance 
-				'texture-luminance-ub8
-				:data *new-tex*))
-		   (when *new-tex*
-		     (setf *new-tex* nil)))
-		 (draw-xz *tex* x+ 0d0 z+ z- :ty ty :y y-mm))
-	       ;; draw rectangle
-	       #+nil (gl:with-primitive :line-loop
-		 (gl:color .5 .5 .5)
-		 (dolist (v vertexs)
-		   (vertex-v v)))))))))))
+	       (let* ((z+ (- nf z-mm))
+		      (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
+		      (ty (/ (* 1d0 (vec-i-y (elt centers 0)))
+			     y))
+		      (x+ (* 1d-3 ri dx x)))
+		 (progn ;; load and display the 3d texture
+		   (gl:color 1 1 1 1)
+		   (ensure-uptodate-tex)
+		   (when tex
+		    (draw-xz tex x+ 0d0 z+ z- :ty ty :y y-mm))))))))))))
 
