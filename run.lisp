@@ -61,13 +61,18 @@
 (update-scale 1 40)
 
 
+
 #+nil 
 (let* ((obj (lens:make-objective))
        (n (lens::immersion-index obj))
-       (f (lens::focal-length obj)))
-  (gui:set-view-center (list 
-			(v+ (first (centers-mm *model*))
-			    (make-vec 0d0 0d0 (* n f))))))
+       (f (lens::focal-length obj))
+       (nucleus-position (elt (centers-mm *model*) 6))
+       (center (make-vec (vec-x nucleus-position)
+			 (vec-y nucleus-position))))
+  (defparameter *look* nucleus-position)
+  (gui:update-view :fov-list (list 40d0)
+		   :center-list (list (v- (make-vec 0d0 0d0 (* n f))
+					  center))))
 
 #+nil
 (with-gui

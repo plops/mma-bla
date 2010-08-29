@@ -104,7 +104,7 @@
 			  (car scale))))
 	       (gl:scale s s s))
 	     (draw-axes)
-	     (translate-v (v* ez (- nf)))
+	     #+nil (translate-v (v* ez (- nf)))
 	     (gl:with-pushed-matrix
 	       (translate-v (v* ez (- nf z-mm)))
 	       (draw-hidden-spheres model)))

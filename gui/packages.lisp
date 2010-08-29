@@ -14,4 +14,4 @@
 	   #:draw-axes
 	   #:draw-xz
 	   #:draw-wire-box
-	   #:set-view-center))
+	   #:update-view))
