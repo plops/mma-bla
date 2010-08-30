@@ -20,7 +20,7 @@
       (load-identity)
       (if 2d
 	  (ortho 0 (width w) (height w) 0 -1 1)
-	  (progn (glu:perspective 40 (/ (width w) (height w)) .01 100)
+	  (progn (glu:perspective 40 (/ (width w) (height w)) 3 50)
 		 (glu:look-at 20 30 10
 			      0 0 0
 			      0 0 1)))

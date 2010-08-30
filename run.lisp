@@ -17,7 +17,7 @@
    (multiple-value-bind (conv dx dz)
        (angular-intensity-psf-minimal-resolution
 	:x-um 8s0 :z-um 12s0
-	:window-radius .1 :window-x -.1 :window-y 0s0
+	:window-radius 1.0 :window-x 0s0 :window-y 0s0
 	:debug t :initialize t
 	:integrand-evaluations 100)
      (resample-3-csf conv dx dx dz .2 .2 1.0))))
@@ -67,11 +67,14 @@
        (center (make-vec (vec-x nucleus-position)
 			 (vec-y nucleus-position))))
   (update-view-center nucleus-position)
-  (update-scale 300 20))
+  (update-scale 2 20))
 
 #+nil
 (defun draw-all ()
-  (draw *model* :nucleus 0 :bfp-ratio-x -.1d0))
+  (draw *model*
+	:nucleus 0 
+	:bfp-ratio-x 0d0
+	:window-radius-ratio .1d0))
 
 #+nil
 (with-gui
