@@ -80,37 +80,85 @@ theta."
 		(push (list (* rotator f)
 			    (* rotator b))
 		      result))))
-    (when (and (oddp nr-ffp) (odd-p nr-bfp)) ;; central ray was omitted above
+    (when (and (oddp nr-ffp) (oddp nr-bfp)) ;; central ray was omitted above
       (push (list (complex 0d0) (complex 0d0)) result))
     (nreverse result)))
 
 #+nil
 (sample-circles 2 2 4)
 
+;;				      ------+------
+;;			          ---/      |      \---
+;;			       --/    	    |---+---   \--
+;;			     -/            -|   |   \-    \-
+;;			    /       	  / | z |     \     \
+;;		          -/   	         /  |   |  r   \     \-
+;;		         /       	 |y +---+------+       \
+;;		        /                \  |   |      /        \
+;;		        |                 \ |   |     /         |
+;;	               /       	     	   -|   |   /-           \
+;;	               |                    |---+---      	 |
+;;	       	      -+--------------------+---+----------------+--
+;;	               |                    |   x       rr       |
+;;	               \       	     	    |  	                 /
+
+(defun move-complex-circle (z rr x/rr y/rr r/rr)
+  "Given a complex number Z inside the unit circle, move the unit
+circle to position X,Y inside the BFP with radius RR. Scale the unit
+circle to the window-radius R."
+  (declare ((complex double-float) z)
+	   ((double-float -1d0 1d0) x/rr y/rr)
+	   ((double-float 0d0 1d0) r/rr)
+	   (double-float rr)
+	   (values (complex double-float) &optional))
+  (+ (complex (* x/rr rr) (* y/rr rr))
+     (* r/rr rr z)))
+
+#+nil
+(move-complex-circle (complex 1d0 0d0) 2d0 .9d0 0d0 .1d0)
+
+#+nil
+(move-complex-circle (complex 1d0 0d0) 1d0 .9d0 0d0 .1d0)
+
 (defmethod make-rays ((objective lens::objective) (model sphere-model)
-		     illuminated-sphere-index sample-position
-		     bfp-ratio-x bfp-ratio-y window-radius-ratio
-		     bfp-position)
-  (declare (fixnum illuminated-sphere-index)
-	   (double-float bfp-ratio-x bfp-ratio-y window-radius-ratio)
-	   (values ray ray &optional))
+		      nucleus positions win-x/r win-y/r win-r/r)
+  "Given an objective and a nucleus in a model generate rays from a
+circle on the back focal plane into the front focal plane. The pattern
+of the rays is given as a list of 2-lists of complex numbers. The
+first complex number gives the relative position inside the central
+cross section of the nucleus and the second number gives the relative
+position in the bfp. The coordinates and size of the window in the
+back focal plane are given relative to the radius of the bfp. The
+return value is a list of 2-lists of rays, where the first ray starts
+from the principal sphere and the second ray from the bfp."
+  (declare (fixnum nucleus)
+	   (cons positions)
+	   (double-float win-x/r win-y/r win-r/r)
+	   (values cons &optional))
+  (assert (subtypep (type-of (first (first positions))) '(complex double-float)))
+  (assert (subtypep (type-of (second (first positions))) '(complex double-float)))
   (with-slots (centers-mm
 	       radii-mm) model
-    (let ((center (elt centers-mm illuminated-sphere-index))
-	  (radius (elt radii-mm illuminated-sphere-index)))
-      (with-slots ((bfp-radius lens::bfp-radius)
+    (let ((center (elt centers-mm nucleus))
+	  (radius (elt radii-mm nucleus)))
+      (with-slots ((r lens::bfp-radius)
 		   (ri lens::immersion-index)
 		   (f lens::focal-length)) objective
-	(let* ((sample-pos (sample-circle
-			    (complex (vec-x center) (vec-y center))
-			    radius sample-position))
-	       (bfp-pos (sample-circle (complex bfp-ratio-x bfp-ratio-y)
-				       window-radius-ratio
-				       bfp-position)))
-	  (lens:get-ray-behind-objective
-	   objective
-	   (realpart sample-pos) (imagpart sample-pos)
-	   (realpart bfp-pos)    (imagpart bfp-pos)))))))
+	(loop for (f b) in positions collect
+	     (let ((fr (move-complex-circle f r win-x/r win-y/r win-r/r))
+		   (br (move-complex-circle b 1d0 (vec-x center) (vec-y center)
+					    radius)))
+	       (multiple-value-bind (exit enter)
+		   (lens:get-ray-behind-objective
+		    objective
+		    (realpart fr) (imagpart fr)
+		    (realpart br) (imagpart br))
+		 (list exit enter))))))))
+
+#+nil
+(make-rays (lens:make-objective) *model* 0 (sample-circles 2 2 4)
+	   .2d0 0d0 .1d0)
+
 
 (defun merit-function (vec2 params)
   (declare ((simple-array double-float (2)) vec2)

@@ -3,4 +3,7 @@
   (:export
    #:sphere-model
    #:sphere-model-angular
-   #:make-test-model))
+   #:make-test-model
+   #:sample-circles
+   #:move-complex-circle
+   #:make-rays))
