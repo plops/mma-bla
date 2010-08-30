@@ -140,25 +140,28 @@ from the principal sphere and the second ray from the bfp."
   (with-slots (centers-mm
 	       radii-mm) model
     (let ((center (elt centers-mm nucleus))
-	  (radius (elt radii-mm nucleus)))
+	  (radius (elt radii-mm nucleus))
+	  (result nil))
       (with-slots ((r lens::bfp-radius)
 		   (ri lens::immersion-index)
 		   (f lens::focal-length)) objective
-	(loop for (f b) in positions collect
-	     (let ((fr (move-complex-circle f r win-x/r win-y/r win-r/r))
-		   (br (move-complex-circle b 1d0 (vec-x center) (vec-y center)
+	(loop for (f b) in positions do
+	     (let ((br (move-complex-circle b r win-x/r win-y/r win-r/r))
+		   (fr (move-complex-circle f 1d0 (vec-x center) (vec-y center)
 					    radius)))
-	       (multiple-value-bind (exit enter)
-		   (lens:get-ray-behind-objective
-		    objective
-		    (realpart fr) (imagpart fr)
-		    (realpart br) (imagpart br))
-		 (list exit enter))))))))
+	       (handler-case
+		   (multiple-value-bind (exit enter)
+		       (lens:get-ray-behind-objective
+			objective
+			(realpart fr) (imagpart fr)
+			(realpart br) (imagpart br))
+		     (push (list exit enter) result))
+		 (ray-lost () nil))))
+	(nreverse result)))))
 
 #+nil
 (make-rays (lens:make-objective) *model* 0 (sample-circles 2 2 4)
 	   .2d0 0d0 .1d0)
-
 
 (defun merit-function (vec2 params)
   (declare ((simple-array double-float (2)) vec2)
