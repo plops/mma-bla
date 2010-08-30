@@ -63,13 +63,13 @@
   (declare (double-float x-mm y-mm)
 	   ((double-float -1d0 1d0) bfp-x/r bfp-y/r)
 	   (values ray ray &optional))
-  (with-slots (bfp-radius
+  (with-slots (bfp-radius center
 	       (f focal-length)) obj
     (let* ((theta (find-inverse-ray-angle obj x-mm y-mm))
 	   (phi (atan y-mm x-mm))
-	   (start (make-vec (* bfp-radius bfp-x/r)
-			    (* bfp-radius bfp-y/r)
-			    (- f)))
+	   (start (v+ center (make-vec (* bfp-radius bfp-x/r)
+				       (* bfp-radius bfp-y/r)
+				       (- f))))
 	   (enter (make-instance 'ray  
 				 :start start
 				 :direction (v-spherical theta phi)))

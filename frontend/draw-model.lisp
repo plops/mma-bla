@@ -22,27 +22,28 @@
 ;;
 ;; the objective sits below the sample. its (thin) lens has a distance
 ;; nf to the in-focus plane. z is directed from the objective towards
-;; the sample. the first slice of the stack is furthest from the
-;; objective.
+;; the sample. the first slice of the stack is nearest to the
+;; objective.  in the test sample the single sphere is centered on
+;; slice 10, the plane of spheres is in slice 20.
 ;;
 ;;     	               ^ z
 ;;                     |
 ;;            	       |   /
 ;;           	 +-----+-/----+
-;;       --------+-----/------+---------    nf
-;;           	 +---/-+------+
+;;       --------+-----/------+---------    z-plane-mm = z_slice * n * dz * 1d-3
+;;           	 +---/-+------+       --  0
 ;;            	    /  |
 ;;     \          /-   |               /
 ;;     	\       /-     |              /	principal
 ;;     	 -\   /-       |            /-	  sphere
 ;;         --/         |         /--
 ;;     	     |---\     |     /---
-;;           | 	  -----+-----------------    0
+;;           | 	  -----+-----------------    - nf + z-plane-mm
 ;;   	     | 	       |
 ;;    	     | 	       |
 ;;           | 	       |
 ;;     	     |         |
-;;       ----+---------+-----------------   -f
+;;       ----+---------+-----------------   - f - nf + z-plane-mm
 ;;           |	       |   back focal plane
 ;;	               |
 
@@ -54,7 +55,7 @@
 (let ((rot 0)
       (tex nil)
       (new-tex nil)
-      (scale '(100))
+      (scale '(300))
       (view-center (list (v))))
   (defun update-tex (data)
     "Supply either an image or a volume of unsigned-byte. It will be
@@ -102,7 +103,8 @@ update-view-center."
 		   (objective (lens:make-objective :normal (v 0 0 1)
 						   :center (v)))
 		   (win-x/r 0d0) (win-y/r 0d0)
-		   (win-r/r .02d0))
+		   (win-r/r .02d0)
+		   (z-plane-mm (vec-z (elt (raytrace::centers-mm model) nucleus))))
     (declare (fixnum nucleus)
 	     (lens:objective objective)
 	     (double-float win-x/r win-y/r win-r/r))
@@ -110,63 +112,61 @@ update-view-center."
     (with-slots (dimensions spheres centers-mm centers dx dy dz) model
       (with-slots ((f lens::focal-length)
 		   (bfp-radius lens::bfp-radius)
+		   (center lens::center)
 		   (na lens::numerical-aperture)
 		   (ri lens::immersion-index)) objective
+	(setf center (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
 	(destructuring-bind (z y x)
 	    dimensions
 	  (let* ((cent (elt centers-mm nucleus))
 		 (y-mm (vec-y cent))
-		 (z-mm (vec-z cent))   
-		 (nf (* ri f))
 		 (ez (v 0 0 1)))
 	    (progn
 	      (gl:enable :depth-test)
 	      (let ((s (pop-until-end scale)))
 		(gl:scale s s s))
-	      (gl:translate 0 0 (- nf))
+	      #+nil (gl:translate 0 0 (- nf))
 	      (rotate-translate-sample-space)
-	      (gl:with-pushed-matrix ;; move axes into focal plane
-		(gl:translate 0 0 nf)
-		(draw-axes))
+	      (draw-axes)	     ;; move axes into focal plane
 	      (gl:with-pushed-matrix ;; move current stack plane into focal plane
-		(translate-v (v* ez (- nf z-mm)))
+		(translate-v (v* ez (- z-plane-mm)))
 		(draw-hidden-spheres model))
-	      (let ((lens (make-instance 'lens:disk :center (v) 
+	      (let ((lens (make-instance 'lens:disk :center center 
 					 :radius bfp-radius))
-		    (bfp (make-instance 'lens:disk :center (make-vec 0d0 0d0 (- f))
+		    (bfp (make-instance 'lens:disk :center 
+					(v- center (make-vec 0d0 0d0 f))
 					:radius bfp-radius)))
 		(gl:color .4 .4 .4) ;; draw planes defining the objective
 		(gui::draw lens) (gui::draw bfp))
 	      (labels ((plane (direction position)
-			    "Define a plane that is perpendicular to
+			 "Define a plane that is perpendicular to
 an axis and crosses it at POSITION."
-			   (declare ((member :x :y :z) direction)
-				    (double-float position))
-			   (let* ((normal (ecase direction
-					    (:x (v 1))
-					    (:y (v 0 1))
-					    (:z (v 0 0 1)))))
-			     (let* ((center (v* normal position))
-				    (outer-normal (normalize center)))
-			       (make-instance 'lens:disk
-					      :radius (* ri .01)
-					      :normal outer-normal
-					      :center center)))))
-		(let* ((z+ (- nf z-mm))
-		       (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
+			 (declare ((member :x :y :z) direction)
+				  (double-float position))
+			 (let* ((normal (ecase direction
+					  (:x (v 1))
+					  (:y (v 0 1))
+					  (:z (v 0 0 1)))))
+			   (let* ((center (v* normal position))
+				  (outer-normal (normalize center)))
+			     (make-instance 'lens:disk
+					    :radius (* ri .01)
+					    :normal outer-normal
+					    :center center)))))
+		(let* ((z+ 0d0)
+		       (z- (* 1d-3 ri dz z))
 		       (p-z (plane :z z-)) ;; slice that's furthest from objective
 		       (x+ (* 1d-3 ri dx x))
 		       (y+ (* 1d-3 ri dy x)))
 		  (let* ((start (make-vec 0d0 0d0 z+)) ;; draw bounding box
-			 (dim (make-vec x+ y+ (* 1d-3 ri dz z))))
+			 (dim (make-vec x+ y+ z-)))
 		    (gl:color .6 .6 .6)
 		    (draw-wire-box start (v+ start dim)))
 		  ;; rays from back focal plane through sample
 		  (loop for (exit enter) in
 		       (make-rays objective model nucleus 
 				  (sample-circles 3 3 1)
-				  win-x/r win-y/r win-r/r)
-		     do
+				  win-x/r win-y/r win-r/r) do
 		       (let ((h-z (lens:intersect exit p-z)))
 			 (gl:line-width 1)
 			 (gl:color .2 .6 .8)

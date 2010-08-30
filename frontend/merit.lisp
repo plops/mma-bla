@@ -154,7 +154,6 @@ from the principal sphere and the second ray from the bfp."
 					    win-x/r win-y/r win-r/r))
 		   (fr (move-complex-circle f 1d0 (vec-x center) (vec-y center)
 					    radius)))
-	       (defparameter *sldf* bfp-radius)
 	       (handler-case
 		   (multiple-value-bind (exit enter)
 		       (lens:get-ray-behind-objective
@@ -167,7 +166,8 @@ from the principal sphere and the second ray from the bfp."
 
 #+nil
 (defparameter *look*
- (loop for (exit enter) in (make-rays (lens:make-objective) *model* 0 
+ (loop for (exit enter) in (make-rays (lens:make-objective :center (v 0 0 1))
+				      *model* 0 
 				      (sample-circles 2 2 1)
 				      .0d0 0d0 .1d0)
       collect
@@ -180,39 +180,44 @@ positions (positions is a list of 2-lists of complex numbers)."
   (declare ((simple-array double-float (2)) vec2)
 	   (cons params)
 	   (values double-float &optional))
-  (destructuring-bind (objective model nucleus-index window-radius positions)
+  (destructuring-bind (objective model nucleus-index 
+				 window-radius positions z-mm-from-objective)
       params
-   (let* ((border-value 0d0) ;; value to return when outside of bfp
-	  ;; this has to be considerably bigger than the maxima on the bfp
-	  (border-width window-radius) ;; in this range to the
-	  ;; border of the bfp
-	  ;; enforce bad merit
-	  ;; function
-	  (sum 0d0)
-	  (radius (norm2 vec2)))
-     (if (< radius (- .99d0 border-width))
-	 ;; inside
-	 (loop for (exit enter) in (make-rays objective model nucleus-index
-					      positions (vec2-x vec2)
-					      (vec2-y vec2) window-radius) do
-	      (incf sum
-		    (raytrace:ray-spheres-intersection
-		     exit model nucleus-index)))
-	 ;; in the border-width or outside of bfp
-	 (incf sum border-value))
-     sum)))
+    (let* ((border-value 0d0) ;; value to return when outside of bfp
+	   ;; this has to be considerably bigger than the maxima on the bfp
+	   (border-width window-radius) ;; in this range to the
+	   ;; border of the bfp
+	   ;; enforce bad merit
+	   ;; function
+	   (sum 0d0)
+	   (radius (norm2 vec2)))
+      (if (< radius (- .99d0 border-width))
+	  ;; inside
+	  (loop for (exit enter) in (make-rays objective model nucleus-index
+					       positions (vec2-x vec2)
+					       (vec2-y vec2) window-radius) do
+	       (incf sum
+		     (raytrace:ray-spheres-intersection
+		      exit model nucleus-index)))
+	  ;; in the border-width or outside of bfp
+	  (incf sum border-value))
+      sum)))
 
 #+nil
-(let* ((obj )
+(let* ((obj (lens:make-objective :center (v) :normal (v 0 0 1)))
        (window-radius .2d0)
-       (positions (sample-circles 3 12 12))
-       (params (list (lens:make-objective :center (v) :normal (v 0 0 1))
-		     *model*
-		     0
-		     window-radius
-		     positions)))
-  (merit-function (make-vec2 :x -.2d0 :y .2d0)
-		  params))
+       (positions (sample-circles 3 12 12)))
+  (with-slots ((c lens::center)
+	       (ri lens::immersion-index)
+	       (f lens::focal-length)) obj
+    (setf c (make-vec 0d0 0d0 (- (* ri f)))) ;; small shift for sample is missing
+    (let* ((params (list obj
+			 *model*
+			 0
+			 window-radius
+			 positions))) 
+      (merit-function (make-vec2 :x -.2d0 :y .2d0)
+		      params))))
 
 (defun find-optimal-bfp-window-center (nucleus params)
   (declare (fixnum nucleus)
