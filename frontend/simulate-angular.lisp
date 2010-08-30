@@ -137,29 +137,4 @@ principal sphere and the ray entering the bfp."
 	   (realpart sample-pos) (imagpart sample-pos)
 	   (realpart bfp-pos)    (imagpart bfp-pos)))))))
 
-#+nil ;; store the scan for each nucleus in the bfp
-(time
- (let* ((n 30)
-	(nn (length (centers *model*)))
-	(mosaicx (ceiling (sqrt nn)))
-	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
-			    :element-type 'double-float))
-	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
-	(window-radius .1d0)
-	(positions (sample-circles 3 3 1)))
-   (dotimes (nuc 1 nn)
-     (let* ((params (list obj
-			  *model*
-			  nuc
-			  window-radius
-			  positions))
-	    (px (* n (mod nuc mosaicx)))
-	    (py (* n (floor nuc mosaicx))))
-       (do-region ((j i) (n n))
-	 (let ((x (- (* 2d0 (/ i n)) 1d0))
-	       (y (- (* 2d0 (/ j n)) 1d0)))
-	   (setf (aref mosaic (+ py j) (+ px i))
-		 (merit-function (make-vec2 :x x :y y)
-				 params))))))
-   (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-2-df/ub8 mosaic))))
 

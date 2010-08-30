@@ -203,7 +203,7 @@ positions (positions is a list of 2-lists of complex numbers)."
 	  (incf sum border-value))
       sum)))
 
-#+nil
+#+nil ;; call merit function for one window center position
 (let* ((obj (lens:make-objective :center (v) :normal (v 0 0 1)))
        (window-radius .2d0)
        (positions (sample-circles 3 12 12))
@@ -217,8 +217,37 @@ positions (positions is a list of 2-lists of complex numbers)."
 			 0
 			 window-radius
 			 positions))) 
-      (merit-function (make-vec2 :x -.2d0 :y .2d0)
+      (merit-function (make-vec2 :x -.2d0 :y 0d0)
 		      params))))
+
+#+nil ;; store the scan for each nucleus in the bfp
+(time
+ (let* ((n 30)
+	(nn (length (centers *model*)))
+	(mosaicx (ceiling (sqrt nn)))
+	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
+			    :element-type 'double-float))
+	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
+	(window-radius .01d0)
+	(positions (sample-circles 3 7 8)))
+   (dotimes (nuc 1 nn)
+     (with-slots ((c lens::center)
+		  (ri lens::immersion-index)
+		  (f lens::focal-length)) obj
+       (let* ((z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) nuc)))) 
+	 (setf c (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
+	 (let* ((params (list obj *model* nuc window-radius positions))
+		(px (* n (mod nuc mosaicx)))
+		(py (* n (floor nuc mosaicx))))
+	   (do-region ((j i) (n n))
+	     (let ((x (- (* 2d0 (/ i n)) 1d0))
+		   (y (- (* 2d0 (/ j n)) 1d0)))
+	       (setf (aref mosaic (+ py j) (+ px i))
+		     (merit-function (make-vec2 :x x :y y)
+				     params))))))))
+   (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-2-df/ub8 mosaic))))
+
+
 
 (defun find-optimal-bfp-window-center (nucleus params)
   (declare (fixnum nucleus)
