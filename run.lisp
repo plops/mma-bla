@@ -51,9 +51,6 @@
      (cross-section-xz *conv* (vec-i-y (elt (centers *model*) 0)))))
    nil))
 
-#+nil
-(defun draw-all ()
-  (draw *model* :nucleus 0 :bfp-ratio-x -.1d0))
 
 #+nil
 (update-scale 300 40)
@@ -66,13 +63,15 @@
 (let* ((obj (lens:make-objective))
        (n (lens::immersion-index obj))
        (f (lens::focal-length obj))
-       (nucleus-position (elt (centers-mm *model*) 6))
+       (nucleus-position (elt (centers-mm *model*) 0))
        (center (make-vec (vec-x nucleus-position)
 			 (vec-y nucleus-position))))
-  (defparameter *look* nucleus-position)
-  (gui:update-view :fov-list (list 40d0)
-		   :center-list (list (v- (make-vec 0d0 0d0 (* n f))
-					  center))))
+  (update-view-center nucleus-position)
+  (update-scale 300 20))
+
+#+nil
+(defun draw-all ()
+  (draw *model* :nucleus 0 :bfp-ratio-x -.1d0))
 
 #+nil
 (with-gui

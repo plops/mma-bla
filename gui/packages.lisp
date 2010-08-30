@@ -13,5 +13,4 @@
 	   #:bind-tex
 	   #:draw-axes
 	   #:draw-xz
-	   #:draw-wire-box
-	   #:update-view))
+	   #:draw-wire-box))
