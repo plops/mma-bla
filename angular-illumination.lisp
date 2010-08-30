@@ -124,6 +124,8 @@
   (save-stack-ub8 "/home/martin/tmp/line"
 		  vol))
 
+#+nil
+frontend::merit-function 
 
 #+nil
 (time

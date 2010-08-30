@@ -164,11 +164,11 @@ an axis and crosses it at POSITION."
 		  ;; rays from back focal plane through sample
 		  (loop for (exit enter) in
 		       (make-rays objective model nucleus 
-				  (sample-circles 2 2 1)
+				  (sample-circles 3 3 1)
 				  win-x/r win-y/r win-r/r)
 		     do
 		       (let ((h-z (lens:intersect exit p-z)))
-			 (gl:line-width 3)
+			 (gl:line-width 1)
 			 (gl:color .2 .6 .8)
 			 (gl:with-primitive :line-strip
 			   (vertex-v (vector::start enter))

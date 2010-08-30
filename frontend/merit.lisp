@@ -174,10 +174,13 @@ from the principal sphere and the second ray from the bfp."
       (vector::start enter)))
 
 (defun merit-function (vec2 params)
+  "Vec2 contains the center of the window in th bfp. Params must be a
+list containing objective model nucleus-index window-radius
+positions (positions is a list of 2-lists of complex numbers)."
   (declare ((simple-array double-float (2)) vec2)
 	   (cons params)
 	   (values double-float &optional))
-  (destructuring-bind (objective model nucleus-index window-radius)
+  (destructuring-bind (objective model nucleus-index window-radius positions)
       params
    (let* ((border-value 0d0) ;; value to return when outside of bfp
 	  ;; this has to be considerably bigger than the maxima on the bfp
@@ -189,21 +192,27 @@ from the principal sphere and the second ray from the bfp."
 	  (radius (norm2 vec2)))
      (if (< radius (- .99d0 border-width))
 	 ;; inside
-	 (loop for dirs in '((:right :left)
-			     (:top :bottom)) do
-	      (loop for dir in dirs do
-		   (loop for bfp-dir in dirs do
-			(let ((ray (make-ray objective
-					     model
-					     nucleus-index dir
-					     (vec2-x vec2) (vec2-y vec2)
-					     window-radius bfp-dir)))
-			  (incf sum
-				(raytrace:ray-spheres-intersection
-				 ray model nucleus-index))))))
+	 (loop for (exit enter) in (make-rays objective model nucleus-index
+					      positions (vec2-x vec2)
+					      (vec2-y vec2) window-radius) do
+	      (incf sum
+		    (raytrace:ray-spheres-intersection
+		     exit model nucleus-index)))
 	 ;; in the border-width or outside of bfp
 	 (incf sum border-value))
      sum)))
+
+#+nil
+(let* ((obj )
+       (window-radius .2d0)
+       (positions (sample-circles 3 12 12))
+       (params (list (lens:make-objective :center (v) :normal (v 0 0 1))
+		     *model*
+		     0
+		     window-radius
+		     positions)))
+  (merit-function (make-vec2 :x -.2d0 :y .2d0)
+		  params))
 
 (defun find-optimal-bfp-window-center (nucleus params)
   (declare (fixnum nucleus)

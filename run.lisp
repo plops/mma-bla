@@ -73,8 +73,8 @@
 (defun draw-all ()
   (draw *model*
 	:nucleus 0
-	:win-x/r .4d0
-	:win-r/r 0.5d0))
+	:win-x/r -.2d0
+	:win-r/r 0.1d0))
 
 #+nil
 (with-gui

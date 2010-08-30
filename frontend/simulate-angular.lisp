@@ -139,18 +139,20 @@ principal sphere and the ray entering the bfp."
 
 #+nil ;; store the scan for each nucleus in the bfp
 (time
- (let* ((n 10)
-	(nn (length *spheres-c-r*))
+ (let* ((n 30)
+	(nn (length (centers *model*)))
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
 			    :element-type 'double-float))
 	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
-	(window-radius .05d0))
-   (dotimes (nuc nn)
+	(window-radius .1d0)
+	(positions (sample-circles 3 3 1)))
+   (dotimes (nuc 1 nn)
      (let* ((params (list obj
-			  window-radius
+			  *model*
 			  nuc
-			  *spheres-c-r*))
+			  window-radius
+			  positions))
 	    (px (* n (mod nuc mosaicx)))
 	    (py (* n (floor nuc mosaicx))))
        (do-region ((j i) (n n))
