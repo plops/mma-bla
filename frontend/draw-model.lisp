@@ -127,17 +127,16 @@ update-view-center."
 		(gl:scale s s s))
 	      #+nil (gl:translate 0 0 (- nf))
 	      (rotate-translate-sample-space)
-	      (draw-axes)	     ;; move axes into focal plane
-	      (gl:with-pushed-matrix ;; move current stack plane into focal plane
-		(translate-v (v* ez (- z-plane-mm)))
-		(draw-hidden-spheres model))
+	      (draw-axes) ;; move axes into focal plane
+	      (draw-hidden-spheres model) 
 	      (let ((lens (make-instance 'lens:disk :center center 
 					 :radius bfp-radius))
 		    (bfp (make-instance 'lens:disk :center 
 					(v- center (make-vec 0d0 0d0 f))
 					:radius bfp-radius)))
 		(gl:color .4 .4 .4) ;; draw planes defining the objective
-		(gui::draw lens) (gui::draw bfp))
+		(gui::draw lens)
+		(gui::draw bfp))
 	      (labels ((plane (direction position)
 			 "Define a plane that is perpendicular to
 an axis and crosses it at POSITION."

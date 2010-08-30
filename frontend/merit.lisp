@@ -181,7 +181,7 @@ positions (positions is a list of 2-lists of complex numbers)."
 	   (cons params)
 	   (values double-float &optional))
   (destructuring-bind (objective model nucleus-index 
-				 window-radius positions z-mm-from-objective)
+				 window-radius positions)
       params
     (let* ((border-value 0d0) ;; value to return when outside of bfp
 	   ;; this has to be considerably bigger than the maxima on the bfp
@@ -206,11 +206,12 @@ positions (positions is a list of 2-lists of complex numbers)."
 #+nil
 (let* ((obj (lens:make-objective :center (v) :normal (v 0 0 1)))
        (window-radius .2d0)
-       (positions (sample-circles 3 12 12)))
+       (positions (sample-circles 3 12 12))
+       (z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) 0))))
   (with-slots ((c lens::center)
 	       (ri lens::immersion-index)
 	       (f lens::focal-length)) obj
-    (setf c (make-vec 0d0 0d0 (- (* ri f)))) ;; small shift for sample is missing
+    (setf c (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
     (let* ((params (list obj
 			 *model*
 			 0
