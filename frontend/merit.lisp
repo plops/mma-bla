@@ -53,7 +53,7 @@ be 3 and nr-bfp would be 5. The result is the outer product -1 -1, -1
 -.5, -1, 0, ..., a list with all interconnections. Note that the pair
 0,0 isn't emitted as it would result in duplications when turned by
 theta."
-  (declare (fixnum nr-ffp nr-bfp))
+  (declare ((integer 2) nr-ffp nr-bfp))
   (let ((ffps (loop for i below nr-ffp collect
 		   (complex (- (/ (* 2d0 i) (1- nr-ffp)) 1))))
 	(bfps (loop for i below nr-bfp collect
@@ -66,16 +66,18 @@ theta."
     (nreverse result)))
 
 #+nil
-(sample-line 3 3)
+(sample-line 2 2)
 
 (defun sample-circles (nr-ffp nr-bfp nr-theta)
   "Create coordinates in front and backfocal plane that sample circles
   in a regular pattern."
-  (declare (fixnum nr-ffp nr-bfp nr-theta))
+  (declare ((integer 2) nr-ffp nr-bfp)
+	   ((integer 1) nr-theta)
+	   (values cons &optional))
   (let ((line (sample-line nr-ffp nr-bfp))
 	(result nil))
     (loop for theta below nr-theta do
-	 (let ((rotator (exp (complex 0d0 (/ (* 2d0 pi theta) nr-theta)))))
+	 (let ((rotator (exp (complex 0d0 (/ (* pi theta) nr-theta)))))
 	   (loop for (f b) in line do
 		(push (list (* rotator f)
 			    (* rotator b))
@@ -85,7 +87,7 @@ theta."
     (nreverse result)))
 
 #+nil
-(sample-circles 2 2 4)
+(sample-circles 2 2 1)
 
 ;;				      ------+------
 ;;			          ---/      |      \---
@@ -120,6 +122,9 @@ circle to the window-radius R."
 #+nil
 (move-complex-circle (complex 1d0 0d0) 1d0 .9d0 0d0 .1d0)
 
+#+nil
+(move-complex-circle (complex 1d0) 3.601d0 0d0 0d0 .1d0)
+
 (defmethod make-rays ((objective lens::objective) (model sphere-model)
 		      nucleus positions win-x/r win-y/r win-r/r)
   "Given an objective and a nucleus in a model generate rays from a
@@ -137,18 +142,19 @@ from the principal sphere and the second ray from the bfp."
 	   (values cons &optional))
   (assert (subtypep (type-of (first (first positions))) '(complex double-float)))
   (assert (subtypep (type-of (second (first positions))) '(complex double-float)))
-  (with-slots (centers-mm
-	       radii-mm) model
+  (with-slots (centers-mm radii-mm) model
     (let ((center (elt centers-mm nucleus))
 	  (radius (elt radii-mm nucleus))
 	  (result nil))
-      (with-slots ((r lens::bfp-radius)
+      (with-slots ((bfp-radius lens::bfp-radius)
 		   (ri lens::immersion-index)
 		   (f lens::focal-length)) objective
 	(loop for (f b) in positions do
-	     (let ((br (move-complex-circle b r win-x/r win-y/r win-r/r))
+	     (let ((br (move-complex-circle b 1d0
+					    win-x/r win-y/r win-r/r))
 		   (fr (move-complex-circle f 1d0 (vec-x center) (vec-y center)
 					    radius)))
+	       (defparameter *sldf* bfp-radius)
 	       (handler-case
 		   (multiple-value-bind (exit enter)
 		       (lens:get-ray-behind-objective
@@ -160,8 +166,12 @@ from the principal sphere and the second ray from the bfp."
 	(nreverse result)))))
 
 #+nil
-(make-rays (lens:make-objective) *model* 0 (sample-circles 2 2 4)
-	   .2d0 0d0 .1d0)
+(defparameter *look*
+ (loop for (exit enter) in (make-rays (lens:make-objective) *model* 0 
+				      (sample-circles 2 2 1)
+				      .0d0 0d0 .1d0)
+      collect
+      (vector::start enter)))
 
 (defun merit-function (vec2 params)
   (declare ((simple-array double-float (2)) vec2)

@@ -101,11 +101,11 @@ update-view-center."
   (defmethod draw ((model sphere-model) &key (nucleus 0)
 		   (objective (lens:make-objective :normal (v 0 0 1)
 						   :center (v)))
-		   (bfp-ratio-x 0d0) (bfp-ratio-y 0d0)
-		   (window-radius-ratio .02d0))
+		   (win-x/r 0d0) (win-y/r 0d0)
+		   (win-r/r .02d0))
     (declare (fixnum nucleus)
 	     (lens:objective objective)
-	     (double-float bfp-ratio-x bfp-ratio-y window-radius-ratio))
+	     (double-float win-x/r win-y/r win-r/r))
     (gl:clear-color .32 .3 .3 1)
     (with-slots (dimensions spheres centers-mm centers dx dy dz) model
       (with-slots ((f lens::focal-length)
@@ -154,36 +154,40 @@ an axis and crosses it at POSITION."
 					      :center center)))))
 		(let* ((z+ (- nf z-mm))
 		       (z- (+ nf (- (* 1d-3 ri dz z) z-mm)))
-		       (x+ (* 1d-3 ri dx x))
-		       (y+ (* 1d-3 ri dy x))
 		       (p-z (plane :z z-)) ;; slice that's furthest from objective
-		       (bfps '(:left :left :right :right :top :top :bottom :bottom
-			       :left :right :bottom :top))
-		       (samples '(:left :right :right :left :bottom :top :bottom :top
-				  :center :center :center :center)))
+		       (x+ (* 1d-3 ri dx x))
+		       (y+ (* 1d-3 ri dy x)))
 		  (let* ((start (make-vec 0d0 0d0 z+)) ;; draw bounding box
 			 (dim (make-vec x+ y+ (* 1d-3 ri dz z))))
 		    (gl:color .6 .6 .6)
 		    (draw-wire-box start (v+ start dim)))
-		  (handler-case ;; rays from back focal plane through sample
-		      (loop for bfp-pos in bfps and sample-pos in samples do
-			   (multiple-value-bind (exit enter)
-			       (make-ray objective model
-					 nucleus sample-pos
-					 bfp-ratio-x
-					 bfp-ratio-y 
-					 window-radius-ratio bfp-pos)
-			     (let ((h-z (lens:intersect exit p-z)))
-			       (gl:line-width 3)
-			       (gl:color .2 .6 .8)
-			       (gl:with-primitive :line-strip
-				 (vertex-v (vector::start enter))
-				 (vertex-v (vector::start exit))
-				 (vertex-v h-z)))))
-		    (ray-lost () nil))
+		  ;; rays from back focal plane through sample
+		  (loop for (exit enter) in
+		       (make-rays objective model nucleus 
+				  (sample-circles 2 2 1)
+				  win-x/r win-y/r win-r/r)
+		     do
+		       (let ((h-z (lens:intersect exit p-z)))
+			 (gl:line-width 3)
+			 (gl:color .2 .6 .8)
+			 (gl:with-primitive :line-strip
+			   (vertex-v (vector::start enter))
+			   (vertex-v (vector::start exit))
+			   (vertex-v h-z))))
 		  (let* ((ty (/ (* 1d0 (vec-i-y (elt centers 0)))
 				y)))
 		    (gl:color 1 1 1 1) ;; load and display the 3d texture
 		    (ensure-uptodate-tex)
 		    (when tex
 		      (draw-xz tex x+ 0d0 z+ z- :ty ty :y y-mm))))))))))))
+#+nil
+(defparameter *look*
+ (loop for (exit enter) in
+      (make-rays (lens:make-objective) *model* 0 (sample-circles 2 2 1)
+		 0d0 0d0 .1d0)
+      collect
+      (vector::start enter)))
+
+#+nil
+(defparameter *look*
+ (list (lens:make-objective) (sample-circles 2 2 2)))

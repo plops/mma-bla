@@ -67,14 +67,14 @@
        (center (make-vec (vec-x nucleus-position)
 			 (vec-y nucleus-position))))
   (update-view-center nucleus-position)
-  (update-scale 2 20))
+  (update-scale 300 20))
 
 #+nil
 (defun draw-all ()
   (draw *model*
-	:nucleus 0 
-	:bfp-ratio-x 0d0
-	:window-radius-ratio .1d0))
+	:nucleus 0
+	:win-x/r .4d0
+	:win-r/r 0.5d0))
 
 #+nil
 (with-gui
