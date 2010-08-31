@@ -305,7 +305,7 @@ the coordinates. Return the centroid."
 				   worst worst-value)
 	    (find-extrema vals temperature)
 	  (declare (ignore second-worst))
-	  ;;(format t "~f~%" best-value)
+	  
 	  (when (< best-value best-ever-value) ;; store the best value 
 	    (v-set best-ever (displace-reference simplex best))
 	    (setf best-ever-value best-value))
@@ -316,6 +316,10 @@ the coordinates. Return the centroid."
 				(+ (abs best-value)
 				   (abs worst-value)
 				   1d-20)))))
+	    (let ((point (displace-reference simplex best)))
+	     (format t "~2,12f tol= ~2,12f T= ~2,12f (~2,4f ~2,4f) ~%" 
+		     best-value rtol temperature
+		     (aref point 0) (aref point 1)))
 	    (when (or (< rtol ftol)
 		      ;; should only be checked for low temperatures
 		      ;;(< (abs (simplex-volume simplex)) min-volume)
@@ -333,14 +337,14 @@ the coordinates. Return the centroid."
 	    (let* ((centroid (calc-centroid simplex worst))
 		   ;; reflect worst point around centroid
 		   (reflected (v-extrapolate centroid (displace simplex worst) alpha))
-		   (reflected-value (funcall funk reflected))
+		   (reflected-value (funcall funk reflected params))
 		   (reflected-heat (heat (- temperature) reflected-value)))
 	;;      (dformat t "~a~%" (list 'reflected reflected reflected-value))
 	      ;; if new point better than current best, expand the simplex
 	      (when (< reflected-heat best-value)
 		(let* ((expanded (v+ (v* reflected rho)
 				     (v* centroid (- 1 rho))))
-		       (expanded-value (funcall funk expanded))
+		       (expanded-value (funcall funk expanded params))
 		       (expanded-heat (heat (- temperature) expanded-value)))
 		;;  (dformat t "~a~%" (list 'expanded expanded expanded-value))
 		  ;; keep whichever is best
@@ -358,7 +362,7 @@ the coordinates. Return the centroid."
 		(let* ((contracted (v-extrapolate centroid 
 						  (displace simplex worst)
 						  gamma))
-		       (contracted-value (funcall funk contracted))
+		       (contracted-value (funcall funk contracted params))
 		       (contracted-heat (heat (- temperature) contracted-value)))
 		#+nil  (dformat t "~a~%" (list 'contracted
 					 contracted contracted-value))
@@ -376,11 +380,12 @@ the coordinates. Return the centroid."
 			     (v* (v- (displace simplex i)
 				     (displace simplex best))
 				 sigma)))
-		  (setf (aref vals i) (funcall funk (displace simplex i)))))
+		  (setf (aref vals i) (funcall funk (displace simplex i) params))))
 	      (go label1))))))))
 
 ;; look at merit-function for format of params
-(defun anneal (simplex funk &key (itmax 500) (ftol 1d-5) (start-temperature 100d0)
+(defun anneal (simplex funk &key (cooling-steps 30)
+	       (itmax 500) (ftol 1d-5) (start-temperature 100d0)
 	       (eps/m .02d0) (simplex-min-size .1d0) (params nil))
   (declare ((simple-array double-float 2) simplex)
 	   (function funk)
@@ -388,7 +393,7 @@ the coordinates. Return the centroid."
 	   (double-float ftol start-temperature eps/m simplex-min-size)
 	   (cons params)
 	   (values double-float (simple-array double-float 1) &optional))
-  (let* ((m 30)
+  (let* ((m cooling-steps)
 	 (eps (* eps/m m))
 	 (temp start-temperature))
     (do ((count 0 (incf count)))

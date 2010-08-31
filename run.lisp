@@ -2,7 +2,7 @@
 (in-package :frontend)
 
 #+nil
-(defparameter *model* (make-instance 'sphere-model-angular))
+(defparameter *model* (make-instance 'sphere-model-angular :dx .2d0 :dz 1.0d0))
 
 #+nil
 (time
@@ -12,7 +12,7 @@
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
 #+nil
-(time
+(times
  (defparameter *psf* 
    (multiple-value-bind (conv dx dz)
        (angular-intensity-psf-minimal-resolution
@@ -67,14 +67,18 @@
        (center (make-vec (vec-x nucleus-position)
 			 (vec-y nucleus-position))))
   (update-view-center nucleus-position)
-  (update-scale 200 20))
+  (update-scale 2 20))
 
 #+nil
 (defun draw-all ()
   (draw *model*
 	:nucleus 0
-	:win-x/r 0d0
-	:win-r/r .98d0))
+	:win-x/r -0.2402d0 :win-y/r 0.0053d0
+	; :win-x/r -.0927d0 :win-y/r -0.2359d0
+	:win-r/r .08d0
+	:nr-ffp 2
+	:nr-bfp 3
+	:nr-theta 1))
 
 #+nil
 (with-gui

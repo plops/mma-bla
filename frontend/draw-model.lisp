@@ -104,11 +104,15 @@ update-view-center."
 						   :center (v)))
 		   (win-x/r 0d0) (win-y/r 0d0)
 		   (win-r/r .02d0)
-		   (z-plane-mm (vec-z (elt (raytrace::centers-mm model) nucleus))))
+		   (z-plane-mm (vec-z (elt 
+				       (raytrace::centers-mm model) nucleus)))
+		   (nr-ffp 2)
+		   (nr-bfp 3)
+		   (nr-theta 1))
     (declare (fixnum nucleus)
 	     (lens:objective objective)
 	     (double-float win-x/r win-y/r win-r/r))
-    (gl:clear-color .32 .3 .3 1)
+    (gl:clear-color 1 1 1 1)
     (with-slots (dimensions spheres centers-mm centers dx dy dz) model
       (with-slots ((f lens::focal-length)
 		   (bfp-radius lens::bfp-radius)
@@ -164,10 +168,10 @@ an axis and crosses it at POSITION."
 		  ;; rays from back focal plane through sample
 		  (loop for (exit enter) in
 		       (make-rays objective model nucleus 
-				  (sample-circles 3 3 1)
+				  (sample-circles nr-ffp nr-bfp nr-theta)
 				  win-x/r win-y/r win-r/r) do
 		       (let ((h-z (lens:intersect exit p-z)))
-			 (gl:line-width 1)
+			 (gl:line-width 3)
 			 (gl:color .2 .6 .8)
 			 (gl:with-primitive :line-strip
 			   (vertex-v (vector::start enter))

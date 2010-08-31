@@ -54,12 +54,12 @@
     (let* ((l (v- center start))
 	   (c (- (v. l l) (* radius radius)))
 	   (b (* -2d0 (v. l direction))))
-      (handler-case
+      (handler-case 
 	  (multiple-value-bind (x1 x2)
 	      (quadratic-roots 1d0 b c)
 	    (abs (- x1 x2)))
-	(no-solution () 0d0)
-	(one-solution () 0d0)))))
+	(one-solution () 0d0)
+	(no-solution () 0d0)))))
 
 #+nil
 (ray-sphere-intersection-length (v 0d0 .1d0 -12d0) (v 0d0 0d0 1d0) (v) 3d0)

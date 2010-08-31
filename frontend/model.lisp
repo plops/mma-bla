@@ -6,35 +6,40 @@
 				  :element-type '(complex psf:my-float))
 	    :type (simple-array (complex psf:my-float) 3))))
 
-(defmethod initialize-instance :after ((model sphere-model) 
-				       &key (filename-glob "/home/martin/tmp/xa*.pgm") (radius-pixels 12d0))
+(defmethod initialize-instance :after 
+    ((model sphere-model) &key 
+     (filename-glob "/home/martin/tmp/xa*.pgm") (radius-pixels 12d0))
   (let ((radius-sf (coerce radius-pixels 'single-float)))
-   (with-slots ((dx raytrace::dx)
-		(dy raytrace::dy)
-		(dz raytrace::dz)
-		(immersion-index raytrace::immersion-index)
-		(dimensions raytrace::dimensions)
-		(centers raytrace::centers)
-		(radii-mm raytrace::radii-mm)
-		(centers-mm raytrace::centers-mm) spheres) model
-     (unless centers ;; read from files if centers aren't given
-       (let* ((stack-byte (read-stack filename-glob))
-	      (dims (array-dimensions stack-byte))
-	      (stack (make-array dims :element-type '(complex my-float))))
+    (with-slots ((dx raytrace::dx)
+		 (dy raytrace::dy)
+		 (dz raytrace::dz)
+		 (immersion-index raytrace::immersion-index)
+		 (dimensions raytrace::dimensions)
+		 (centers raytrace::centers)
+		 (radii-mm raytrace::radii-mm)
+		 (centers-mm raytrace::centers-mm) spheres) model
+      (unless centers ;; read from files if centers aren't given
+	(let* ((stack-byte (read-stack filename-glob))
+	       (dims (array-dimensions stack-byte))
+	       (stack (make-array dims :element-type '(complex my-float))))
 	 (destructuring-bind (z y x) dims
 	   (do-region ((k j i) (z y x))
-	     (setf (aref stack k j i) (complex (+ (* #.(coerce .43745 'my-float) k)
-						  (aref stack-byte k j i)))))
+	     (setf (aref stack k j i) (complex 
+				       (+ (* #.(coerce .43745 'my-float) k)
+					  (aref stack-byte k j i)))))
 	   ;; find centers of cells by convolving with sphere, actually an
 	   ;; oval because the z resolution is smaller than the transversal
 	   (let* ((conv (convolve-circ 
 			 stack 
-			 (fftshift
-			  (#.(cond ((subtypep 'my-float 'single-float) 'draw-oval-csf)
-				   ((subtypep 'my-float 'double-float) 'draw-oval-cdf))
-			     radius-sf z y x))))
+			 (#.(cond ((subtypep 'my-float 'single-float)
+				   'draw-oval-csf)
+				  ((subtypep 'my-float 'double-float) 
+				   'draw-oval-cdf))
+			    radius-sf z y x)))
 		  (cv (convert conv 'sf 'realpart))
 		  (rcenters nil))
+	     (save-stack-ub8 "/home/martin/tmp/stack-conv"
+			     (normalize-3-sf/ub8 cv))
 	     (do-region ((k j i) ((- z 3) (- y 1) (- x 1)) (6 1 1))
 	       (macrolet ((c (a b c)
 			    `(aref cv (+ k ,a) (+ j ,b) (+ i ,c))))
@@ -48,10 +53,11 @@
      (destructuring-bind (z y x) dimensions
        (setf radii-mm (loop for i below (length centers) collect
 			   (* 1d-3 immersion-index dx radius-pixels))
-	     centers-mm (mapcar #'(lambda (x) (let ((s (* 1d-3 immersion-index)))
-						(make-vec (* s dx (vec-i-x x))
-							  (* s dy (vec-i-y x))
-							  (* s dz (vec-i-z x)))))
+	     centers-mm (mapcar #'(lambda (x)
+				    (let ((s (* 1d-3 immersion-index)))
+				      (make-vec (* s dx (vec-i-x x))
+						(* s dy (vec-i-y x))
+						(* s dz (vec-i-z x)))))
 				centers)
 	     spheres (draw-ovals radius-sf centers z y x))))))
 

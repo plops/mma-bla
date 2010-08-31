@@ -61,7 +61,8 @@ theta."
 	(result nil))
     (loop for f in ffps do
 	 (loop for b in bfps do
-	      (unless (= (complex 0d0) f b) ;; prevent duplication of central ray
+	    ;; prevent duplication of central ray
+	      (unless (= (complex 0d0) f b)
 		(push (list f b) result))))
     (nreverse result)))
 
@@ -139,9 +140,11 @@ from the principal sphere and the second ray from the bfp."
   (declare (fixnum nucleus)
 	   (cons positions)
 	   (double-float win-x/r win-y/r win-r/r)
-	   (values cons &optional))
-  (assert (subtypep (type-of (first (first positions))) '(complex double-float)))
-  (assert (subtypep (type-of (second (first positions))) '(complex double-float)))
+	   (values (or null cons) &optional))
+  (assert (subtypep (type-of (first (first positions)))
+		    '(complex double-float)))
+  (assert (subtypep (type-of (second (first positions)))
+		    '(complex double-float)))
   (with-slots (centers-mm radii-mm) model
     (let ((center (elt centers-mm nucleus))
 	  (radius (elt radii-mm nucleus))
@@ -173,19 +176,20 @@ from the principal sphere and the second ray from the bfp."
       collect
       (vector::start enter)))
 
-(defun merit-function (vec2 params)
+(defun merit-function (vec2 params &key (border-value 100d0))
   "Vec2 contains the center of the window in th bfp. Params must be a
 list containing objective model nucleus-index window-radius
-positions (positions is a list of 2-lists of complex numbers)."
+positions (positions is a list of 2-lists of complex
+numbers). BORDER-VALUE has to be bigger than then the maximum of
+integrals in the back focal plane. It will be returned when the beam
+wanders outside of the bfp."
   (declare ((simple-array double-float (2)) vec2)
 	   (cons params)
 	   (values double-float &optional))
   (destructuring-bind (objective model nucleus-index 
 				 window-radius positions)
       params
-    (let* ((border-value 0d0) ;; value to return when outside of bfp
-	   ;; this has to be considerably bigger than the maxima on the bfp
-	   (border-width window-radius) ;; in this range to the
+    (let* ((border-width window-radius) ;; in this range to the
 	   ;; border of the bfp
 	   ;; enforce bad merit
 	   ;; function
@@ -193,61 +197,67 @@ positions (positions is a list of 2-lists of complex numbers)."
 	   (radius (norm2 vec2)))
       (if (< radius (- .99d0 border-width))
 	  ;; inside
-	  (loop for (exit enter) in (make-rays objective model nucleus-index
-					       positions (vec2-x vec2)
-					       (vec2-y vec2) window-radius) do
-	       (incf sum
-		     (raytrace:ray-spheres-intersection
-		      exit model nucleus-index)))
+	  (let* ((rays (make-rays objective model nucleus-index
+				 positions (vec2-x vec2)
+				 (vec2-y vec2) window-radius)))
+	    (unless rays
+	      (return-from merit-function border-value))
+	    (let ((s (/ 1d0 (length rays))))
+	     (loop for (exit enter) in rays do
+		  (incf sum
+			(* s (raytrace:ray-spheres-intersection
+			      exit model nucleus-index))))))
 	  ;; in the border-width or outside of bfp
 	  (incf sum border-value))
       sum)))
 
 #+nil ;; call merit function for one window center position
 (let* ((obj (lens:make-objective :center (v) :normal (v 0 0 1)))
-       (window-radius .2d0)
-       (positions (sample-circles 3 12 12))
+       (window-radius .1d0)
+       (positions (sample-circles 3 10 12))
        (z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) 0))))
   (with-slots ((c lens::center)
 	       (ri lens::immersion-index)
 	       (f lens::focal-length)) obj
     (setf c (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
-    (let* ((params (list obj
-			 *model*
-			 0
-			 window-radius
-			 positions))) 
-      (merit-function (make-vec2 :x -.2d0 :y 0d0)
+    (let* ((params (list obj *model* 0 window-radius positions))) 
+      (merit-function (make-vec2 :x .4d0 :y .4d0)
 		      params))))
 
-#+nil ;; store the scan for each nucleus in the bfp
+#+nil ;; store the scan for different bfp window sizes
 (time
- (let* ((n 30)
-	(nn 5 #+nil (length (centers *model*)))
+ (let* ((n 100)
+	(nn 6 #+nil (length (centers *model*)))
 	(mosaicx (ceiling (sqrt nn)))
 	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
 			    :element-type 'double-float))
 	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
-	(positions (sample-circles 3 5 5)))
+	(nucleus 0)
+	(positions (sample-circles 3 7 5)))
    (dotimes (nuc nn)
      (with-slots ((c lens::center)
 		  (ri lens::immersion-index)
 		  (f lens::focal-length)) obj
-       (let* ((window-radius (* nuc (/ .20d0 nn)))
-	      (z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) 0)))) 
+       (let* ((window-radius (* nuc (/ .30d0 nn)))
+	      (z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) nucleus)))
+	      (vals nil)) 
 	 (setf c (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
-	 (let* ((params (list obj *model* 0 window-radius positions))
+	 (let* ((params (list obj *model* nucleus window-radius positions))
 		(px (* n (mod nuc mosaicx)))
 		(py (* n (floor nuc mosaicx))))
 	   (do-region ((j i) (n n))
-	     (let ((x (- (* 2d0 (/ i n)) 1d0))
-		   (y (- (* 2d0 (/ j n)) 1d0)))
-	       (setf (aref mosaic (+ py j) (+ px i))
-		     (merit-function (make-vec2 :x x :y y)
-				     params))))))))
+	     (let* ((x (- (* 2d0 (/ i n)) 1d0))
+		    (y (- (* 2d0 (/ j n)) 1d0))
+		    (v (merit-function (make-vec2 :x x :y y)
+				       params
+				       :border-value 0d0)))
+	       (setf (aref mosaic (+ py j) (+ px i)) v)
+	       (unless (= v 0d0) (push v vals)))))
+	 (format t "min ~2,6f max ~2,6f win-r ~2,3f~%"
+	       (reduce #'min vals)
+	       (reduce #'max vals)
+	       window-radius))))
    (write-pgm "/home/martin/tmp/scan-mosaic.pgm" (normalize-2-df/ub8 mosaic))))
-
-
 
 (defun find-optimal-bfp-window-center (nucleus params)
   (declare (fixnum nucleus)
@@ -257,18 +267,46 @@ positions (positions is a list of 2-lists of complex numbers)."
   (loop
      (multiple-value-bind (min point)
 	 (simplex-anneal:anneal (simplex-anneal:make-simplex
-				 (make-vec2 :x -1d0 :y -1d0) 1d0)
+				 (make-vec2 :x -.4d0 :y -.4d0) .3d0)
 				#'merit-function
 				;; set temperature bigger than the
 				;; maxima in the bfp but smaller
 				;; than border-value
-				:start-temperature 2.4d0
-				:eps/m .02d0
-				:itmax 1000
-				:ftol 1d-3
+				:start-temperature .04d0
+				:cooling-steps 30
+				:eps/m .001d0 ;; high eps/m cools faster
+ 				:itmax 100 ;; steps per temperature
+				:ftol 10d-3
 				:params params)
        (when (< min 100d0)
 	 (return-from find-optimal-bfp-window-center point)))))
 
 #+nil
-(find-optimal-bfp-window-center 0)
+(time
+ (let* ((n 30)
+	(nn 5 #+nil (length (centers *model*)))
+	(mosaicx (ceiling (sqrt nn)))
+	(mosaic (make-array (list (* n mosaicx) (* n mosaicx))
+			    :element-type 'double-float))
+	(obj (lens:make-objective :center (v) :normal (v 0 0 1)))
+	(positions (sample-circles 3 7 5))
+	(scan 0)
+	(nucleus 0))
+   (with-open-file (*standard-output* "/home/martin/tmp/scan-min.dat"
+				      :direction :output
+				      :if-exists :supersede)
+    (with-slots ((c lens::center)
+		 (ri lens::immersion-index)
+		 (f lens::focal-length)) obj
+      (let* ((window-radius .08d0 #+nil (* nuc (/ .20d0 nn)))
+	     (z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) nucleus)))) 
+	(setf c (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
+	(let* ((params (list obj *model* nucleus window-radius positions))
+	       (px (* n (mod scan mosaicx)))
+	       (py (* n (floor scan mosaicx))))
+	  (find-optimal-bfp-window-center nucleus params)
+	  #+nil (format t "~a~%"
+			)))))
+   #+nil (write-pgm "/home/martin/tmp/scan-mosaic.pgm"
+		    (normalize-2-df/ub8 mosaic))))
+

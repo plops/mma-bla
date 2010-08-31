@@ -20,8 +20,8 @@
       (load-identity)
       (if 2d
 	  (ortho 0 (width w) (height w) 0 -1 1)
-	  (progn (glu:perspective 40 (/ (width w) (height w)) 3 50)
-		 (glu:look-at 20 30 10
+	  (progn (glu:perspective 40 (/ (width w) (height w)) 3 100)
+		 (glu:look-at 20 30 -5
 			      0 0 0
 			      0 0 1)))
       (matrix-mode :modelview)
@@ -34,7 +34,7 @@
   (funcall (draw-func w))
     
   (swap-buffers)
-  (sleep (/ 20))
+  (sleep (/ 10))
   (post-redisplay))
 
 (defmethod reshape ((w fenster) x y)
