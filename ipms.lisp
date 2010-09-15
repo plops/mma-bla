@@ -22,7 +22,9 @@
   (unless (= 0 (connect))
     (error "Library couldn't connect to board."))
   (load-configuration "/home/martin/linux-mma2-deprecated20100910/boardini/800803.ini")
-  (set-voltage +volt-pixel+ 17.5s0))
+  (set-voltage +volt-pixel+ 17.5s0)
+  (set-voltage +volt-frame-f+ 17.5s0)
+  (set-voltage +volt-frame-l+ 17.5s0))
 
 (defun write-data (buf &key (pic-number 1))
   "Write a 256x256 unsigned-short buffer to the device."
@@ -146,7 +148,16 @@
    (begin)))
 
 #+nil
-(time (progn (select-pictures 1 :n 1)))
+(time (progn
+	(set-stop-mma)
+	(set-extern-trigger t)
+	(select-pictures 8 :n 1 :ready-out-needed t)
+	(begin)))
+
+#+nil
+(progn
+  (select-pictures 8 :n 1 :ready-out-needed t)
+  (set-extern-trigger t))
 
 (dotimes (i 1000)
   (sleep .3) 
@@ -156,8 +167,11 @@
 (time
  (progn
    (set-stop-mma)
-   (set-extern-trigger nil)
-   (load-disks :n 120)
+   (set-extern-ready 16s0 530s0)
+   (set-deflection-phase 16s0 530s0)
+   (set-extern-trigger t)
+   (load-concentric-circles :n 12)
+   #+nil (load-disks :n 120)
    (begin)))
 #+nil 
 (progn
