@@ -21,7 +21,7 @@
 		       4001)
   (unless (= 0 (connect))
     (error "Library couldn't connect to board."))
-  (load-configuration "/home/martin/linux-mma2/boardini/800803.ini")
+  (load-configuration "/home/martin/linux-mma2-deprecated20100910/boardini/800803.ini")
   (set-voltage +volt-pixel+ 17.5s0))
 
 (defun write-data (buf &key (pic-number 1))
@@ -35,13 +35,14 @@
 
 (defun draw (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
   (declare (single-float r-small r-big)
+	   (fixnum pic-number)
 	   (values null &optional))
   (let* ((n 256)
 	 (nh (floor n 2))
 	 (1/n (/ 1.0 n))
 	 (buf (make-array (list n n) 
 			  :element-type '(unsigned-byte 16))))
-    (declare (type (simple-array (unsigned-byte 16) (* *))))
+    (declare (type (simple-array (unsigned-byte 16) 2) buf))
     (dotimes (j n)
       (dotimes (i n)
 	(let* ((x (* 2.0 1/n (- i nh)))
@@ -51,6 +52,27 @@
 		(if (< r-small r r-big) 0 #xffff)))))
     (write-data buf :pic-number pic-number)
     nil))
+
+(defun draw-disk (&key (cx 0) (cy 0) (radius .1) (pic-number 1))
+  (declare (single-float radius)
+	   (fixnum cx cy pic-number) 
+	   (values null &optional))
+  (let* ((n 256)
+	 (nh (floor n 2))
+	 (1/n (/ 1.0 n))
+	 (buf (make-array (list n n) 
+			  :element-type '(unsigned-byte 16))))
+    (declare (type (simple-array (unsigned-byte 16) 2) buf))
+    (dotimes (j n)
+      (dotimes (i n)
+	(let* ((x (* 2.0 1/n (- i nh cx)))
+	       (y (* 2.0 1/n (- j nh cy)))
+	       (r (sqrt (+ (* x x) (* y y)))))
+	  (setf (aref buf i j) 
+		(if (< r radius) 0 #xffff)))))
+    (write-data buf :pic-number pic-number)
+    nil))
+
 
 (defun parse-bits (value bits)
   (declare (fixnum value))
@@ -86,28 +108,56 @@
 (defun end ()
   (set-stop-mma)
   (set-power-off))
-(defun load-pictures (&key (n 12) (dr .02) (ready-out-needed 0))
+
+(defun select-pictures (start &key (n 1) (ready-out-needed nil))
   (dotimes (i n)
-    (let ((r (/ .2 n)))
+    (set-picture-sequence (+ 1 start i)
+			  (if (< i (- n 1)) 0 1)
+			  (if ready-out-needed 1 0))))
+
+(defun load-concentric-circles (&key (n 12) (dr .02) (ready-out-needed nil))
+  (dotimes (i n)
+    (let ((r (/ (* 1.0 (1+ i)) n)))
       (format t "~a~%" `(picture ,i / ,n))
       (draw :pic-number (1+ i)
 	    :r-small (- r dr)
 	    :r-big (+ r dr))))
+  (select-pictures 0 :n n))
+
+(defun load-disks (&key (n 12))
   (dotimes (i n)
-    (set-picture-sequence (1+ i) (if (< i (- n 1)) 0 1)
-			  ready-out-needed)))
+    (let ((x (floor (* 256 (- i (floor n 2)) (/ 1.0 n)))))
+      (draw-disk :cx x :cy 0 :pic-number (1+ i))))
+  (select-pictures 0 :n n))
+
+(defun load-disks2 (&key (n 12))
+  (dotimes (j n)
+    (dotimes (i n)
+      (let ((x (floor (* 256 (- i (floor n 2)) (/ 1.0 n))))
+	    (y (floor (* 256 (- j (floor n 2)) (/ 1.0 n)))))
+	(draw-disk :cx x :cy y :pic-number (1+ (+ i (* n j)))))))
+  (select-pictures 0 :n (* n n)))
+
 #+nil 
 (time
  (progn
    (init)
-   (load-pictures :n 4)
+   (load-concentric-circles :n 4)
    (begin)))
+
+#+nil
+(time (progn (select-pictures 1 :n 1)))
+
+(dotimes (i 1000)
+  (sleep .3) 
+  (select-pictures (random (* 12 12))))
+
 #+nil 
 (time
  (progn
    (set-stop-mma)
-   ;; (set-extern-trigger nil)
-   (load-pictures :n 2)
+   (set-extern-trigger nil)
+   (load-disks :n 120)
    (begin)))
 #+nil 
 (progn
