@@ -1,3 +1,4 @@
+#.(require :gui)
 #.(require :ipms-ffi)
  
 (defpackage :ipms
@@ -23,8 +24,9 @@
     (error "Library couldn't connect to board."))
   (load-configuration "/home/martin/linux-mma2-deprecated20100910/boardini/800803.ini")
   (set-voltage +volt-pixel+ 17.5s0)
-  (set-voltage +volt-frame-f+ 17.5s0)
-  (set-voltage +volt-frame-l+ 17.5s0))
+  (set-voltage +volt-frame-f+ 20.0s0)
+  (set-voltage +volt-frame-l+ 20.0s0)
+  (set-voltage +volt-dmd-l+ 6.0s0))
 
 (defun write-data (buf &key (pic-number 1))
   "Write a 256x256 unsigned-short buffer to the device."
@@ -35,7 +37,7 @@
       (write-matrix-data pic-number 3 (sb-sys:vector-sap buf1) (length buf1))))
   nil)
 
-(defun draw (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
+(defun draw-ring (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
   (declare (single-float r-small r-big)
 	   (fixnum pic-number)
 	   (values null &optional))
@@ -55,7 +57,7 @@
     (write-data buf :pic-number pic-number)
     nil))
 
-(defun draw-disk (&key (cx 0) (cy 0) (radius .1) (pic-number 1))
+(defun draw-disk (&key (cx 0) (cy 0) (radius .1) (pic-number 1) (value 0))
   (declare (single-float radius)
 	   (fixnum cx cy pic-number) 
 	   (values null &optional))
@@ -71,7 +73,7 @@
 	       (y (* 2.0 1/n (- j nh cy)))
 	       (r (sqrt (+ (* x x) (* y y)))))
 	  (setf (aref buf i j) 
-		(if (< r radius) 0 #xffff)))))
+		(if (< r radius) value #xffff)))))
     (write-data buf :pic-number pic-number)
     nil))
 
@@ -117,13 +119,20 @@
 			  (if (< i (- n 1)) 0 1)
 			  (if ready-out-needed 1 0))))
 
+(defun load-white (&key (pic-number 0))
+  (draw-disk :cx 0 :cy 0 :radius 1.0 :pic-number pic-number))
+
+(defun load-black (&key (pic-number 0))
+  (draw-disk :cx 0 :cy 0 :radius 1.0 :pic-number pic-number
+	     :value #xffff))
+
 (defun load-concentric-circles (&key (n 12) (dr .02) (ready-out-needed nil))
   (dotimes (i n)
     (let ((r (/ (* 1.0 (1+ i)) n)))
       (format t "~a~%" `(picture ,i / ,n))
-      (draw :pic-number (1+ i)
-	    :r-small (- r dr)
-	    :r-big (+ r dr))))
+      (draw-ring :pic-number (1+ i)
+		 :r-small (- r dr)
+		 :r-big (+ r dr))))
   (select-pictures 0 :n n :ready-out-needed ready-out-needed))
 
 (defun load-disks (&key (n 12))
@@ -158,12 +167,20 @@
 
 #+nil
 (progn
-  (select-pictures 67 :n 1 :ready-out-needed t))
+  (select-pictures 100 :n 1 :ready-out-needed t))
+#+nil
+(dotimes (j 2)
+ (dotimes (i 10)
+   (sleep .3)
+   (select-pictures (+ 50 i) :n 1 :ready-out-needed t))
+ (dotimes (i 10)
+   (sleep .3)
+   (select-pictures (+ 50 (- 9 i)) :n 1 :ready-out-needed t)))
 
 #+nil
 (dotimes (i 100)
   (sleep .3) 
-  (select-pictures (random (* 10 10))))
+  (select-pictures (random (* 10 10)) :ready-out-needed t))
 
 #+nil
 (let ((width 530s0))
@@ -177,16 +194,23 @@
    (set-extern-ready 16s0 530s0)
    (set-deflection-phase 16s0 530s0)
    (set-extern-trigger t)
-   #+nil (load-concentric-circles :n 12)
+   (load-concentric-circles :n 12)
    #+nil (load-disks :n 120)
-   (load-disks2 :n 10)
+   #+nil (load-disks2 :n 10)
+   (load-white :pic-number 101)
+   (load-black :pic-number 102)
    (begin)))
 #+nil 
 (progn
   (end)
   (disconnect))
 
-(require :gui)
 
+
+(let ((blub nil))
+  (defun draw ()
+    (gl:clear-color 0 0 0 1)
+    (gl:clear :color-buffer-bit)))
+#+nil
 (gui:with-gui
-  nil)
+  (draw))
