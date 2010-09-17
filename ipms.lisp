@@ -1,4 +1,4 @@
-#.(load "ipms-ffi.lisp")
+#.(require :ipms-ffi)
  
 (defpackage :ipms
   (:use :cl :ipms-ffi))
@@ -124,7 +124,7 @@
       (draw :pic-number (1+ i)
 	    :r-small (- r dr)
 	    :r-big (+ r dr))))
-  (select-pictures 0 :n n))
+  (select-pictures 0 :n n :ready-out-needed ready-out-needed))
 
 (defun load-disks (&key (n 12))
   (dotimes (i n)
@@ -147,21 +147,28 @@
    (load-concentric-circles :n 4)
    (begin)))
 
+(format t "~a" 'blub)
+
 #+nil
 (time (progn
 	(set-stop-mma)
 	(set-extern-trigger t)
-	(select-pictures 8 :n 1 :ready-out-needed t)
+	(select-pictures 2 :n 1 :ready-out-needed t)
 	(begin)))
 
 #+nil
 (progn
-  (select-pictures 8 :n 1 :ready-out-needed t)
-  (set-extern-trigger t))
+  (select-pictures 67 :n 1 :ready-out-needed t))
 
-(dotimes (i 1000)
+#+nil
+(dotimes (i 100)
   (sleep .3) 
-  (select-pictures (random (* 12 12))))
+  (select-pictures (random (* 10 10))))
+
+#+nil
+(let ((width 530s0))
+ (set-extern-ready 16s0 width)
+ (set-deflection-phase 16s0 width))
 
 #+nil 
 (time
@@ -170,10 +177,16 @@
    (set-extern-ready 16s0 530s0)
    (set-deflection-phase 16s0 530s0)
    (set-extern-trigger t)
-   (load-concentric-circles :n 12)
+   #+nil (load-concentric-circles :n 12)
    #+nil (load-disks :n 120)
+   (load-disks2 :n 10)
    (begin)))
 #+nil 
 (progn
   (end)
   (disconnect))
+
+(require :gui)
+
+(gui:with-gui
+  nil)
