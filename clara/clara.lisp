@@ -1,4 +1,3 @@
-#.(require :clara)
 (in-package :clara)
  
 (defmacro check (&body body)
@@ -230,7 +229,7 @@
 	     (lookup-error ret)))
     (eq state drv-acquiring)))
 
-(defun copy-most-recent-data ()
+(defun wait-for-image-and-copy ()
   (when (is-acquiring-p)
     (check (wait-for-acquisition))
     (setf *im*
@@ -240,51 +239,43 @@
 	      (let ((ret (get-oldest-image16 (sb-sys:vector-sap img1)
 					     (* *w* *h*))))
 		(if (eq ret drv-no-new-data)
-		    (return-from copy-most-recent-data *displayed-images*)
+		    (return-from wait-for-image-and-copy *displayed-images*)
 		    (check ret))))
 	    img))
     (incf *displayed-images*)
     #+nil (check (free-internal-memory))))
 
-(defun parse-status ()
+(defun status ()
   (multiple-value-bind (e status)
       (get-status)
     (list (lookup-error e) (lookup-error status))))
 
-#+nil
-(time (init-fast :exposure-s .016s0 :width 320 :height 240))
-#+nil 
-(parse-status)
-#+nil
-(check (abort-acquisition))
+(defun stop ()
+  (check (abort-acquisition)))
 
-(defun write-scaled-image (stream img)
-  (declare (stream stream)
-	   ((simple-array (signed-byte 16) 2) img))
-  (let* ((a1 (sb-ext:array-storage-vector img))
-	 (n (length a1))
-	 (ma (aref a1 0))
-	 (b (make-array n :element-type '(unsigned-byte 8))))
-    (dotimes (i n)
-      (let ((v (aref a1 i)))
-	(setf ma (if (< ma v) v ma))))
-    (dotimes (i n)
-      (setf (aref b i) (floor (* 255 (aref a1 i))
-			      ma)))
-    (write-sequence b stream)))
-;; ffplay -an -pix_fmt gray -s 320x240 -f rawvideo camout 
-#+nil
-(with-open-file (fifo "/home/martin/0518/mma/camout"
-		       :direction :output
-		       :if-exists :append
-		       :element-type '(signed-byte 16))
-   (dotimes (i 1000)
-     (copy-most-recent-data)
-     (write-scaled-image fifo *im*))
-   (check (abort-acquisition)))
-
-#+nil
-(progn
+(defun uninit ()
   (setf *adc-calibrated* nil
 	*im* nil)
   (check (shutdown)))
+
+;; use the following procedure to obtain images: call init-fast with
+;; exposure and image size you want the first call will take a while
+;; (8 seconds) later calls don't call initialize again when
+;; *adc-calibrate*=t. then call status to see if the camera is idle or
+;; acquiring. call wait-for-image-and-copy to get image data. it
+;; either returns the oldest image or waits until an image has been
+;; captured. the data is copied into *im*. to change exposure time or
+;; image size call stop and call init-fast again. to close the camera
+;; call uninit. init-fast will take again 8s to start it up.
+
+#+nil
+(time (init-fast :exposure-s .016s0 :width 320 :height 240))
+#+nil 
+(status)
+#+nil
+(progn
+  (dotimes (i 10)
+    (wait-for-image-and-copy))
+  (stop))
+#+nil
+(uninit)
