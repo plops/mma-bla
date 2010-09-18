@@ -252,16 +252,36 @@
     (list (lookup-error e) (lookup-error status))))
 
 #+nil
-(time (init-fast :exposure-s .016s0 :width 256 :height 256))
+(time (init-fast :exposure-s .016s0 :width 320 :height 240))
 #+nil 
 (parse-status)
 #+nil
 (check (abort-acquisition))
+
+(defun write-scaled-image (stream img)
+  (declare (stream stream)
+	   ((simple-array (signed-byte 16) 2) img))
+  (let* ((a1 (sb-ext:array-storage-vector img))
+	 (n (length a1))
+	 (ma (aref a1 0))
+	 (b (make-array n :element-type '(unsigned-byte 8))))
+    (dotimes (i n)
+      (let ((v (aref a1 i)))
+	(setf ma (if (< ma v) v ma))))
+    (dotimes (i n)
+      (setf (aref b i) (floor (* 255 (aref a1 i))
+			      ma)))
+    (write-sequence b stream)))
+;; ffplay -an -pix_fmt gray -s 320x240 -f rawvideo camout 
 #+nil
-(progn
-  (dotimes (i 10)
-    (copy-most-recent-data))
-  (check (abort-acquisition)))
+(with-open-file (fifo "/home/martin/0518/mma/camout"
+		       :direction :output
+		       :if-exists :append
+		       :element-type '(signed-byte 16))
+   (dotimes (i 1000)
+     (copy-most-recent-data)
+     (write-scaled-image fifo *im*))
+   (check (abort-acquisition)))
 
 #+nil
 (progn
