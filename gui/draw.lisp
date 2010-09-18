@@ -11,37 +11,42 @@
      (bind-texture target object)
      (tex-parameter target :texture-min-filter :nearest)
      (tex-parameter target :texture-mag-filter :nearest)
+     (tex-parameter target :texture-wrap-s :repeat)
+     (tex-parameter target :texture-wrap-t :repeat)
      (sb-sys:with-pinned-objects (data)
        (let* ((data1 (sb-ext:array-storage-vector data))
 	      (data-sap (sb-sys:vector-sap data1)))
-	 (tex-image-2d target 0 :rgb (length data) 1 0 :rgb
+	 (tex-image-2d target 0 :rgb (floor (length data) 3) 1 0 :rgb
 		       :unsigned-byte data-sap))))))
 
 (defmethod destroy ((tex grating))
   (delete-textures (list (object tex))))
 
-(defmethod bind-tex ((tex grating))
-  (bind-texture (target tex) (object tex)))
+(defmacro with-grating ((grating data) &body body)
+  `(let ((,grating (make-instance 'gui::grating :data ,data)))
+     ,@body
+     (gui::destroy ,grating)))
 
-(defmethod draw ((self bild) &optional
+(defmethod bind-tex ((tex grating))
+  (bind-texture :texture-2d (object tex)))
+
+(defmethod draw ((self grating) &key
 		 (x 0f0) (y 0f0) 
-		 (ww 1920f0) (hh 1080f0))
-  (declare (single-float x y ww hh))
-  (with-slots ((w width)
-               (h height)
-               (obj texture-object)
-               (target texture-target))
-      self
-    (bind-tex grating)
-    (enable target)
-    (color 1 1 1)
-    (let ((q 1 #+nil(/ h w)))
-     (with-primitive :quads
-       (tex-coord 0 0)(vertex x y)
-       (tex-coord w 0)(vertex ww y)
-       (tex-coord w h)(vertex ww (* q hh))
-       (tex-coord 0 h)(vertex x (* q hh))))
-    (disable target)))
+		 (w 1920f0) (h 1080f0)
+		 (wt 1f0) (ht 1f0))
+  (declare (single-float x y w h))
+  (let ((target :texture-2d))
+   (with-slots ((obj object)) self
+     (bind-tex self)
+     (enable target)
+     (color 1 1 1)
+     (let ((q 1 #+nil(/ h w)))
+       (with-primitive :quads
+	 (tex-coord 0 0)(vertex x y)
+	 (tex-coord wt 0)(vertex w y)
+	 (tex-coord wt ht)(vertex w (* q h))
+	 (tex-coord 0 ht)(vertex x (* q h))))
+     (disable target))))
 
 (defun draw-axes ()
   (gl:line-width 3)

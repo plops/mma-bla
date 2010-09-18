@@ -13,7 +13,7 @@
 			      (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1)))
 	      :type function)))
 
-(defmethod set-view ((w fenster) &key (2d nil))
+(defmethod set-view ((w fenster) &key (2d t))
       (load-identity)
       (viewport 0 0 (width w) (height w))
       (matrix-mode :projection)
