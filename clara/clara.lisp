@@ -1,4 +1,4 @@
-(require :clara)
+#.(require :clara)
 (in-package :clara)
  
 (defmacro check (&body body)
@@ -147,19 +147,27 @@
 #+nil ;; close the camera, reopening will calibrate adc again (waiting 8s)
 (check (shutdown))
 
- 
+(defvar *w* 32)
+(defvar *h* 32) 
+(defvar *adc-calibrated* nil)
+(defvar *displayed-images* nil)
+(defvar *start-series* nil)
+(defparameter *im* nil)
+
 (defun init-run-till-abort (&key (width 32) (height 32) (exposure-s 1s0)
 			    (fast-adc t))
-  (let* ((cams (val2 (get-available-cameras)))
-	 (handle (val2 (get-camera-handle (1- cams)))))
-    (check (set-current-camera handle)))
-   (check (initialize "/usr/local/etc/andor"))
-   (check (set-read-mode 4))
-   (check (set-acquisition-mode 5))
-   (check (set-kinetic-cycle-time 0f0))
- 
-   (check (set-exposure-time exposure-s))
-   (check (set-ad-channel (if fast-adc 1 0)))
+  (unless *adc-calibrated* 
+    (let* ((cams (val2 (get-available-cameras)))
+	   (handle (val2 (get-camera-handle (1- cams)))))
+      (check (set-current-camera handle)))
+    (check (initialize "/usr/local/etc/andor"))
+    (setf *adc-calibrated* t))
+  (check (set-read-mode 4)) ;; 0 vertical bin, 1 multitrack, 2 randomtrack, 3 singletrack, 4 image 
+  (check (set-acquisition-mode 5)) ;; 1 sglscan, 2 accum, 3 kinetics, 4 fast kin, 5 run-till-abort
+  (check (set-kinetic-cycle-time 0f0))
+  
+  (check (set-exposure-time exposure-s))
+  (check (set-ad-channel (if fast-adc 1 0)))
    (check (set-output-amplifier 0))
    (check (set-hs-speed 0 0))
    (check (set-frame-transfer-mode 1))
@@ -178,10 +186,14 @@
 	    (ymin (- yh hh))
 	    (ymax (+ ymin height)))
        (check (set-image 1 1 (1+ xmin) xmax (1+ ymin) ymax))))
+   (setf *w* width
+	 *h* height)
    (multiple-value-bind (ret exp acc kin)
        (get-acquisition-timings)
-     (declare (ignore ret exp acc))
-     kin))
+     (check ret)
+     (format t
+	     "size: ~dx~d exposure time: ~fs   accumulation time: ~fs   kinetic cycle time: ~fs~%"
+	     *w* *h* exp acc kin)))
 
 
 (defun is-idle-p ()
@@ -192,18 +204,12 @@
 	     (lookup-error ret)))
     (eq state drv-idle)))
  
-(defvar *adc-calibrated* nil)
-(defvar *displayed-images* nil)
-(defvar *start-series* nil)
-(defparameter *im* nil)
 
 (defun init-fast (&key (exposure-s .016s0 exposure-s-p) 
 		  (width 1392) (height 1040) (fast-adc t))
-  (unless *adc-calibrated* 
-    (init-run-till-abort :exposure-s exposure-s 
-			 :width width :height height
-			 :fast-adc fast-adc)
-    (setf *adc-calibrated* t))
+  (init-run-till-abort :exposure-s exposure-s 
+		       :width width :height height
+		       :fast-adc fast-adc)
  
   (when exposure-s-p
     (unless (is-idle-p)
@@ -211,7 +217,7 @@
     (check (set-exposure-time exposure-s)))
   
   (when (is-idle-p)
-      (check (start-acquisition)))
+    (check (start-acquisition)))
  
   (setf *displayed-images* 0)
   (setf *start-series* (val3 (get-acquisition-progress))))
@@ -226,19 +232,39 @@
 
 (defun copy-most-recent-data ()
   (when (is-acquiring-p)
-    (check (wait-for-acquisition)))
-  (setf *im*
-        (let* ((img (make-array (list *w* *h*) :element-type '(signed-byte 16)))
-               (img1 (sb-ext:array-storage-vector img)))
-          (sb-sys:with-pinned-objects (img1)
-	    (let ((ret (get-oldest-image16 (sb-sys:vector-sap img1)
-					   (* *w* *h*))))
-	      (if (eq ret drv-no-new-data)
-		  (return-from copy-most-recent-data *displayed-images*)
-		  (check ret))))
-          img))
-  (incf *displayed-images*)
-  #+nil(check (free-internal-memory)))
+    (check (wait-for-acquisition))
+    (setf *im*
+	  (let* ((img (make-array (list *w* *h*) :element-type '(signed-byte 16)))
+		 (img1 (sb-ext:array-storage-vector img)))
+	    (sb-sys:with-pinned-objects (img1)
+	      (let ((ret (get-oldest-image16 (sb-sys:vector-sap img1)
+					     (* *w* *h*))))
+		(if (eq ret drv-no-new-data)
+		    (return-from copy-most-recent-data *displayed-images*)
+		    (check ret))))
+	    img))
+    (incf *displayed-images*)
+    #+nil (check (free-internal-memory))))
+
+(defun parse-status ()
+  (multiple-value-bind (e status)
+      (get-status)
+    (list (lookup-error e) (lookup-error status))))
 
 #+nil
 (time (init-fast :exposure-s .016s0 :width 256 :height 256))
+#+nil 
+(parse-status)
+#+nil
+(check (abort-acquisition))
+#+nil
+(progn
+  (dotimes (i 10)
+    (copy-most-recent-data))
+  (check (abort-acquisition)))
+
+#+nil
+(progn
+  (setf *adc-calibrated* nil
+	*im* nil)
+  (check (shutdown)))
