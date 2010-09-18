@@ -1,15 +1,3 @@
-(defpackage :clara
-  (:use :cl :sb-alien :sb-c-call)
-  (:export
-   #:init-fast
-   #:wait-for-image-and-copy
-   #:status
-   #:stop
-   #:uninit
-   #:*im*
-
-;; actually I don't want to export those, they are from ffi and I use
-;; them in clara
 #:get-available-cameras
 #:get-camera-handle
 #:set-current-camera
@@ -64,5 +52,3 @@
 #:get-acquisition-progress
 #:wait-for-acquisition
 #:set-number-accumulations
-
-   ))

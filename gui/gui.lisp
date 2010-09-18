@@ -34,7 +34,6 @@
   (funcall (draw-func w))
     
   (swap-buffers)
-  (sleep (/ 10))
   (post-redisplay))
 
 (defmethod reshape ((w fenster) x y)

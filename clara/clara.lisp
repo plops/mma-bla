@@ -153,8 +153,8 @@
 (defvar *start-series* nil)
 (defparameter *im* nil)
 
-(defun init-run-till-abort (&key (width 32) (height 32) (exposure-s 1s0)
-			    (fast-adc t))
+(defun init-run-till-abort (&key (width 32) (height 32) (xpos 0) (ypos 0) (exposure-s 1s0)
+			    (fast-adc t) (external-trigger nil))
   (unless *adc-calibrated* 
     (let* ((cams (val2 (get-available-cameras)))
 	   (handle (val2 (get-camera-handle (1- cams)))))
@@ -170,7 +170,7 @@
    (check (set-output-amplifier 0))
    (check (set-hs-speed 0 0))
    (check (set-frame-transfer-mode 1))
-   (check (set-trigger-mode 0)) ;; 0 int, 1 ext, 10 software
+   (check (set-trigger-mode (if external-trigger 1 0))) ;; 0 int, 1 ext, 10 software
    
    (multiple-value-bind (e xdim ydim)
        (get-detector)
@@ -184,7 +184,8 @@
 	    (hh (floor height 2))
 	    (ymin (- yh hh))
 	    (ymax (+ ymin height)))
-       (check (set-image 1 1 (1+ xmin) xmax (1+ ymin) ymax))))
+       (check (set-image 1 1 (+ xpos (1+ xmin)) (+ xpos xmax)
+			 (+ ypos (1+ ymin)) (+ ypos ymax)))))
    (setf *w* width
 	 *h* height)
    (multiple-value-bind (ret exp acc kin)
@@ -205,9 +206,12 @@
  
 
 (defun init-fast (&key (exposure-s .016s0 exposure-s-p) 
-		  (width 1392) (height 1040) (fast-adc t))
+		  (width 1392) (height 1040) (x 0) (y 0) (fast-adc t)
+		  (external-trigger nil))
   (init-run-till-abort :exposure-s exposure-s 
 		       :width width :height height
+		       :external-trigger external-trigger
+		       :xpos x :ypos y
 		       :fast-adc fast-adc)
  
   (when exposure-s-p
@@ -236,8 +240,8 @@
 	  (let* ((img (make-array (list *w* *h*) :element-type '(signed-byte 16)))
 		 (img1 (sb-ext:array-storage-vector img)))
 	    (sb-sys:with-pinned-objects (img1)
-	      (let ((ret (get-oldest-image16 (sb-sys:vector-sap img1)
-					     (* *w* *h*))))
+	      (let ((ret (get-most-recent-image16 (sb-sys:vector-sap img1)
+						  (* *w* *h*))))
 		(if (eq ret drv-no-new-data)
 		    (return-from wait-for-image-and-copy *displayed-images*)
 		    (check ret))))

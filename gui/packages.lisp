@@ -3,8 +3,10 @@
   (:use :cl :gl :glut)
   (:export #:fenster
 	   #:with-gui
-	   #:texture-luminance-ub8
+	   #:grating
 	   #:destroy
-	   #:bind-tex
+	   #:bind
+	   #:draw
 	   #:draw-axes
-	   #:draw-wire-box))
+	   #:draw-wire-box
+	   #:texture))
