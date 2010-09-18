@@ -52,10 +52,12 @@
   (case key
     (#\Esc (destroy-current-window))))
 
-(defmacro with-gui (&body body)
+(defmacro with-gui ((w &optional (h w) (x 0) (y 0)) &body body)
   `(display-window 
     (make-instance 'gui:fenster
 		   :mode '(:double :rgb :depth)
+		   :width ,w :height ,h
+		   :xpos ,x :ypos ,y ; FIXME doesn't work
 		   :draw-func #'(lambda ()
 				  ,@body))))
 

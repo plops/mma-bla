@@ -1,9 +1,17 @@
-#.(require :gui)
-#.(require :ipms-ffi)
- 
-(defpackage :ipms
-  (:use :cl :ipms-ffi))
-(in-package :ipms)
+(defpackage :mma
+  (:use :cl :ipms-ffi)
+  (:export
+   #:init
+   #:begin
+   #:select-pictures
+   #:uninit
+   #:load-black
+   #:load-white
+   #:load-disks
+   #:load-disks2
+   #:load-concentric-circles))
+
+(in-package :mma)
  
 (defun set-extern-trigger (&optional (on t))
   (if on
@@ -26,7 +34,15 @@
   (set-voltage +volt-pixel+ 17.5s0)
   (set-voltage +volt-frame-f+ 20.0s0)
   (set-voltage +volt-frame-l+ 20.0s0)
-  (set-voltage +volt-dmd-l+ 6.0s0))
+  (set-voltage +volt-dmd-l+ 6.0s0)
+  (set-extern-ready 16s0 530s0)
+  (set-deflection-phase 16s0 530s0)
+  (load-white)
+  (set-power-on)
+  (begin)
+  (set-stop-mma)
+  (set-extern-trigger t)
+  (set-start-mma))
 
 (defun write-data (buf &key (pic-number 1))
   "Write a 256x256 unsigned-short buffer to the device."
@@ -105,13 +121,11 @@
 #+nil 
 (status)
 (defun begin ()
-  (set-power-on)
   (set-start-mma)
-  (sleep 1) 
+  (sleep 1)
   (status))
 (defun end ()
-  (set-stop-mma)
-  (set-power-off))
+  (set-stop-mma))
 
 (defun select-pictures (start &key (n 1) (ready-out-needed nil))
   (dotimes (i n)
@@ -119,11 +133,11 @@
 			  (if (< i (- n 1)) 0 1)
 			  (if ready-out-needed 1 0))))
 
-(defun load-white (&key (pic-number 0))
-  (draw-disk :cx 0 :cy 0 :radius 1.0 :pic-number pic-number))
+(defun load-white (&key (radius 1.0) (pic-number 0))
+  (draw-disk :cx 0 :cy 0 :radius radius :pic-number pic-number))
 
-(defun load-black (&key (pic-number 0))
-  (draw-disk :cx 0 :cy 0 :radius 1.0 :pic-number pic-number
+(defun load-black (&key (radius 1.0) (pic-number 0))
+  (draw-disk :cx 0 :cy 0 :radius radius :pic-number pic-number
 	     :value #xffff))
 
 (defun load-concentric-circles (&key (n 12) (dr .02) (ready-out-needed nil))
@@ -142,32 +156,37 @@
   (select-pictures 0 :n n))
 
 (defun load-disks2 (&key (n 12))
-  (dotimes (j n)
-    (dotimes (i n)
-      (let ((x (floor (* 256 (- i (floor n 2)) (/ 1.0 n))))
-	    (y (floor (* 256 (- j (floor n 2)) (/ 1.0 n)))))
-	(draw-disk :cx x :cy y :pic-number (1+ (+ i (* n j)))))))
+  (let ((shift (if (evenp n) 
+		   (floor 256 (* 2 n))
+		   0)))
+   (dotimes (j n)
+     (dotimes (i n)
+       (let ((x (floor (* 256 (- i (floor n 2)) (/ 1.0 n))))
+	     (y (floor (* 256 (- j (floor n 2)) (/ 1.0 n)))))
+	 (draw-disk :cx (+ x shift)
+		    :cy (+ y shift)
+		    :radius (/ 1s0 n)
+		    :pic-number (1+ (+ i (* n j))))))))
   (select-pictures 0 :n (* n n)))
+
+(defun uninit ()
+  (end)
+  (disconnect))
 
 #+nil 
 (time
- (progn
-   (init)
-   (load-concentric-circles :n 4)
-   (begin)))
-
-(format t "~a" 'blub)
+ (init))
 
 #+nil
 (time (progn
 	(set-stop-mma)
-	(set-extern-trigger t)
+	;;(set-extern-trigger t)
 	(select-pictures 2 :n 1 :ready-out-needed t)
 	(begin)))
 
 #+nil
 (progn
-  (select-pictures 100 :n 1 :ready-out-needed t))
+  (select-pictures 1 :n 1 :ready-out-needed t))
 #+nil
 (dotimes (j 2)
  (dotimes (i 10)
@@ -200,17 +219,6 @@
    (load-white :pic-number 101)
    (load-black :pic-number 102)
    (begin)))
-#+nil 
-(progn
-  (end)
-  (disconnect))
 
-
-
-(let ((blub nil))
-  (defun draw ()
-    (gl:clear-color 0 0 0 1)
-    (gl:clear :color-buffer-bit)))
 #+nil
-(gui:with-gui
-  (draw))
+(uninit)
