@@ -7,14 +7,14 @@
 ;;; CLARA CAMERA
 #+nil
 (progn
-  (clara:init-fast :exposure-s 0.016s0 :width 300 :height 256 
-		   :x -100 :y 80 :fast-adc t :external-trigger t)
+  (clara:init-fast :exposure-s 0.016s0 :width 256 :height 256 
+		   :x -30 :y 80 :fast-adc t :external-trigger t)
   (clara:wait-for-image-and-copy)
   (clara:status))
 #+nil
-(clara:status)
-#+nil
 (clara:stop)
+#+nil
+(clara:status)
 #+nil
 (clara:uninit)
 #+nil
@@ -23,14 +23,22 @@ clara:*im*
 
 ;;; MMA OVER NETWORK (run ifconfig eth1 192.168.0.1)
 #+nil
+(mma:init)
+#+nil
+(mma:status)
+#+nil
+(mma::set-start-mma)
+#+nil
 (progn
-  (mma:init))
+  (mma::set-stop-mma)
+  (mma::set-extern-trigger t)
+  (mma:begin))
 #+nil
 (progn
   (mma::end)
-  (mma:load-white :radius .3 :pic-number 8)
+  #+nil (mma:load-white :radius .3 :pic-number 8)
   #+nil (mma:load-concentric-circles :n 12)
-  #+nil (mma:load-disks2 :n 3)
+  (mma:load-disks2 :n 3)
   (mma:begin))
 #+nil
 (mma:uninit)

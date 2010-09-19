@@ -9,7 +9,8 @@
    #:load-white
    #:load-disks
    #:load-disks2
-   #:load-concentric-circles))
+   #:load-concentric-circles
+   #:status))
 
 (in-package :mma)
  
@@ -37,12 +38,9 @@
   (set-voltage +volt-dmd-l+ 6.0s0)
   (set-extern-ready 16s0 530s0)
   (set-deflection-phase 16s0 530s0)
-  (load-white)
   (set-power-on)
-  (begin)
-  (set-stop-mma)
-  (set-extern-trigger t)
-  (set-start-mma))
+  (load-white)
+  (begin))
 
 (defun write-data (buf &key (pic-number 1))
   "Write a 256x256 unsigned-short buffer to the device."
