@@ -237,7 +237,7 @@
   (when (is-acquiring-p)
     (check (wait-for-acquisition))
     (setf *im*
-	  (let* ((img (make-array (list *w* *h*) :element-type '(signed-byte 16)))
+	  (let* ((img (make-array (list *w* *h*) :element-type '(unsigned-byte 16)))
 		 (img1 (sb-ext:array-storage-vector img)))
 	    (sb-sys:with-pinned-objects (img1)
 	      (let ((ret (get-most-recent-image16 (sb-sys:vector-sap img1)

@@ -55,7 +55,7 @@
   ((object :accessor object :initarg :object :initform 0 :type fixnum)))
 
 (defmethod initialize-instance :after ((tex texture) &key data (offset .3s0) (scale 30s0))
-  (declare ((simple-array (signed-byte 16) 2) data))
+  (declare ((simple-array (unsigned-byte 16) 2) data))
   (let ((target :texture-rectangle-nv))
     (with-slots (object) tex
       (setf object (first (gen-textures 1)))
@@ -82,7 +82,7 @@
   (bind-texture :texture-rectangle-nv (object tex)))
 
 (defmethod update ((tex texture) &key data)
-  (declare ((simple-array (signed-byte 16) 2) data))
+  (declare ((simple-array (unsigned-byte 16) 2) data))
   (bind tex)
   (destructuring-bind (w h) (array-dimensions data)
     (let* ((data1 (sb-ext:array-storage-vector data))

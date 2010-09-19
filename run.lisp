@@ -59,14 +59,22 @@ clara:*im*
 #+nil
 (focus:disconnect)
 
+(defun clamp-u16 (a)
+  (declare (values (unsigned-byte 16) &optional))
+  (let ((ma #.(1- (expt 2 16))))
+   (cond ((< a 0) 0)
+	 ((< ma a) ma)
+	 (t a))))
+
 (defvar *section-im* nil)
+(defvar *widefield-im* nil)
 
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 10)
-       (phases 3)
+(let* ((white-width 3)
+       (phases 7)
        (colors 3) 
        (a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
-       (phase 2)
+       (phase 0)
        
        (im-scale 60s0)
        (im-offset .09s0))
@@ -82,33 +90,49 @@ clara:*im*
 
   (change-phase 0)
 
-  (defun obtain-sectioned-slice ()
+  (defun obtain-sectioned-slice (&key (accumulate 1))
     (when clara:*im*
       (destructuring-bind (w h) (array-dimensions clara:*im*)
-	(let ((phase-im (make-array (list phases w h) :element-type '(signed-byte 16)))
-	      #+nil (square-im (make-array (list w h) :element-type '(signed-byte 32))))
+	(let ((phase-im (make-array (list phases w h) :element-type '(signed-byte 64)))
+	      (widefield-im (make-array (list w h) :element-type '(signed-byte 64))))
+	  (setf *section-im* (make-array (list w h) :element-type '(unsigned-byte 16))
+		*widefield-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
+	  ;; capture the phase images, accumulate if requested
 	  (dotimes (p phases)
 	   (change-phase p)
-	   (sleep .5)
+	   (sleep .1)
 	   (clara:wait-for-image-and-copy)
-	   (dotimes (j h)
-	     (dotimes (i w)
-	       (setf (aref phase-im p i j) (aref clara:*im* i j)))))
+	   (dotimes (a accumulate)
+	    (dotimes (j h)
+	      (dotimes (i w)
+		(incf (aref phase-im p i j) (aref clara:*im* i j))
+		(incf (aref widefield-im i j) (aref clara:*im* i j))))))
+
+	  ;; min-max reconstruction
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (let* ((v (aref phase-im 0 i j))
 		     (ma v)
 		     (mi v))
 		(loop for p from 1 below phases do
-		     (let ((v (aref phase-im 0 i j)))
+		     (let ((v (aref phase-im p i j)))
 		       (setf mi (min mi v)
-			     ma (max ma v)))
-		     #+nil (let ((q (- (aref phase-im phase i j) 
-				       (aref phase-im (mod (1+ phase) phases) i j))))
-			     (incf (aref square-im i j) 
-				   (* q q))))
-		(setf (aref *section-im* i j) (- ma mi)))
-	      #+nil (setf (aref *section-im* i j) (floor (sqrt (aref square-im i j))))))))))
+			     ma (max ma v))))
+		(setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
+	  ;; sqrt reconstruction
+	  #+nil
+	  (let ((square-im (make-array (list w h) :element-type '(signed-byte 64))))
+	   (dotimes (j h)
+	     (dotimes (i w)
+	       (dotimes (p phases)
+		 (let ((q (- (aref phase-im phase i j) 
+			     (aref phase-im (mod (1+ phase) phases) i j))))
+		   (incf (aref square-im i j) 
+			 (* q q))))
+	       (setf (aref *section-im* i j) (floor (sqrt (aref square-im i j)))))))))
+      (format t "maximum value in section ~a~%"
+	      (reduce #'max (sb-ext:array-storage-vector *section-im*)))))
+  
 
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
@@ -125,12 +149,20 @@ clara:*im*
     ;; draw sectioned image next to it
     (gl:with-pushed-matrix
       (gl:translate 256 0 0)
-     (when *section-im*
-       (let ((tex (make-instance 'gui::texture :data *section-im*
-				 :scale 300s0 :offset 0s0
-				 )))
-	 (destructuring-bind (w h) (array-dimensions *section-im*)
-	   (gui:draw tex :w (* 1s0 w) :h (* 1s0 h))))))
+      (when *section-im*
+	(let ((tex (make-instance 'gui::texture :data *section-im*
+				  :scale 8s0 :offset 0.0s0
+				  )))
+	  (destructuring-bind (w h) (array-dimensions *section-im*)
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))))
+      ;; draw accumulated widefield image below
+      (gl:translate 0 256 0)
+      (when *widefield-im*
+	(let ((tex (make-instance 'gui::texture :data *widefield-im*
+				  :scale 1s0 :offset 0.0s0
+				  )))
+	  (destructuring-bind (w h) (array-dimensions *widefield-im*)
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h))))))
     ;; draw grating for sectioning on the very right
     (gl:translate 800 0 0)
     (let ((repetition 100f0))
@@ -149,9 +181,9 @@ clara:*im*
       (gl:color 0 1 0) (gl:vertex 0 1) (gl:vertex 0 100 0) ;; y axis green
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 #+nil
-(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice)))
+(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 100)))
 
 
 #+nil
-(gui:with-gui (1400 300)
+(gui:with-gui (1400 512)
   (draw-screen))
