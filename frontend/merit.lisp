@@ -310,3 +310,35 @@ wanders outside of the bfp."
    #+nil (write-pgm "/home/martin/tmp/scan-mosaic.pgm"
 		    (normalize-2-df/ub8 mosaic))))
 
+;; fill MMA with rectangular grid of circles
+(let* ((obj (lens:make-objective :center (v) :normal (v 0 0 1)))
+       (nucleus 0)
+       (positions (sample-circles 3 7 5)))
+  (with-slots ((c lens::center)
+	       (ri lens::immersion-index)
+	       (f lens::focal-length)) obj
+    (let* ((n 10)
+	   (shift (if (evenp n) (/ 1d0 n) 0))
+	   (window-radius (/ 1d0 n))
+	   (z-plane-mm (vec-z (elt (raytrace::centers-mm *model*) nucleus)))) 
+      (setf c (make-vec 0d0 0d0 (+ (- (* ri f)) z-plane-mm)))
+      (let* ((params (list obj *model* nucleus window-radius positions))
+	     (result nil))
+	(do-region ((j i) (n n))
+	  (let* ((x (- (* 2d0 (/ i n)) 1d0))
+		 (y (- (* 2d0 (/ j n)) 1d0))
+		 (v (merit-function (make-vec2 :x (+ shift x) :y (+ shift y))
+				    params
+				    :border-value .01d0)))
+	    (push (list i j v) result)))
+	;; print a matrix
+	(let ((ma (reduce #'max result :key #'third))
+	      (mi (reduce #'min result :key #'third)))
+	  (terpri)
+	  (dotimes (j n)
+	   (dotimes (i n)
+	     (let ((v (floor (third (elt result (+ i (* j n)))) (/ ma 99))))
+	      (if (= v mi)
+		  (format t "..")
+		  (format t "~2,'0d" v))))
+	   (terpri)))))))

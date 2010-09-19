@@ -1,6 +1,6 @@
 #.(require :gui)
-(in-package :run)
-
+#+nil(in-package :run)
+(in-package :frontend)
 #+nil
 (let* ((k 25)
        (nuc (first (get-visible-nuclei k)))

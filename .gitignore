@@ -2,3 +2,6 @@
 *#
 .#*
 *.fasl
+*.pgm
+*.png
+*.txt
