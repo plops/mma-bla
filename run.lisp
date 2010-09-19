@@ -57,7 +57,7 @@ clara:*im*
 #+nil ;; move further into sample
 (focus:set-position (+ 1 (focus:get-position)))
 #+nil
-(focus:disconnect)
+(focus:disconnect)a
 
 (defun clamp-u16 (a)
   (declare (values (unsigned-byte 16) &optional))
@@ -69,8 +69,11 @@ clara:*im*
 (defvar *section-im* nil)
 (defvar *widefield-im* nil)
 
+(loop for i below 7 collect
+     (list i (mod (+ i (floor 3 2) ) 3)))
+
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 3)
+(let* ((white-width 4)
        (phases 7)
        (colors 3) 
        (a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
@@ -97,18 +100,32 @@ clara:*im*
 	      (widefield-im (make-array (list w h) :element-type '(signed-byte 64))))
 	  (setf *section-im* (make-array (list w h) :element-type '(unsigned-byte 16))
 		*widefield-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
-	  ;; capture the phase images, accumulate if requested
+	  ;; capture the phase images, accumulate if requested, update widefield image as well
 	  (dotimes (p phases)
-	   (change-phase p)
-	   (sleep .1)
-	   (clara:wait-for-image-and-copy)
-	   (dotimes (a accumulate)
+	    (change-phase p)
+	    (sleep .1)
+	    (clara:wait-for-image-and-copy)
+	    (dotimes (a accumulate)
+	      (dotimes (j h)
+		(dotimes (i w)
+		  (let ((v (aref clara:*im* i j)))
+		    (incf (aref phase-im p i j) v)
+		    (incf (aref widefield-im i j) v)
+		    (setf (aref *widefield-im* i j) (clamp-u16 (floor (aref widefield-im i j) 100))))))))
+	  ;; final widefield image normalize to full 16bit range
+	  (let ((ma 0)
+		(mi (1- (expt 2 64))))
 	    (dotimes (j h)
 	      (dotimes (i w)
-		(incf (aref phase-im p i j) (aref clara:*im* i j))
-		(incf (aref widefield-im i j) (aref clara:*im* i j))))))
-
+		(let ((v (aref widefield-im i j)))
+		  (setf ma (max v ma)
+			mi (min v mi)))))
+	    (dotimes (j h)
+	      (dotimes (i w)
+		(setf (aref *widefield-im* i j) (floor (- (aref widefield-im i j) mi)
+						       (/ (- ma mi) (1- (expt 2 16))))))))
 	  ;; min-max reconstruction
+	  #+nil
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (let* ((v (aref phase-im 0 i j))
@@ -120,13 +137,13 @@ clara:*im*
 			     ma (max ma v))))
 		(setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
 	  ;; sqrt reconstruction
-	  #+nil
+	  
 	  (let ((square-im (make-array (list w h) :element-type '(signed-byte 64))))
 	   (dotimes (j h)
 	     (dotimes (i w)
 	       (dotimes (p phases)
 		 (let ((q (- (aref phase-im phase i j) 
-			     (aref phase-im (mod (1+ phase) phases) i j))))
+			     (aref phase-im (mod (+ p (floor phases 2)) phases) i j))))
 		   (incf (aref square-im i j) 
 			 (* q q))))
 	       (setf (aref *section-im* i j) (floor (sqrt (aref square-im i j)))))))))
@@ -151,11 +168,11 @@ clara:*im*
       (gl:translate 256 0 0)
       (when *section-im*
 	(let ((tex (make-instance 'gui::texture :data *section-im*
-				  :scale 8s0 :offset 0.0s0
+				  :scale 3s0 :offset 0.0s0
 				  )))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))))
-      ;; draw accumulated widefield image below
+      ;; draw out-of-focus image below
       (gl:translate 0 256 0)
       (when *widefield-im*
 	(let ((tex (make-instance 'gui::texture :data *widefield-im*
@@ -181,7 +198,7 @@ clara:*im*
       (gl:color 0 1 0) (gl:vertex 0 1) (gl:vertex 0 100 0) ;; y axis green
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 #+nil
-(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 100)))
+(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 10)))
 
 
 #+nil
