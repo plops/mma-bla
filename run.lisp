@@ -1,34 +1,111 @@
 #.(require :frontend)
 (in-package :frontend)
 
+;; some nuclei
 #+nil
 (defparameter *model* (make-instance 'sphere-model-angular :dx .2d0 :dz 1.0d0))
 
+;; one sphere below a plane of spheres
 #+nil
-(time
- (defparameter *model* (make-test-model)))
+(time (defparameter *model* (make-test-model)))
 
+;; store a cross section of the model
 #+nil
 (write-pgm "/home/martin/tmp/model-cut.pgm"
 	   (normalize-2-csf/ub8-realpart (cross-section-xz (spheres *model*))))
-#+nil
-(times
- (defparameter *psf* 
-   (multiple-value-bind (conv dx dz)
-       (angular-intensity-psf-minimal-resolution
-	:x-um 8s0 :z-um 12s0
-	:window-radius 1.0 :window-x 0s0 :window-y 0s0
-	:debug t :initialize t
-	:integrand-evaluations 100)
-     (resample-3-csf conv dx dx dz .2 .2 1.0))))
-#+nil
-(write-pgm "/home/martin/tmp/psf-cut.pgm"
-	   (normalize-2-csf/ub8-realpart (cross-section-xz *psf*)))
 
+;; calculate detection psf, make sure the sampling is the same as in
+;; the model
+#+nil
+(progn (defparameter *detection-psf*
+	 (let ((z 34)
+	       (x 60)
+	       (dx .2)
+	       (dz 1.0))
+	   (intensity-psf z x x (* dz z) (* dx x) :integrand-evaluations 300)))
+       (write-pgm "/home/martin/tmp/detection-psf-cut.pgm"
+		  (normalize-2-csf/ub8-realpart 
+		   (cross-section-xz *detection-psf*))))
+
+;; calculate illumination psf for different windows (this is for
+;; testing, the same code appears below, sampling the full bfp)
+#+nil
+(time (progn
+	(defparameter *psf* 
+	  (multiple-value-bind (conv dx dz)
+	      (angular-intensity-psf-minimal-resolution
+	       :x-um 8s0 :z-um 36s0
+	       :window-radius 1.0 :window-x 0s0 :window-y 0s0
+	       :debug t :initialize t
+	       :integrand-evaluations 200)
+	    (resample-3-csf conv dx dx dz .2 .2 1.0)))
+	;; store the cross section
+	(write-pgm "/home/martin/tmp/psf-cut.pgm"
+		   (normalize-2-csf/ub8-realpart 
+		    (cross-section-xz *psf*)))))
+
+;; calculate a lot of psf for a grid of windows in the bfp
+#+nil
+(time
+ (let* ((n 8)
+	(shift (if (evenp n) (/ 1s0 n) 0))
+	(window-radius (/ 1s0 n))
+	(result nil)) 
+   (do-region ((j i) (n n))
+     (let* ((x (- (* 2s0 (/ i n)) 1s0))
+	    (y (- (* 2s0 (/ j n)) 1s0)))
+       (format t "~a~%" (list 'psf i j))
+       (multiple-value-bind (conv dx dz)
+	   (angular-intensity-psf-minimal-resolution
+	    :x-um 8s0 :z-um 36s0
+	    :window-radius window-radius :window-x x :window-y y
+	    :debug t :initialize t
+	    :integrand-evaluations 200)
+	 (push (resample-3-csf conv dx dx dz .2 .2 1.0) result))))
+   (defparameter *psfs* result)
+   (dotimes (i (length *psfs*)) ;; store the cross sections
+     (write-pgm (format nil "/home/martin/tmp/psf-cut~3,'0d.pgm" i)
+		(normalize-2-csf/ub8-realpart 
+		 (cross-section-xz (elt *psfs* i)))))))
+
+;; integrate along z for all the fts psfs, and store those otfs as a
+;; mosaic
+#+nil
+(destructuring-bind (z y x) (array-dimensions (fftshift (ft (elt *psfs* 0))))
+  (let* ((n 8)
+	 (otf-mosaic (make-array (list (* n y) (* n x))
+				 :element-type 'single-float)))
+    (dotimes (q (length *psfs*))
+      (let* ((p (elt *psfs* q))
+	     (kp (fftshift (ft p)))
+	     (ii (floor q n))
+	     (jj (mod q n)))
+	(dotimes (k (1- z))
+	  (do-region ((j i) (y x))
+	    (incf (aref otf-mosaic 
+		       (+ j (* y jj)) 
+		       (+ i (* x ii)))
+		  (abs (aref kp k j i)))))))
+    (write-pgm "/home/martin/tmp/otf-mosaic.pgm"
+	      (normalize-2-sf/ub8 otf-mosaic))))
+
+;; check the energy contained in each of the psfs
+#+nil
+(defparameter *integrals*
+ (loop for p in *psfs* collect
+      (let ((sum 0s0))
+	(destructuring-bind (z y x) (array-dimensions p)
+	  (do-region ((k j i) (z y x))
+	    (incf sum (abs (aref p k j i)))))
+	(/ sum 1e10))))
+
+;; convolve the model with the psf, this gives the 
 #+nil
 (time (progn 
 	 (defparameter *conv*
-	  (convolve (spheres *model*) *psf*))
+	  (convolve (spheres *model*) 
+		    (elt *psfs* 35)
+		    #+nil *detection-psf*))
 	(write-pgm "/home/martin/tmp/conv-cut.pgm"
 		   (normalize-2-csf/ub8-realpart 
 		    (cross-section-xz
@@ -42,20 +119,20 @@
 	     (.- (normalize-3-csf/sf-realpart *conv*) 
 		 (normalize-3-csf/sf-realpart (spheres *model*))))))
 
+;; copy the texture to the graphics card
 #+nil
-(time
- (progn
-   (update-tex
-    #+nil (normalize-3-csf/ub8-realpart *conv*)
-    (normalize-2-csf/ub8-realpart
-     (cross-section-xz *conv* (vec-i-y (elt (centers *model*) 0)))))
-   nil))
+(progn
+ (update-tex
+  #+nil (normalize-3-csf/ub8-realpart *conv*)
+  (normalize-2-csf/ub8-realpart
+   (cross-section-xz *conv* (vec-i-y (elt (centers *model*) 0)))))
+ nil)
 
 
-#+nil
-(update-scale 300 40)
-#+nil
-(update-scale 1 40)
+#+nil ;; this way you see the model
+(update-scale 100 40)
+#+nil ;; in this mode you see the bfp
+(update-scale 2.8 40)
 
 
 
@@ -69,17 +146,28 @@
   (update-view-center nucleus-position)
   (update-scale 2 20))
 
+;; choose target nucleus and the geometry of the window in the bfp
 #+nil
-(defun draw-all ()
-  (draw *model*
-	:nucleus 0
-	:win-x/r -0.2402d0 :win-y/r 0.0053d0
-	; :win-x/r -.0927d0 :win-y/r -0.2359d0
-	:win-r/r .08d0
-	:nr-ffp 2
-	:nr-bfp 3
-	:nr-theta 1))
+(let* ((n 4)
+       (shift (if (evenp n) (/ 1d0 n) 0))
+       (direction 27)
+       (i (floor direction n))
+       (j (mod direction n))
+       (x (- (* 1d0 (/ i n)) .5d0))
+       (y (- (* 1d0 (/ j n)) .5d0))
+       (radius (/ 1d0 n)))
+  (format t "~a~%" (list x y shift radius))
+ (defun draw-all ()
+   (draw *model*
+	 :nucleus 0 ;; target nucleus to shoot rays into
+	 :win-x/r (+ x shift)
+	 :win-y/r (+ y shift)
+	 :win-r/r radius
+	 :nr-ffp 2
+	 :nr-bfp 3
+	 :nr-theta 12)))
 
+;; draw the objective, the model and the volume
 #+nil
 (with-gui
   (draw-all))
@@ -244,6 +332,8 @@
       (save-stack-ub8 "/home/martin/tmp/Lf" (normalize3-cdf/ub8-realpart in-focus))
       (/ (mean-realpart in-focus)
 	 (mean-realpart Lf)))))
+#+nil
+(clem)
 
 #+bla
 (defun widefield ()
