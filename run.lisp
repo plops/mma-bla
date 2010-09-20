@@ -33,24 +33,26 @@ clara:*im*
   (mma::set-stop-mma)
   (mma::set-extern-trigger t)
   (mma:begin))
+(defvar *mma-contents* nil)
+(defvar *mma-select* 0)
 #+nil
 (progn
   (mma::end)
   #+nil (mma:load-white :radius .1 :pic-number 8)
   #+nil (mma:load-concentric-circles :n 12)
-  (mma:load-disks2 :n 7)
+  (setf *mma-contents* (mma:load-disks2 :n 5))
   (mma:begin))
 #+nil
 (mma:uninit)
 #+nil
-(let ((x 3)
-      (y 1)
-      (n 7))
- (mma:select-pictures (+ x (* n y)) :ready-out-needed t))
+(let ((x 1)
+      (y 2)
+      (n 5))
+ (mma:select-pictures (+ x (* n y)) :n 2 :ready-out-needed t))
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
 #+nil
-(focus:connect)
+(focus:connect "/dev/ttyUSB0")
 #+nil
 (focus:get-position)
 #+nil ;; move away from sample
@@ -71,8 +73,6 @@ clara:*im*
 (defvar *widefield-im* nil)
 (defvar *unfocused-im* nil)
 
-(loop for i below 7 collect
-     (list i (mod (+ i (floor 3 2) ) 3)))
 
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
 (let* ((white-width 2)
@@ -172,15 +172,17 @@ clara:*im*
 			;;	:scale 40s0 :offset 0.76s0
 				)))
        (destructuring-bind (w h) (array-dimensions clara:*im*)
-	 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))))
+	 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+       (gui:destroy tex)))
     ;; draw sectioned image next to it
     (gl:with-pushed-matrix
       (gl:translate 256 0 0)
       (when *section-im*
 	(let ((tex (make-instance 'gui::texture :data *section-im*
-				  :scale 100s0 :offset 0.0s0)))
+				  :scale 30s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))))
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	  (gui:destroy tex)))
       ;; draw accumulated widefield image below
       (gl:translate 0 256 0)
       (when *widefield-im*
@@ -188,7 +190,8 @@ clara:*im*
 				  :scale 1s0 :offset 0.0s0
 				  )))
 	  (destructuring-bind (w h) (array-dimensions *widefield-im*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h))))))
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	  (gui:destroy tex))))
     ;; draw an image with only out of focus light in the lower left
     (gl:with-pushed-matrix
       (gl:translate 0 256 0)
@@ -196,7 +199,18 @@ clara:*im*
 	(let ((tex (make-instance 'gui::texture :data *unfocused-im*
 				  :scale 1s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h))))))
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	  (gui:destroy tex))))
+    ;; draw the image that is displayed on the mma
+    (gl:with-pushed-matrix
+      (gl:translate 0 512 0)
+      (let ((p (elt *mma-contents* 0))) 
+	(let ((tex (make-instance 'gui::texture :data p
+				  :scale 1s0 :offset 0.0s0)))
+	  (destructuring-bind (w h) (array-dimensions p)
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	  (gui:destroy tex))))
+    
     ;; draw grating for sectioning on the very right
     (gl:translate 800 0 0)
     (let ((repetition 100f0))
@@ -218,6 +232,7 @@ clara:*im*
 (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 100)))
 
 ;; scan through different mma positions and capture slices
+#+nil
 (defparameter *mma-scan*
   (let ((n 7)
 	(result nil))
@@ -265,11 +280,12 @@ clara:*im*
 		      (floor (- (aref ,image i j) mi)
 			     (/ (- ma mi) 255))))))))
      (write-pgm (format nil "~a-~a.pgm" ,filename ',image) mosaic))))
+#+nil
 (progn
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" wide)
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" section)
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" unfocus))
 
 #+nil
-(gui:with-gui (1400 512)
+(gui:with-gui (1400 (+ 256 512))
   (draw-screen))
