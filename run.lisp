@@ -44,11 +44,6 @@ clara:*im*
   (mma:begin))
 #+nil
 (mma:uninit)
-#+nil
-(let ((x 1)
-      (y 2)
-      (n 5))
- (mma:select-pictures (+ x (* n y)) :n 2 :ready-out-needed t))
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
 #+nil
@@ -174,12 +169,12 @@ clara:*im*
        (destructuring-bind (w h) (array-dimensions clara:*im*)
 	 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
        (gui:destroy tex)))
-    ;; draw sectioned image next to it
+    ;; draw SECTIONed image next to it
     (gl:with-pushed-matrix
       (gl:translate 256 0 0)
       (when *section-im*
 	(let ((tex (make-instance 'gui::texture :data *section-im*
-				  :scale 30s0 :offset 0.0s0)))
+				  :scale 10s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex)))
@@ -204,7 +199,7 @@ clara:*im*
     ;; draw the image that is displayed on the mma
     (gl:with-pushed-matrix
       (gl:translate 0 512 0)
-      (let ((p (elt *mma-contents* 0))) 
+      (let ((p (elt *mma-contents* *mma-select*))) 
 	(let ((tex (make-instance 'gui::texture :data p
 				  :scale 1s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions p)
@@ -215,7 +210,7 @@ clara:*im*
     (gl:translate 800 0 0)
     (let ((repetition 100f0))
       (gui::with-grating (g a)
-	(gui:draw g :w (* repetition white-width phases) :h 300.0 :wt repetition)))
+	(gui:draw g :w (* repetition white-width phases) :h 900.0 :wt repetition)))
     
     #+nil
     (gl:with-primitive :lines
@@ -229,7 +224,17 @@ clara:*im*
       (gl:color 0 1 0) (gl:vertex 0 1) (gl:vertex 0 100 0) ;; y axis green
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 #+nil
-(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 100)))
+(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 400)))
+
+#+nil
+(let* ((x 2)
+       (y 1)
+       (n 5)
+       (q (+ x (* n y))))
+  (setf *mma-select* q)
+  (mma:select-pictures q :n 1 :ready-out-needed t))
+
+
 
 ;; scan through different mma positions and capture slices
 #+nil
@@ -238,7 +243,9 @@ clara:*im*
 	(result nil))
     (dotimes (y n)
       (dotimes (x n)
-	(mma:select-pictures (+ x (* n y)) :ready-out-needed t)
+	(let ((q (+ x (* n y))))
+	 (setf *mma-select* q)
+	 (mma:select-pictures q :ready-out-needed t))
 	(sb-thread:join-thread 
 	 (sb-thread:make-thread 
 	  #'(lambda () (obtain-sectioned-slice :accumulate 100))))
