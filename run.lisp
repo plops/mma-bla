@@ -5,10 +5,11 @@
 ;;; CLARA CAMERA
 #+nil
 (progn
-  (when (clara::is-acquiring-p)
-    (clara:stop))
-  (clara:init-fast :exposure-s 1.616s0 :width 256 :height 256 
-		   :x -80 :y 120 :fast-adc nil :external-trigger t)
+  (when clara::*adc-calibrated*
+   (when (clara::is-acquiring-p)
+     (clara:stop)))
+  (clara:init-fast :exposure-s .1616s0 :width 256 :height 256 
+		   :x -80 :y 120 :fast-adc t :external-trigger t)
   (clara:wait-for-image-and-copy)
   (clara:status))
 #+nil
@@ -44,21 +45,21 @@ clara:*im*
   (mma::end)
   #+nil (mma:load-white :radius 1.0 :pic-number 1)
   #+nil (mma:load-concentric-circles :n 12)
-  #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
-  (setf *mma-contents* (mma:load-disks2 :n 5))
+  (setf *mma-contents* (mma::load-concentric-disks :n 12))
+  #+nil (setf *mma-contents* (mma:load-disks2 :n 5))
   (mma:begin))
 #+nil
 (mma:uninit)
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
 #+nil
-(focus:connect "/dev/ttyUSB1")
+(focus:connect "/dev/ttyUSB0")
 #+nil
 (focus:get-position)
 #+nil ;; move away from sample
 (focus:set-position (1- (focus:get-position))) 
 #+nil ;; move further into sample
-(focus:set-position (+ 1 (focus:get-position)))
+(focus:set-position (+ 1.25 (focus:get-position)))
 #+nil
 (focus:set-position (- .25 (focus:get-position)))
 #+nil
@@ -78,14 +79,14 @@ clara:*im*
 (defvar *stack* nil)
 
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 4)
+(let* ((white-width 10)
        (phases 12)
        (colors 3) 
        (a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
        (phase 0)
        
-        (im-scale 30s0) (im-offset 0.56s0)
-       ;(im-scale 40s0) (im-offset 0.0s0)
+       ;(im-scale 40s0) (im-offset 0.56s0)
+       (im-scale 400s0) (im-offset 0.0s0)
        )
 
   (defun change-phase (p)
@@ -166,14 +167,15 @@ clara:*im*
       (format t "maximum value in section ~a~%"
 	      (reduce #'max (sb-ext:array-storage-vector *section-im*)))))
   
-  (defun obtain-stack (&key (n 30) (dz .1s0))
+  (defun obtain-stack (&key (n 30) (dz .1s0) (accumulate 1))
     (let ((center (focus:get-position))
 	  (result nil))
       (dotimes (k n)
 	(let ((z (+ center (* dz (- k (floor n 2))))))
+	  (format t "slice ~f ~d/~d~%" z (1+ k) n)
 	  (focus:set-position z)
 	  (sleep .1)
-	  (obtain-sectioned-slice)
+	  (obtain-sectioned-slice :accumulate accumulate)
 	  (push (list z *section-im*) result)))
       (setf *stack* (reverse result))))
 
@@ -248,20 +250,23 @@ clara:*im*
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 #+nil
 (progn
-  (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 1)))
+  (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 12)))
   )
 
 (defun select-disk (q)
   (setf *mma-select* q)
   (mma:select-pictures q :n 1 :ready-out-needed t))
 
+#+nil
 (setf *dark-im* nil)
+#+nil
+(setf *dark-im* t)
 
 #+nil
-(select-disk 11)
+(select-disk 7)
 
 #+nil
-(sb-thread:make-thread #'(lambda () (obtain-stack)))
+(sb-thread:make-thread #'(lambda () (obtain-stack :dz .3 :accumulate 12)))
 
 (defun average-img (img)
   (let ((sum 0))
@@ -279,11 +284,19 @@ clara:*im*
 
 (defparameter *stack-integral* nil)
 
+
+(defparameter *stack05* *stack*)
+(defparameter *stack11* *stack*)
+(defparameter *stack11-4* *stack*)
+(defparameter *stack11-6* *stack*)
+(defparameter *stack11-10* *stack*)
+(defparameter *stack11-10-disk7* *stack*)
+
 #+nil
 (setf *stack-integral*
  (integrate-slices *stack*))
 
-(with-open-file (s "/dev/shm/o.dat" :if-does-not-exist :create
+(with-open-file (s "/home/martin/tmp/11_5.dat" :if-does-not-exist :create
 		   :if-exists :supersede :direction :output)
   (dolist (e *stack-integral*)
    (format s "~f ~f~%" (first e) (second e))))
@@ -376,5 +389,5 @@ clara:*im*
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" unfocus))
 
 #+nil
-(gui:with-gui (1400 (+ 256 512) 100 100)
+(gui:with-gui (1400 (+ 256 512) (- 1280 512) 100)
   (draw-screen))
