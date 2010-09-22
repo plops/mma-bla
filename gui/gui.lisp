@@ -57,7 +57,7 @@
     (make-instance 'gui:fenster
 		   :mode '(:double :rgb :depth)
 		   :width ,w :height ,h
-		   :xpos ,x :ypos ,y ; FIXME doesn't work
+		   :pos-x ,x :pos-y ,y 
 		   :draw-func #'(lambda ()
 				  ,@body))))
 

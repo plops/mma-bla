@@ -5,8 +5,10 @@
 ;;; CLARA CAMERA
 #+nil
 (progn
-  (clara:init-fast :exposure-s 0.016s0 :width 256 :height 256 
-		   :x -50 :y 80 :fast-adc t :external-trigger t)
+  (when (clara::is-acquiring-p)
+    (clara:stop))
+  (clara:init-fast :exposure-s 1.616s0 :width 256 :height 256 
+		   :x -80 :y 120 :fast-adc nil :external-trigger t)
   (clara:wait-for-image-and-copy)
   (clara:status))
 #+nil
@@ -36,10 +38,13 @@ clara:*im*
 (defvar *mma-contents* nil)
 (defvar *mma-select* 0)
 #+nil
+(mma::select-pictures 0 :n 1 :ready-out-needed t)
+#+nil
 (progn
   (mma::end)
-  #+nil (mma:load-white :radius .1 :pic-number 8)
+  #+nil (mma:load-white :radius 1.0 :pic-number 1)
   #+nil (mma:load-concentric-circles :n 12)
+  #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
   (setf *mma-contents* (mma:load-disks2 :n 5))
   (mma:begin))
 #+nil
@@ -47,13 +52,15 @@ clara:*im*
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
 #+nil
-(focus:connect "/dev/ttyUSB0")
+(focus:connect "/dev/ttyUSB1")
 #+nil
 (focus:get-position)
 #+nil ;; move away from sample
 (focus:set-position (1- (focus:get-position))) 
 #+nil ;; move further into sample
 (focus:set-position (+ 1 (focus:get-position)))
+#+nil
+(focus:set-position (- .25 (focus:get-position)))
 #+nil
 (focus:disconnect)
 
@@ -67,17 +74,19 @@ clara:*im*
 (defvar *section-im* nil)
 (defvar *widefield-im* nil)
 (defvar *unfocused-im* nil)
-
+(defvar *dark-im* t)
+(defvar *stack* nil)
 
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 2)
+(let* ((white-width 4)
        (phases 12)
        (colors 3) 
        (a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
        (phase 0)
        
-       (im-scale 600s0)
-       (im-offset .09s0))
+        (im-scale 30s0) (im-offset 0.56s0)
+       ;(im-scale 40s0) (im-offset 0.0s0)
+       )
 
   (defun change-phase (p)
     (setf phase p
@@ -97,7 +106,8 @@ clara:*im*
 	      (widefield-im (make-array (list w h) :element-type '(signed-byte 64))))
 	  (setf *section-im* (make-array (list w h) :element-type '(unsigned-byte 16))
 		*widefield-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
-	  ;; capture the phase images, accumulate if requested, update widefield image as well
+	  ;; capture the phase images, accumulate if requested, update
+	  ;; widefield image as well
 	  (dotimes (p phases)
 	    (change-phase p)
 	    (sleep .1)
@@ -108,7 +118,8 @@ clara:*im*
 		  (let ((v (aref clara:*im* i j)))
 		    (incf (aref phase-im p i j) v)
 		    (incf (aref widefield-im i j) v)
-		    (setf (aref *widefield-im* i j) (clamp-u16 (floor (aref widefield-im i j) 2))))))))
+		    (setf (aref *widefield-im* i j)
+			  (clamp-u16 (floor (aref widefield-im i j) 2))))))))
 	  ;; final widefield image normalize to full 16bit range
 	  (let ((ma 0)
 		(mi (1- (expt 2 64))))
@@ -155,6 +166,16 @@ clara:*im*
       (format t "maximum value in section ~a~%"
 	      (reduce #'max (sb-ext:array-storage-vector *section-im*)))))
   
+  (defun obtain-stack (&key (n 30) (dz .1s0))
+    (let ((center (focus:get-position))
+	  (result nil))
+      (dotimes (k n)
+	(let ((z (+ center (* dz (- k (floor n 2))))))
+	  (focus:set-position z)
+	  (sleep .1)
+	  (obtain-sectioned-slice)
+	  (push (list z *section-im*) result)))
+      (setf *stack* (reverse result))))
 
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
@@ -174,7 +195,7 @@ clara:*im*
       (gl:translate 256 0 0)
       (when *section-im*
 	(let ((tex (make-instance 'gui::texture :data *section-im*
-				  :scale 10s0 :offset 0.0s0)))
+				  :scale 80s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex)))
@@ -197,20 +218,22 @@ clara:*im*
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex))))
     ;; draw the image that is displayed on the mma
-    (gl:with-pushed-matrix
-      (gl:translate 0 512 0)
-      (let ((p (elt *mma-contents* *mma-select*))) 
-	(let ((tex (make-instance 'gui::texture :data p
-				  :scale 1s0 :offset 0.0s0)))
-	  (destructuring-bind (w h) (array-dimensions p)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	  (gui:destroy tex))))
+    (when *mma-contents*
+      (gl:with-pushed-matrix
+	(gl:translate 0 512 0)
+	(let ((p (elt *mma-contents* *mma-select*))) 
+	  (let ((tex (make-instance 'gui::texture :data p
+				    :scale 1s0 :offset 0.0s0)))
+	    (destructuring-bind (w h) (array-dimensions p)
+	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	    (gui:destroy tex)))))
     
     ;; draw grating for sectioning on the very right
     (gl:translate 800 0 0)
-    (let ((repetition 100f0))
-      (gui::with-grating (g a)
-	(gui:draw g :w (* repetition white-width phases) :h 900.0 :wt repetition)))
+    (unless *dark-im*
+     (let ((repetition 100f0))
+       (gui::with-grating (g a)
+	 (gui:draw g :w (* repetition white-width phases) :h 900.0 :wt repetition))))
     
     #+nil
     (gl:with-primitive :lines
@@ -224,11 +247,50 @@ clara:*im*
       (gl:color 0 1 0) (gl:vertex 0 1) (gl:vertex 0 100 0) ;; y axis green
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 #+nil
-(sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 400)))
+(progn
+  (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 1)))
+  )
+
+(defun select-disk (q)
+  (setf *mma-select* q)
+  (mma:select-pictures q :n 1 :ready-out-needed t))
+
+(setf *dark-im* nil)
 
 #+nil
-(let* ((x 2)
-       (y 1)
+(select-disk 11)
+
+#+nil
+(sb-thread:make-thread #'(lambda () (obtain-stack)))
+
+(defun average-img (img)
+  (let ((sum 0))
+   (destructuring-bind (w h) (array-dimensions img)
+     (dotimes (j h)
+       (dotimes (i w)
+	 (incf sum (aref img i j))))
+     (/ sum (* 1s0 w h)))))
+
+(defun integrate-slices (stack)
+  (loop for s in stack collect
+    (destructuring-bind (z slice) s
+      (list z
+	    (average-img slice)))))
+
+(defparameter *stack-integral* nil)
+
+#+nil
+(setf *stack-integral*
+ (integrate-slices *stack*))
+
+(with-open-file (s "/dev/shm/o.dat" :if-does-not-exist :create
+		   :if-exists :supersede :direction :output)
+  (dolist (e *stack-integral*)
+   (format s "~f ~f~%" (first e) (second e))))
+
+#+nil
+(let* ((x 1)
+       (y 4)
        (n 5)
        (q (+ x (* n y))))
   (setf *mma-select* q)
@@ -239,7 +301,7 @@ clara:*im*
 ;; scan through different mma positions and capture slices
 #+nil
 (defparameter *mma-scan*
-  (let ((n 7)
+  (let ((n 5)
 	(result nil))
     (dotimes (y n)
       (dotimes (x n)
@@ -248,7 +310,7 @@ clara:*im*
 	 (mma:select-pictures q :ready-out-needed t))
 	(sb-thread:join-thread 
 	 (sb-thread:make-thread 
-	  #'(lambda () (obtain-sectioned-slice :accumulate 100))))
+	  #'(lambda () (obtain-sectioned-slice :accumulate 1))))
 	(push (list x y *widefield-im* *section-im* *unfocused-im*) result)))
     result))
 
@@ -267,6 +329,26 @@ clara:*im*
       (format s "P5~%~D ~D~%255~%" w h))
     (with-open-file (s filename 
                        :element-type '(unsigned-byte 8)
+                       :direction :output
+                       :if-exists :append)
+      (write-sequence (sb-ext:array-storage-vector img) s))
+    nil))
+
+(defun write-pgm16 (filename img)
+  (declare (simple-string filename)
+           ((array (unsigned-byte 16) 2) img)
+           (values null &optional))
+  (destructuring-bind (h w)
+      (array-dimensions img)
+    (declare ((integer 0 65535) w h))
+    (with-open-file (s filename
+                       :direction :output
+                       :if-exists :supersede
+                       :if-does-not-exist :create)
+      (declare (stream s))
+      (format s "P5~%~D ~D~%255~%" w h))
+    (with-open-file (s filename 
+                       :element-type '(unsigned-byte 16)
                        :direction :output
                        :if-exists :append)
       (write-sequence (sb-ext:array-storage-vector img) s))
@@ -294,5 +376,5 @@ clara:*im*
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" unfocus))
 
 #+nil
-(gui:with-gui (1400 (+ 256 512))
+(gui:with-gui (1400 (+ 256 512) 100 100)
   (draw-screen))

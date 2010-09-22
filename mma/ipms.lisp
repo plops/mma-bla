@@ -138,7 +138,7 @@
   (draw-disk :cx 0 :cy 0 :radius radius :pic-number pic-number
 	     :value #xffff))
 
-(defun load-concentric-circles (&key (n 12) (dr .02) (ready-out-needed nil))
+(defun load-concentric-circles (&key (n 12) (dr .02) (ready-out-needed t))
   (dotimes (i n)
     (let ((r (/ (* 1.0 (1+ i)) n)))
       (format t "~a~%" `(picture ,i / ,n))
@@ -146,6 +146,18 @@
 		 :r-small (- r dr)
 		 :r-big (+ r dr))))
   (select-pictures 0 :n n :ready-out-needed ready-out-needed))
+
+(defun load-concentric-disks (&key (n 12) (ready-out-needed t))
+  (let ((result nil))
+    (dotimes (i n)
+      (let ((r (/ (* 1.0 (1+ i)) n)))
+	(format t "~a~%" `(picture ,i / ,n))
+	(push (draw-disk :cx 0 :cy 0
+			 :pic-number (1+ i)
+			 :radius r)
+	     result)))
+    (select-pictures 0 :n n :ready-out-needed ready-out-needed)
+    (reverse result)))
 
 (defun load-disks (&key (n 12))
   (dotimes (i n)
@@ -169,7 +181,7 @@
 		     :pic-number (1+ (+ i (* n j))))
 	       result))))
    (select-pictures 0 :n (* n n))
-   result))
+   (reverse result)))
 
 (defun uninit ()
   (end)
