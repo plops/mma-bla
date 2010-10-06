@@ -236,12 +236,20 @@ lengths in micrometer."
 	(intermediate-integrals-cyl nz nradius (/ u nz) (/ v nradius))
       (vol::interpolate2-cdf i0 2d0 2d0))))
 
-;; size radius is either the extend in x or y (in um) depending on what is bigger
+;; size radius is either the extend in x or y (in um) depending on
+;; what is bigger, by default they are chosen so that the intensity
+;; psf is sufficiently sampled
 (defun electric-field-psf
-    (z y x size-z size-radius &key (numerical-aperture (coerce 1.38 'my-float)) 
+    (z y x &key
+     (numerical-aperture (coerce 1.38 'my-float)) 
      (immersion-index (coerce 1.515 'my-float))
      (wavelength (coerce .480 'my-float))
-     (integrand-evaluations 31))
+     (integrand-evaluations 31)
+     (size-z (let* ((alpha (asin (/ numerical-aperture immersion-index)))
+		    (dz (/ wavelength (* 2.0 immersion-index (- 1 (cos alpha))))))
+	       (* z dz))) 
+     (size-radius (let* ((dxy (/ wavelength (* 4.0 numerical-aperture))))
+		    (* dxy (max x y)))))
   (declare (fixnum z y x integrand-evaluations)
 	   (my-float size-z size-radius numerical-aperture immersion-index
 		     wavelength)
