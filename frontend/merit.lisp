@@ -311,6 +311,7 @@ wanders outside of the bfp."
 		    (normalize-2-df/ub8 mosaic))))
 
 ;; fill MMA with rectangular grid of circles
+#+nil
 (let* ((obj (lens:make-objective :center (v) :normal (v 0 0 1)))
        (nucleus 0)
        (positions (sample-circles 3 7 5)))

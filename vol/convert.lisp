@@ -40,7 +40,6 @@
 (convert-1-sf/df-coerce
  (make-array 4 :element-type 'single-float))
 
-
 (defmacro def-convert-functions ()
   (labels ( ;; create a spec like this: ub8 sf (* 1s0 x) mul
 	   ;; down can be used to convert double into float
@@ -77,6 +76,11 @@
 		    ,(def 'ub8 'csf)
 		    ,(def 'ub8 'cdf)
 		    
+		    ,(def 'ub16 'sf)
+		    ,(def 'ub16 'df)
+		    ,(def 'ub16 'csf)
+		    ,(def 'ub16 'cdf)
+		    
 		    ,(def 'fix 'sf)
 		    ,(def 'fix 'df)
 		    ,(def 'fix 'csf)
@@ -99,6 +103,8 @@
 		    ;; downconvert from float into bytes
 		    ,(def 'sf 'ub8 :floor)
 		    ,(def 'df 'ub8 :floor)
+		    ,(def 'sf 'ub16 :floor)
+		    ,(def 'df 'ub16 :floor)
 		    ,(def 'sf 'fix :floor)
 		    ,(def 'df 'fix :floor)
 
@@ -166,6 +172,8 @@
 (convert (v 231d0) 'df)
 #+nil
 (convert (v 231d0) 'ub8)
+#+nil
+(convert (v 231d0) 'ub16)
 
 ;; converting complex into real with some function and converting into
 ;; out_type, the name of the functions will be like:
@@ -222,7 +230,7 @@
     `(progn ,@result)))
 
 (def-normalize-complex-functions
-    (1 2 3) (ub8 sf df) (realpart imagpart phase abs))
+    (1 2 3) (ub8 ub16 sf df) (realpart imagpart phase abs))
 
 #+nil
 (normalize-1-csf/ub8-realpart 

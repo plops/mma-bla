@@ -454,6 +454,24 @@
 #:CONVERT-3-CDF/UB8-IMAGPART
 #:CONVERT-3-CDF/UB8-ABS
 #:CONVERT-3-CDF/UB8-PHASE
+#:convert-2-ub16/csf-mul
+#:convert-2-sf/ub16-floor
+#:convert-1-sf/ub16-floor
+#:convert-2-ub16/df-mul
+#:convert-3-df/ub16-floor
+#:convert-3-sf/ub16-floor
+#:convert-1-ub16/sf-mul
+#:convert-1-ub16/df-mul
+#:convert-1-df/ub16-floor
+#:convert-1-ub16/cdf-mul
+#:convert-3-ub16/sf-mul
+#:convert-2-ub16/cdf-mul
+#:convert-1-ub16/csf-mul
+#:convert-2-ub16/sf-mul
+#:convert-3-ub16/csf-mul
+#:convert-3-ub16/df-mul
+#:convert-3-ub16/cdf-mul
+#:convert-2-df/ub16-floor
 #:convolve))
 
 ;; for i in `cat vol.lisp|grep defconst|cut -d " " -f 2`;do echo \#:$i ;done
