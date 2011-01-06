@@ -66,34 +66,29 @@
 			   :element-type (array-element-type vol))))
       (dotimes (k z)
 	(vol:do-region ((j i) ((1- y) (1- x)) (1 1))
-	  (let* ((a (aref vol k (1+ j) i))
-		 (b (aref vol k j (1+ i)))
-		 (c (aref vol k (1- j) i))
-		 (d (aref vol k j (1- i)))
-		 (e (aref vol k j i)))
-	    (setf (aref res k j i)
-		  (* (abs e) (if (and (< a e)
-				      (< b e)
-				      (< c e)
-				      (< d e))
-				 0s0
-				 1s0))))))
+	  (macrolet ((q (n m)
+		       `(< (aref vol k (+ ,n j) (+ ,m i)) e)))
+	    (let* ((e (aref vol k j i)))
+	      (setf (aref res k j i)
+		    (* (abs e) (if (and (q 0 1) (q 0 -1)
+					(q 1 0) (q -1 0)
+					(q 1 1) (q 1 -1)
+					(q -1 1) (q -1 -1))
+				   0s0 1s0)))))))
       res)))
 
 (defun mark-max-slice (vol k)
   (destructuring-bind (z y x) (array-dimensions vol)
     (let ((points ()))
       (vol:do-region ((j i) ((1- y) (1- x)) (1 1))
-	(let* ((a (aref vol k (1+ j) i))
-	       (b (aref vol k j (1+ i)))
-	       (c (aref vol k (1- j) i))
-	       (d (aref vol k j (1- i)))
-	       (e (aref vol k j i)))
-	  (when (and (< a e)
-		     (< b e)
-		     (< c e)
-		     (< d e))
-	    (push (list e (list j i)) points))))
+	(macrolet ((q (n m)
+		     `(< (aref vol k (+ ,n j) (+ ,m i)) e)))
+	 (let* ((e (aref vol k j i)))
+	   (when (and (q 0 1) (q 0 -1)
+		      (q 1 0) (q -1 0)
+		      (q 1 1) (q 1 -1)
+		      (q -1 1) (q -1 -1))
+	     (push (list e (list j i)) points)))))
       points)))
 
 
@@ -142,7 +137,7 @@
 
 (defun nuc-candidates (vol k)
  (let ((sorted (point-list-sort (mark-max-slice vol k))))
-   (biggest-part sorted)))
+   (biggest-part sorted .45s0)))
 #+nil
 (nuc-candidates icf 17)
 
@@ -190,7 +185,7 @@
 	      (push cur res)
 	      (setf reference-length r)))))
       res)))
-
+#+nil
 (length (valid-lengths
   (loop for a below 16 collect
        (nuc-min icf 15s0 
@@ -201,15 +196,16 @@
 #+nil
 (let ((vol (vol:normalize-3-sf/ub8 
 		(mark-max icf))))
-  (loop for k from 16 below 33 do
-    (let* ((cands (nuc-candidates icf k)))
+  (loop for k from 17 below 19 do
+    (let* ((cands (nuc-candidates icf k))
+	   (np 16))
      (dolist (cand cands)
        (let ((points
 	      (valid-lengths
-	       (loop for a below 16 collect
+	       (loop for a below np collect
 		    (nuc-min icf 15s0 
 			     cand
-			     (/ (* a 2 (coerce pi 'single-float)) 16)
+			     (/ (* a 2 (coerce pi 'single-float)) np)
 			     k)))))
 	 (dolist (p points)
 	   (destructuring-bind (r c s) p
