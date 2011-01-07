@@ -16,8 +16,8 @@
 		       :element-type '(unsigned-byte 16))
       ;; FIXME: why do I need -170 offset?
       (file-position s (+ (- 170) pos 
-			  (* stack z y x 2)
-			  (* slice y x 2)))
+			  (* stack z y x)
+			  (* slice y x)))
       (let* ((a (make-array (list y x)
 			    :element-type '(unsigned-byte 16)))
 	     (a1 (make-array (* y x)
@@ -41,7 +41,7 @@
 		       :element-type '(unsigned-byte 16))
       ;; FIXME: why do I need -170 offset?
       (file-position s (+ (- 170) pos 
-			  (* stack z y x 2)))
+			  (* stack z y x)))
       (let* ((a (make-array (list z y x)
 			    :element-type '(unsigned-byte 16)))
 	     (a1 (make-array (* z y x)
