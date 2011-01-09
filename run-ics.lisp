@@ -1,4 +1,4 @@
-#.(require :frontend)
+;#.(require :frontend)
 #.(require :import)
 #.(require :vol)
 #.(require :bresenham)
@@ -8,30 +8,37 @@
 (declaim (optimize (speed 1) (safety 3) (debug 3)))
 
 (defparameter *initial-nuclear-diameter* 21s0)
-(defparameter *noise-threshold* .02s0)
+(defparameter *noise-threshold-2d* 4s0)
+(defparameter *noise-threshold-3d* .03s0)
 (defparameter *min-drop* .3s0)
 (defparameter *max-ray-change* 1.5s0)
 (defparameter *min-ray-change* .333s0)
+
+(defparameter *nuclear-center-set* nil)
+(defparameter *centroids* nil)
+
+
 ;; comparing filtered image
 ;; martin@desktop-big:/dev/shm/st> montage -geometry 291 -tile 2 `for i in *.pgm ;do echo ../a/$i $i;done|tr '\12' ' '` ../o.pgm
 
 ;; diameters and noise thresholds for different timepoints
 #||
-0  25
+0  25 .1
 1  16     (use 21 diameter)
-4  34 .1
-5  37 .1
+4  34 .08
+5  37 .08
 20 28 .02
+30 (30 works better than 21)
 34 29 .02
-50 21
-67 22
-90 22
+050 21 .02 (higher?)
+67 22 .02
+90 22 .02
 ||#
 
 #+nil
 (defparameter icd
   (vol:convert-3-ub16/csf-mul 
-   (import:read-ics4-stack "/home/martin/20101225/cele.ics" 34))) 
+   (import:read-ics4-stack "/home/martin/cele.ics" 80))) 
 
 #+nil
 (vol:write-pgm "/dev/shm/o.pgm"
@@ -174,21 +181,33 @@
       (incf (aref hist d)))
     (values hist n mi ma)))
 #+nil
-(point-list-histogram *nuclear-center-set*)
+(point-list-histogram *nuclear-center-set* 20)
 
 (defun print-histogram (hist n mi ma)
-  (dotimes (i n)
-    (format t "~6,3@f [~3S] " 
-	    (+ (* i (/ (- ma mi) n))
-	       mi)
-	    (aref hist i))
-    (dotimes (j (aref hist i))
-      (format t "*"))
-    (format t "~%")))
+  (let ((mah (reduce #'max hist)))
+     (dotimes (i n)
+       (format t "~8,3@f .. ~8,3@f [~3S] " 
+	       (+ (/ (* i (- ma mi)) n)
+		  mi)
+	       (+ (/ (* (1+ i) (- ma mi)) n)
+		  mi)
+	       (aref hist i))
+       (dotimes (j (floor (* 40 (aref hist i)) mah))
+	 (format t "*"))
+       (format t "~%"))))
 
-#+nil
+#+nil ;; histogram of 3d maxima
 (multiple-value-call #'print-histogram
   (point-list-histogram *nuclear-center-set* 20))
+
+#+nil ;; histogram of 2d maxima
+(let ((res ()))
+ (loop for i from 0 below 40 do
+   (dolist (c (mark-max-slice icf i))
+     (push c res)))
+ (multiple-value-call #'print-histogram
+   (point-list-histogram res)))
+
 
 
 (defun point-list-sort (points)
@@ -206,7 +225,7 @@
 
 (defun nuc-candidates (vol k)
   (point-list-bigger (mark-max-slice vol k)
-		     *noise-threshold*))
+		     *noise-threshold-2d*))
 #+nil
 (nuc-candidates icf 17)
 
@@ -268,9 +287,12 @@
 		17))))
 
 #+nil
-(destructuring-bind (az ay ax) (array-dimensions icf)
+(time
+ (destructuring-bind (az ay ax) (array-dimensions icf)
    (let ((vol (vol:normalize-3-sf/ub8 
 	       (mark-max icf)))
+	 (centroids (make-array az :element-type 'list
+				:initial-element ()))
 	 (pif (coerce pi 'single-float)))
      (loop for k from 1 below 39  do
 	  (let* ((cands (nuc-candidates icf k))
@@ -284,12 +306,96 @@
 					       cand
 					       (/ (* pif a 2) np)
 					       k))))))
-		(dolist (p points)
-		  (destructuring-bind (r c s) p
-		    (format t "~a~%" r)
-		    (setf (aref vol 
-				k
-				(floor (clamp (first s) 0 (1- ay)))
-				(floor (clamp (second s) 0 (1- ax))))
-			  128)))))))
-     (vol:save-stack-ub8 "/dev/shm/st" vol)))
+		(let ((px 0s0)
+		      (py 0s0)
+		      (ravg 0s0))
+		  (dolist (p points)
+		    (destructuring-bind (r c s) p
+		      (incf ravg r)
+		      (incf px (second s))
+		      (incf py (first s))
+		      (setf (aref vol 
+				  k
+				  (floor (clamp (first s) 0 (1- ay)))
+				  (floor (clamp (second s) 0 (1- ax))))
+			    128)))
+		  (let* ((n (length points))
+			 (avg-radius (/ ravg n))
+			 (centroid (list (/ py n) (/ px n))))
+		    (push (list avg-radius centroid) (aref centroids k))))))))
+     (defparameter *centroids* centroids)
+     (let ((nuclei (assign-all-polygons)))
+       (dolist (nucleus nuclei)
+	 (destructuring-bind ((r (z y x)) polygons) nucleus
+	   (draw-egg vol r (* 1s0 z) (* 1s0 y) (* 1s0 x)))))
+     (vol:save-stack-ub8 "/dev/shm/st" vol)
+     (format t "fertig~%"))))
+
+
+(defun draw-egg (vol radius cz cy cx)
+  (declare ((simple-array (unsigned-byte 8) 3) vol)
+	   (single-float radius cz cy cx)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
+  (let ((scale-z 5.0)
+	(radius2 (* radius radius)))
+    (destructuring-bind (z y x) (array-dimensions vol)
+      (let ((zz (min z (ceiling (+ cz radius))))
+	    (yy (min y (ceiling (+ cy radius))))
+	    (xx (min x (ceiling (+ cx radius))))
+	    (az (max 0 (floor (- cz radius))))
+	    (ay (max 0 (floor (- cy radius))))
+	    (ax (max 0 (floor (- cx radius)))))
+       (vol:do-region ((k j i) (zz yy xx) (az ay ax))
+	 (let ((r2 (+ (vol::square-sf (- i cx))
+		      (vol::square-sf (- j cy))
+		      (vol::square-sf (* scale-z (- k cz))))))
+	   (setf (aref vol k j i)
+		 (if (< r2 radius2)
+		     (min (* (aref vol k j i) 2) 255)
+		     (aref vol k j i)))))))
+    vol))
+
+(defun find-centroid (y x centroid)
+  (let ((result ()))
+   (dolist (c centroid)
+     (destructuring-bind (r (cy cx)) c
+       (let ((qx (- x cx))
+	     (qy (- y cy)))
+	 (when (< (+ (* qx qx) (* qy qy))
+		  (* r r))
+	   (push c result)))))
+   result))
+
+(defun assign-all-polygons ()
+  (let ((result ()))
+   (dolist (a (point-list-bigger *nuclear-center-set* *noise-threshold-3d*))
+     (destructuring-bind (e (z y x)) a
+       ;; get centroid 
+       (let ((cent (find-centroid y x (aref *centroids* z))))
+	 (when cent
+	   (destructuring-bind (r (cy cx)) (first cent)
+	     ;; central radius r -> how far to search up and down?
+	     (let* ((extend (ceiling (* 1.5s0 r) 
+				     5s0))
+		    ;; collect polygons belonging to current nuclear center
+		    ;; store central radius 
+		    (polygons (remove-if 
+			       #'null
+			       (loop for curz from (- z extend) 
+				  upto (+ z extend) collect
+				    (when (< 0 curz 40)
+				     (let ((curcent (find-centroid 
+						     y x 
+						     (aref *centroids* curz))))
+				       (when curcent
+					 (destructuring-bind (r (cy cx))
+					     (first curcent) ;; FIXME handle more
+					   (list r (list curz cy cx))))))))))
+	       (push (list (list r (list z y x)) polygons) result)))))))
+   result))
+
+#+nil
+(assign-all-polygons)
+
+
+
