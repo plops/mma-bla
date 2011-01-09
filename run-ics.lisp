@@ -8,8 +8,8 @@
 (declaim (optimize (speed 1) (safety 3) (debug 3)))
 
 (defparameter *initial-nuclear-diameter* 21s0)
-(defparameter *noise-threshold-2d* 4s0)
-(defparameter *noise-threshold-3d* .03s0)
+(defparameter *noise-threshold-2d* 3s0)
+(defparameter *noise-threshold-3d* .01s0)
 (defparameter *min-drop* .3s0)
 (defparameter *max-ray-change* 1.5s0)
 (defparameter *min-ray-change* .333s0)
@@ -149,17 +149,21 @@
 	   (incf sum (aref kern k j i)))
 	 (vol::s* (/ 1e6 sum) kern))))))
 
+(defparameter icf nil)
+(defparameter *nuclear-center-set* nil)
 #+nil
 (time
  (progn
    (vol:save-stack-ub8 "/dev/shm/a" (vol:normalize-3-csf/ub8-realpart icd))
-   (defparameter icf
+   (setf icf
 	  (vol:convert-3-csf/sf-realpart (vol:convolve-circ-3-csf icd *kern*)))
-   (defparameter *nuclear-center-set*
+   (setf *nuclear-center-set*
      (nuclear-seeds icf))
-   (vol:save-stack-ub8 "/dev/shm/st"
-		    (vol:normalize-3-sf/ub8 
-		     (mark-max icf)))))
+   (let ((st (vol:normalize-3-sf/ub8 
+	      (mark-max icf))))
+     (vol:save-stack-ub8 "/dev/shm/st"
+			 st)
+     (vol:write-pgm "/dev/shm/mp1.pgm" (max-projection st)))))
 #+nil ;; mark 2d maxima
 (vol:save-stack-ub8 "/dev/shm/st"
 		    (vol:normalize-3-sf/ub8 
@@ -198,7 +202,7 @@
 
 #+nil ;; histogram of 3d maxima
 (multiple-value-call #'print-histogram
-  (point-list-histogram *nuclear-center-set* 20))
+  (point-list-histogram *nuclear-center-set*))
 
 #+nil ;; histogram of 2d maxima
 (let ((res ()))
@@ -250,7 +254,7 @@
 					 (clamp xx 0s0 (* 1s0 (1- ax))))))
 	   (if (<= v mi)
 	       (setf mi v)
-	       (progn (format t "found minimum~%")
+	       (progn ; (format t "found minimum~%")
 		      (return-from nuc-min (list r (list y x) (list yy xx)))))
 	   (when (< v (* *min-drop* e))
 	     (return-from nuc-min (list r (list y x) (list yy xx))))))))))
@@ -279,12 +283,12 @@
 	      (setf reference-length r)))))
       res)))
 #+nil
-(length (valid-lengths
+(valid-lengths
   (loop for a below 16 collect
        (nuc-min icf 15s0 
 		(first (nuc-candidates icf 17))
 		(/ (* a 2 (coerce pi 'single-float)) 16)
-		17))))
+		17)))
 
 #+nil
 (time
@@ -294,7 +298,7 @@
 	 (centroids (make-array az :element-type 'list
 				:initial-element ()))
 	 (pif (coerce pi 'single-float)))
-     (loop for k from 1 below 39  do
+     (loop for k from 0 below 40  do
 	  (let* ((cands (nuc-candidates icf k))
 		 (np 16))
 	    (dolist (cand cands)
@@ -318,21 +322,30 @@
 				  k
 				  (floor (clamp (first s) 0 (1- ay)))
 				  (floor (clamp (second s) 0 (1- ax))))
-			    128)))
+			    255)))
 		  (let* ((n (length points))
 			 (avg-radius (/ ravg n))
 			 (centroid (list (/ py n) (/ px n))))
 		    (push (list avg-radius centroid) (aref centroids k))))))))
      (defparameter *centroids* centroids)
-     (let ((nuclei (assign-all-polygons)))
+     (let ((nuclei (assign-all-polygons))
+	   (fil (make-array (array-dimensions vol)
+			    :element-type '(unsigned-byte 8))))
        (dolist (nucleus nuclei)
 	 (destructuring-bind ((r (z y x)) polygons) nucleus
-	   (draw-egg vol r (* 1s0 z) (* 1s0 y) (* 1s0 x)))))
+	   (draw-egg vol (* .8 r) (* 1s0 z) (* 1s0 y) (* 1s0 x))
+	   (draw-egg fil r (* 1s0 z) (* 1s0 y) (* 1s0 x) 1)))
+       (vol:write-pgm "/dev/shm/mp3.pgm" (vol:normalize-2-sf/ub8 
+					  (sum-projection fil))))
      (vol:save-stack-ub8 "/dev/shm/st" vol)
+     (vol:write-pgm "/dev/shm/mp2.pgm" (max-projection vol))
+     (vol:write-pgm "/dev/shm/omp.pgm" (max-projection 
+					(vol:normalize-3-csf/ub8-realpart icd)))
+     
      (format t "fertig~%"))))
 
 
-(defun draw-egg (vol radius cz cy cx)
+(defun draw-egg (vol radius cz cy cx &optional (val 0))
   (declare ((simple-array (unsigned-byte 8) 3) vol)
 	   (single-float radius cz cy cx)
 	   (values (simple-array (unsigned-byte 8) 3) &optional))
@@ -351,7 +364,7 @@
 		      (vol::square-sf (* scale-z (- k cz))))))
 	   (setf (aref vol k j i)
 		 (if (< r2 radius2)
-		     (min (* (aref vol k j i) 2) 255)
+		     val
 		     (aref vol k j i)))))))
     vol))
 
@@ -399,3 +412,27 @@
 
 
 
+(defun max-projection (vol)
+  (declare ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array (unsigned-byte 8) 2) &optional))
+  (destructuring-bind (z y x) (array-dimensions vol)
+   (let ((a (make-array (list y x) :element-type '(unsigned-byte 8))))
+     (vol:do-region ((j i) (y x))
+       (let ((ma (aref vol 0 j i)))
+	 (loop for k from 1 below z do	
+	      (let ((v (aref vol k j i)))
+		(when (< ma v)
+		  (setf ma v))))
+	 (setf (aref a j i) ma)))
+     a)))
+
+(defun sum-projection (vol)
+  (declare ((simple-array (unsigned-byte 8) 3) vol)
+	   (values (simple-array single-float 2) &optional))
+  (destructuring-bind (z y x) (array-dimensions vol)
+   (let ((a (make-array (list y x) :element-type 'single-float)))
+     (vol:do-region ((j i) (y x))
+       (setf (aref a j i)
+	     (* 1s0
+	      (loop for k below z sum (aref vol k j i)))))
+     a)))
