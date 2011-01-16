@@ -3,7 +3,20 @@
 (defvar *stream* nil)
 (defvar *fd* nil)
 
-(defun connect (&optional (devicename "/dev/ttyUSB1"))
+(defun run-shell (command)
+  (with-output-to-string (stream)
+    (sb-ext:run-program "/bin/bash" (list "-c" command)
+			:input nil
+			:output stream)))
+
+(defun find-zeiss-usb-adapter ()
+  (let ((port (run-shell "dmesg|grep pl2303|grep ttyUSB|tail -n1|sed s+.*ttyUSB+/dev/ttyUSB+g|tr -d '\\n'")))
+    (if (string-equal "" port)
+	(error "dmesg output doesn't contain ttyUSB assignment. This can happen when the system ran a long time. You could reattach the USB adapter that is connected to the microscope.")
+	port)))
+
+
+(defun connect (&optional (devicename (find-zeiss-usb-adapter)))
   (multiple-value-bind (s fd)
       (open-serial devicename)
     (defparameter *stream* s)

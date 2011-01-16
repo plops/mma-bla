@@ -9,4 +9,6 @@
 	   #:draw
 	   #:draw-axes
 	   #:draw-wire-box
-	   #:texture))
+	   #:texture
+	   #:grating-stack
+	   #:grating->texture))

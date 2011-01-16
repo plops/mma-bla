@@ -8,7 +8,7 @@
   (when clara::*adc-calibrated*
    (when (clara::is-acquiring-p)
      (clara:stop)))
-  (clara:init-fast :exposure-s .0163s0 :width 256 :height 256 
+  (clara:init-fast :exposure-s (* 10 .0163s0) :width 256 :height 256 
 		   :x -38 :y 26 :fast-adc t :external-trigger t)
   (clara:wait-for-image-and-copy)
   (clara:status)
@@ -58,23 +58,8 @@ clara:*im*
 
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
-;; dmesg|grep pl2303|grep ttyUSB|tail -n1|sed s+.*ttyUSB+/dev/ttyUSB+g
-(defun run-shell (command)
-  (with-output-to-string (stream)
-    (sb-ext:run-program "/bin/bash" (list "-c" command)
-			:input nil
-			:output stream)))
-
-(defun find-zeiss-usb-adapter ()
-  (let ((port (run-shell "dmesg|grep pl2303|grep ttyUSB|tail -n1|sed s+.*ttyUSB+/dev/ttyUSB+g|tr -d '\\n'")))
-    (if (string-equal "" port)
-	(error "dmesg output doesn't contain ttyUSB assignment. This can happen when the system ran a long time. You could reattach the USB adapter that is connected to the microscope.")
-	port)))
-
-
-
 #+nil
-(focus:connect (find-zeiss-usb-adapter))
+(focus:connect)
 #+nil
 (focus:get-position)
 #+nil ;; move away from sample
@@ -94,28 +79,27 @@ clara:*im*
 (defvar *section-im* nil)
 (defvar *widefield-im* nil)
 (defvar *unfocused-im* nil)
-(defvar *dark-im* t)
+(defvar *dark-im* nil)
 (defvar *stack* nil)
 
+
+
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 4)
-       (phases 12)
-       (colors 3) 
-       (a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
+(let* ((white-width 1)
+       (phases-x 30)
+       (phases-y 1)
+       (a (make-array (* phases-x phases-y white-width) 
+		      :element-type '(unsigned-byte 8)))
        (phase 0)
        
        ;(im-scale 40s0) (im-offset 0.56s0)
-       (im-scale 20s0) (im-offset 0.0s0)
+       (im-scale 200s0) (im-offset 0.0s0)
        )
 
   (defun change-phase (p)
     (setf phase p
-	  a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
-    (let ((offset (* phase white-width colors)))
-     (dotimes (i white-width)
-       (setf (aref a (+ offset (+ 0 (* colors i)))) #b01010100 ;; disable first bit plane
-	     (aref a (+ offset (+ 1 (* colors i)))) #b01010101 ;; show only every other bit plane
-	     (aref a (+ offset (+ 2 (* colors i)))) #b01010101)))) 
+	  a (gui:grating->texture (gui:grating-stack phases-y phases-x)
+				  p :h white-width :w white-width))) 
 
   (change-phase 0)
 
@@ -132,24 +116,29 @@ clara:*im*
   (defun obtain-sectioned-slice (&key (accumulate 1))
     (when clara:*im*
       (destructuring-bind (w h) (array-dimensions clara:*im*)
-	(let ((phase-im (make-array (list phases w h) :element-type '(signed-byte 64)))
-	      (widefield-im (make-array (list w h) :element-type '(signed-byte 64))))
-	  (setf *section-im* (make-array (list w h) :element-type '(unsigned-byte 16))
-		*widefield-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
+	(let ((phase-im (make-array (list phases-y phases-x w h) 
+				    :element-type '(signed-byte 64)))
+	      (widefield-im (make-array (list w h) 
+					:element-type '(signed-byte 64))))
+	  (setf *section-im* (make-array (list w h) 
+					 :element-type '(unsigned-byte 16))
+		*widefield-im* (make-array (list w h) 
+					   :element-type '(unsigned-byte 16)))
 	  ;; capture the phase images, accumulate if requested, update
 	  ;; widefield image as well
-	  (dotimes (p phases)
-	    (change-phase p)
-	    (sleep .1)
-	    (clara:wait-for-image-and-copy)
-	    (dotimes (a accumulate)
-	      (dotimes (j h)
-		(dotimes (i w)
-		  (let ((v (aref clara:*im* i j)))
-		    (incf (aref phase-im p i j) v)
-		    (incf (aref widefield-im i j) v)
-		    (setf (aref *widefield-im* i j)
-			  (clamp-u16 (floor (aref widefield-im i j) 2))))))))
+	  (dotimes (py phases-y)
+	    (dotimes (px phases-x)
+	      (change-phase (+ px (* phases-x py)))
+	      (sleep .1)
+	      (clara:wait-for-image-and-copy)
+	      (dotimes (a accumulate)
+		(dotimes (j h)
+		 (dotimes (i w)
+		   (let ((v (aref clara:*im* i j)))
+		     (incf (aref phase-im py px i j) v)
+		     (incf (aref widefield-im i j) v)
+		     (setf (aref *widefield-im* i j)
+			   (clamp-u16 (floor (aref widefield-im i j) 2)))))))))
 	  ;; final widefield image normalize to full 16bit range
 	  (let ((ma 0)
 		(mi (1- (expt 2 64))))
@@ -166,13 +155,14 @@ clara:*im*
 	  ;; min-max reconstruction
 	    (dotimes (j h)
 	      (dotimes (i w)
-		(let* ((v (aref phase-im 0 i j))
+		(let* ((v (aref phase-im 0 0 i j))
 		       (ma v)
 		       (mi v))
-		  (loop for p from 1 below phases do
-		       (let ((v (aref phase-im p i j)))
-			 (setf mi (min mi v)
-			       ma (max ma v))))
+		  (dotimes (py phases-y)
+		   (dotimes (px phases-x)
+		     (let ((v (aref phase-im py px i j)))
+		       (setf mi (min mi v)
+			     ma (max ma v)))))
 		  (setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
 	  ;; sqrt reconstruction
 	    #+nil
@@ -225,7 +215,7 @@ clara:*im*
     (gl:with-pushed-matrix
       (when *section-im*
 	(let ((tex (make-instance 'gui::texture :data *section-im*
-				  :scale 80s0 :offset 0.0s0)))
+				  :scale 500s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
 	    (gl:translate w 0 0)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
@@ -262,9 +252,13 @@ clara:*im*
     ;; draw grating for sectioning on the very right
     (gl:translate 400 0 0)
     (unless *dark-im*
-     (let ((repetition 100f0))
+     (let ((repetition 900f0))
        (gui::with-grating (g a)
-	 (gui:draw g :w (* repetition white-width phases) :h 900.0 :wt repetition))))
+	 (gui:draw g 
+		   :w (* repetition white-width phases-x)
+		   :h (* repetition white-width phases-y)
+		   :wt repetition
+		   :ht repetition))))
 
     #+nil
     (gl:with-pushed-matrix
@@ -273,7 +267,7 @@ clara:*im*
 	    (b (/ #xff 255.0)))
        (gl:color r g b))
       (gl:translate (+ 400 -150.0) 530.0 0.0)
-     (draw-disk-fan :radius 4.0))
+     (draw-disk-fan :radius 100.0))
 
     #+nil
     (gl:with-primitive :lines
@@ -286,11 +280,12 @@ clara:*im*
 	  (gl:vertex x y)))
       (gl:color 0 1 0) (gl:vertex 0 1) (gl:vertex 0 100 0) ;; y axis green
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
-#+nil
+#+nil ;; OBTAIN
 (progn
   (setf *dark-im* nil)
   (sb-thread:join-thread 
-   (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 12))))
+   (sb-thread:make-thread #'(lambda ()
+			      (obtain-sectioned-slice :accumulate 1))))
   (setf *dark-im* t))
 
 (defun select-disk (q)
