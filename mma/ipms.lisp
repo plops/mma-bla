@@ -23,7 +23,24 @@
       (unless (= 0 (disable-extern-start))
 	(error "disable-extern-start didn't return 0."))))
 
+(defun check-network ()
+  "Returns empty string when there is no connection to control board."
+  (with-output-to-string (stream)
+    (sb-ext:run-program 
+     "/bin/bash"
+     (list "-c"
+	   "netstat -anp 2> /dev/null|grep 192.168.0.2:4002") 
+    :output stream)))
+#+nil
+(equal "" (check-network))
+
 (defun init ()
+  (loop
+     for i below 30 
+     until (equal "" (check-network))
+     do
+       (format t "control board already connected, waiting ~d/30~%" i)
+       (sleep 2))
   (register-board #x0036344B00800803
 		  "192.168.0.2"
 		  "255.255.255.0"
@@ -35,10 +52,10 @@
     (error "Library couldn't connect to board."))
   (load-configuration "/home/martin/linux-mma2_20101101/Delivery_2010_11_01_KCL/Linux-Board-Control/TestApplication/64Bit/800803_dmdchanged.ini")
   (load-calibration-data "/home/martin/linux-mma2_20101101/VC2481_15_62_2010-07-30_1.cal")
-  (set-voltage +volt-pixel+ 17.5s0)
-  (set-voltage +volt-frame-f+ 20.0s0)
-  (set-voltage +volt-frame-l+ 20.0s0)
-  (set-voltage +volt-dmd-l+ 6.0s0)
+  ;; (set-voltage +volt-pixel+ 17.5s0)
+  ;; (set-voltage +volt-frame-f+ 20.0s0)
+  ;; (set-voltage +volt-frame-l+ 20.0s0)
+  ;; (set-voltage +volt-dmd-l+ 6.0s0)
   (set-extern-ready 16s0 16300s0)
   (set-deflection-phase 16s0 16300s0)
   (set-power-on)
@@ -52,6 +69,17 @@
   (let ((buf1 (sb-ext:array-storage-vector buf)))
     (sb-sys:with-pinned-objects (buf)
       (write-matrix-data pic-number 3 (sb-sys:vector-sap buf1) (length buf1))))
+  nil)
+
+(defun write-data-cal (buf &key (pic-number 1))
+  "Write a 256x256x3 unsigned-byte buffer to the device."
+  (declare ((simple-array (unsigned-byte 8) (256 256 3)) buf)
+	   (values null &optional))
+  (let ((buf1 (sb-ext:array-storage-vector buf)))
+    (sb-sys:with-pinned-objects (buf)
+      (write-matrix-data pic-number 1
+			   (sb-sys:vector-sap buf1)
+			   (array-total-size buf))))
   nil)
 
 (defun draw-ring (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
@@ -74,7 +102,8 @@
     (write-data buf :pic-number pic-number)
     nil))
 
-(defun draw-ring8 (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
+(defun draw-ring-cal (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
+  "Store 12bit in 24bit chunks. Zero is dark."
   (declare (single-float r-small r-big)
 	   (fixnum pic-number)
 	   (values null &optional))
@@ -91,21 +120,61 @@
 	       (v (if (< r-small r r-big) 
 		      (if (<  (* r 4095) 4095)
 			  (floor (* 4095 r))
-			  255)
+			  4095)
+		      4094)))
+	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
+		(aref buf i j 1) (ldb (byte 8 8) v)))))
+    (write-data-cal buf :pic-number pic-number)))
+
+#+nil
+(draw-ring8 :r-small .2s0 :r-big 1s0)
+
+(defun draw-random-cal (&key (pic-number 1))
+  "Store 12bit in 24bit chunks."
+  (declare (fixnum pic-number)
+	   (values null &optional))
+  (let* ((n 256)
+	 (buf (make-array (list n n 3) 
+			  :element-type '(unsigned-byte 8))))
+    (dotimes (j n)
+      (dotimes (i n)
+	(let ((v (random 4095)))
+	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
+		(aref buf i j 1) (ldb (byte 8 8) v)))))
+    (write-data-cal buf :pic-number pic-number)))
+#+nil
+(draw-random-cal)
+
+(defun draw-disk-cal (&key (cx 0) (cy 0) 
+		      (r-small 0.0) (r-big 1.0)
+		      (pic-number 1)
+		      (value 4095))
+  "Store 12bit in 24bit chunks. Zero is dark."
+  (declare (single-float r-small r-big)
+	   (fixnum pic-number)
+	   (values (simple-array (unsigned-byte 8) 3) &optional))
+  (let* ((n 256)
+	 (nh (floor n 2))
+	 (1/n (/ 1.0 n))
+	 (buf (make-array (list n n 3) 
+			  :element-type '(unsigned-byte 8))))
+    (dotimes (j n)
+      (dotimes (i n)
+	(let* ((x (* 2.0 1/n (- i nh cx)) )
+	       (y (* 2.0 1/n (- j nh cy)))
+	       (r (sqrt (+ (* x x) (* y y))))
+	       (v (if (< r-small r r-big) 
+		      value
 		      0)))
 	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
 		(aref buf i j 1) (ldb (byte 8 8) v)))))
-    (let ((buf1 (sb-ext:array-storage-vector buf)))
-      (sb-sys:with-pinned-objects (buf)
-	(write-matrix-data pic-number 1
-			   (sb-sys:vector-sap buf1)
-			   (* 3 n n))))
-    nil))
-
-
+    (write-data-cal buf :pic-number pic-number)
+    buf))
 
 #+nil
-(draw-ring8 :r-small .3s0 :r-big .9s0)
+(progn
+ (draw-disk-cal :r-big .2s0)
+ nil)
 
 (defun draw-disk (&key (cx 0) (cy 0) (radius .1) (pic-number 1) (value 0))
   (declare (single-float radius)
@@ -163,8 +232,10 @@
       (format t "read-status didn't return 0.~%"))
     (if (not (= 0 error))
 	(format t "error(s) ~a detected, status: ~a, retval: ~a~%"
-		(list error (parse-error-bits error)) (parse-status-bits status) retval)
-	(format t "status ~a~%" (parse-status-bits status)))))
+		(list error (parse-error-bits error)) 
+		(parse-status-bits status) retval)
+	(format t "status ~a~%" (parse-status-bits status)))
+    (parse-status-bits status)))
 #+nil 
 (status)
 (defun begin ()
@@ -181,7 +252,7 @@
 			  (if ready-out-needed 1 0))))
 
 (defun load-white (&key (radius 1.0) (pic-number 0))
-  (draw-disk :cx 0 :cy 0 :radius radius :pic-number pic-number))
+  (draw-disk-cal :cx 0 :cy 0 :r-big radius :pic-number pic-number))
 
 (defun load-black (&key (radius 1.0) (pic-number 0))
   (draw-disk :cx 0 :cy 0 :radius radius :pic-number pic-number
@@ -224,13 +295,18 @@
      (dotimes (i n)
        (let ((x (floor (* 256 (- i (floor n 2)) (/ 1.0 n))))
 	     (y (floor (* 256 (- j (floor n 2)) (/ 1.0 n)))))
-	 (push (draw-disk :cx (+ x shift)
-		     :cy (+ y shift)
-		     :radius (/ 1s0 n)
-		     :pic-number (1+ (+ i (* n j))))
+	 (push (draw-disk-cal :cx (+ x shift)
+			      :cy (+ y shift)
+			      :r-big (/ 1s0 n)
+			      :pic-number (1+ (+ i (* n j))))
 	       result))))
    (select-pictures 0 :n (* n n))
    (reverse result)))
+
+#+nil
+(progn
+ (load-disks2 :n 4)
+ nil)
 
 (defun uninit ()
   (end)
