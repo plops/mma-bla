@@ -10,7 +10,9 @@
    #:load-disks
    #:load-disks2
    #:load-concentric-circles
-   #:status))
+   #:status
+   #:set-nominal-deflection-nm
+   #:get-nominal-deflection-nm))
 
 (in-package :mma)
  
@@ -31,13 +33,14 @@
 		       4001)
   (unless (= 0 (connect))
     (error "Library couldn't connect to board."))
-  (load-configuration "/home/martin/linux-mma2-deprecated20100910/boardini/800803.ini")
+  (load-configuration "/home/martin/linux-mma2_20101101/Delivery_2010_11_01_KCL/Linux-Board-Control/TestApplication/64Bit/800803_dmdchanged.ini")
+  (load-calibration-data "/home/martin/linux-mma2_20101101/VC2481_15_62_2010-07-30_1.cal")
   (set-voltage +volt-pixel+ 17.5s0)
   (set-voltage +volt-frame-f+ 20.0s0)
   (set-voltage +volt-frame-l+ 20.0s0)
   (set-voltage +volt-dmd-l+ 6.0s0)
-  (set-extern-ready 16s0 530s0)
-  (set-deflection-phase 16s0 530s0)
+  (set-extern-ready 16s0 16300s0)
+  (set-deflection-phase 16s0 16300s0)
   (set-power-on)
   (load-white)
   (begin))
@@ -70,6 +73,39 @@
 		(if (< r-small r r-big) 0 #xffff)))))
     (write-data buf :pic-number pic-number)
     nil))
+
+(defun draw-ring8 (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
+  (declare (single-float r-small r-big)
+	   (fixnum pic-number)
+	   (values null &optional))
+  (let* ((n 256)
+	 (nh (floor n 2))
+	 (1/n (/ 1.0 n))
+	 (buf (make-array (list n n 3) 
+			  :element-type '(unsigned-byte 8))))
+    (dotimes (j n)
+      (dotimes (i n)
+	(let* ((x (* 2.0 1/n (- i nh)) )
+	       (y (* 2.0 1/n (- j nh)))
+	       (r (sqrt (+ (* x x) (* y y))))
+	       (v (if (< r-small r r-big) 
+		      (if (<  (* r 4095) 4095)
+			  (floor (* 4095 r))
+			  255)
+		      0)))
+	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
+		(aref buf i j 1) (ldb (byte 8 8) v)))))
+    (let ((buf1 (sb-ext:array-storage-vector buf)))
+      (sb-sys:with-pinned-objects (buf)
+	(write-matrix-data pic-number 1
+			   (sb-sys:vector-sap buf1)
+			   (* 3 n n))))
+    nil))
+
+
+
+#+nil
+(draw-ring8 :r-small .3s0 :r-big .9s0)
 
 (defun draw-disk (&key (cx 0) (cy 0) (radius .1) (pic-number 1) (value 0))
   (declare (single-float radius)
@@ -124,7 +160,7 @@
 (defun status ()
   (multiple-value-bind (retval status error) (read-status)
     (unless (= 0 retval)
-      (format t "read-status didn't return 0."))
+      (format t "read-status didn't return 0.~%"))
     (if (not (= 0 error))
 	(format t "error(s) ~a detected, status: ~a, retval: ~a~%"
 		(list error (parse-error-bits error)) (parse-status-bits status) retval)
@@ -198,7 +234,21 @@
 
 (defun uninit ()
   (end)
-  (disconnect))
+  (disconnect)
+#+nil  (sb-alien:unload-shared-object ipms-ffi::*library*))
+
+(defun set-nominal-deflection-nm (&optional (value 118.25s0))
+  (declare (single-float value))
+  (ipms-ffi:set-parameter 1001 value 4))
+
+#+nil
+(set-nominal-deflection-nm 10s0)
+
+(defun get-nominal-deflection-nm ()
+  (get-parameter 1001 4))
+
+#+nil
+(get-nominal-deflection-nm)
 
 #+nil 
 (time

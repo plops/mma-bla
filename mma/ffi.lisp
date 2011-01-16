@@ -41,14 +41,18 @@
 	   #:+volt-ce-l+
 	   #:+volt-pixel+ 
 	   #:+volt-column-all+
-	   ))
+	   #:load-calibration-data
+	   #:set-parameter
+	   #:get-parameter))
 
 ;; to generate list of functions in this file:
 ;; for i in `cat ipms-ffi.lisp|grep define-ali|cut -d " " -f 3|cut -d ")" -f 1`;do echo \#:$i;done
 
 
-(in-package :ipms-ffi) 
-(load-shared-object "/home/martin/linux-mma2_20100916/64Bit/libIPMS_SLM.so.1.0.0"
+(in-package :ipms-ffi)
+(defparameter *library* "/home/martin/linux-mma2_20101101/Delivery_2010_11_01_KCL/Linux-Board-Control/IPMS_SLM_shared_lib/64Bit/libIPMS_SLM.so.1.0.0") 
+(load-shared-object *library*
+		    #+nil"/home/martin/linux-mma2_20100916/64Bit/libIPMS_SLM.so.1.0.0"
 		    #+nil "/home/martin/linux-mma2/ipms_slm_shared_lib/32bit/libIPMS_SLM.so.1.0.0")
  
 ;; all functions return 0 on success and <0 if there was an error
@@ -237,8 +241,7 @@ pulsewidth."
   (delay-us float :out)
   (width-us float :out))
 
-(define-alien-routine ("SLM_SetMMATemperature" set-mma-temperature)
-    int
+(define-alien-routine ("SLM_SetMMATemperature" set-mma-temperature)    int
   "MMA target temperature for Peltier cooling system in degrees
 celsius."
   (temperature-deg float))
@@ -261,3 +264,26 @@ celsius."
 
 (define-alien-routine ("SLM_UpdateEmbeddedSW" update-embedded-software)
     int)
+
+
+(define-alien-routine ("SLM_LoadCalibrationData" load-calibration-data)
+    int
+  "Load *.cal file to calculate calibrated images."
+  (path c-string))
+
+(define-alien-routine ("SLM_SetParameter" set-parameter)
+    int
+  "Set internal parameters like nominal deflection values. Nominal
+deflection has number 1001 and expects a single float."
+  (number unsigned-int)
+  (value single-float :copy) ;; *void
+  (bytes unsigned-int))
+
+(define-alien-routine ("SLM_GetParameter" get-parameter)
+    int
+  "Get internal parameters like nominal deflection values. Nominal
+deflection has number 1001 and returns a single float."
+  (number unsigned-int)
+  (value single-float :out)
+  (bytes unsigned-int))
+
