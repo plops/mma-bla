@@ -1,19 +1,22 @@
-#.(require :gui)
+#.(require :gui) ;; make sure DISPLAY is exported
 #.(require :clara)
 #.(require :mma)
 #.(require :focus)
-;;; CLARA CAMERA
+;;; Clara CAMERA
 #+nil
 (progn
   (when clara::*adc-calibrated*
    (when (clara::is-acquiring-p)
      (clara:stop)))
-  (clara:init-fast :exposure-s .1616s0 :width 256 :height 256 
-		   :x -80 :y 120 :fast-adc t :external-trigger t)
+  (clara:init-fast :exposure-s .0163s0 :width 256 :height 256 
+		   :x -38 :y 26 :fast-adc t :external-trigger t)
   (clara:wait-for-image-and-copy)
-  (clara:status))
+  (clara:status)
+  (format t "initialized~%"))
 #+nil
 (clara:stop)
+#+nil
+(clara:start-acquisition)
 #+nil
 (clara:status)
 #+nil
@@ -39,29 +42,45 @@ clara:*im*
 (defvar *mma-contents* nil)
 (defvar *mma-select* 0)
 #+nil
-(mma::select-pictures 0 :n 1 :ready-out-needed t)
+(mma::select-pictures 15 :n 1 :ready-out-needed t)
 #+nil
 (progn
   (mma::end)
-  #+nil (mma:load-white :radius 1.0 :pic-number 1)
+   (mma:load-white :radius 1.0 :pic-number 1)
   #+nil (mma:load-concentric-circles :n 12)
-  (setf *mma-contents* (mma::load-concentric-disks :n 12))
-  #+nil (setf *mma-contents* (mma:load-disks2 :n 5))
+  #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
+  #+nil (setf *mma-contents* (mma::load-concentric-circles :dr .1 :n 12))
+  #+nil (setf *mma-contents* (mma:load-disks2 :n 4))
+  #+nil(mma::draw-grating)
   (mma:begin))
 #+nil
 (mma:uninit)
 
+
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
+;; dmesg|grep pl2303|grep ttyUSB|tail -n1|sed s+.*ttyUSB+/dev/ttyUSB+g
+(defun run-shell (command)
+  (with-output-to-string (stream)
+    (sb-ext:run-program "/bin/bash" (list "-c" command)
+			:input nil
+			:output stream)))
+
+(defun find-zeiss-usb-adapter ()
+  (let ((port (run-shell "dmesg|grep pl2303|grep ttyUSB|tail -n1|sed s+.*ttyUSB+/dev/ttyUSB+g|tr -d '\\n'")))
+    (if (string-equal "" port)
+	(error "dmesg output doesn't contain ttyUSB assignment. This can happen when the system ran a long time. You could reattach the USB adapter that is connected to the microscope.")
+	port)))
+
+
+
 #+nil
-(focus:connect "/dev/ttyUSB0")
+(focus:connect (find-zeiss-usb-adapter))
 #+nil
 (focus:get-position)
 #+nil ;; move away from sample
-(focus:set-position (1- (focus:get-position))) 
+(focus:set-position (- (focus:get-position) .25))
 #+nil ;; move further into sample
-(focus:set-position (+ 1.25 (focus:get-position)))
-#+nil
-(focus:set-position (- .25 (focus:get-position)))
+(focus:set-position (+ .25 (focus:get-position)))
 #+nil
 (focus:disconnect)
 
@@ -79,14 +98,14 @@ clara:*im*
 (defvar *stack* nil)
 
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 10)
+(let* ((white-width 4)
        (phases 12)
        (colors 3) 
        (a (make-array (* colors phases white-width) :element-type '(unsigned-byte 8)))
        (phase 0)
        
        ;(im-scale 40s0) (im-offset 0.56s0)
-       (im-scale 400s0) (im-offset 0.0s0)
+       (im-scale 20s0) (im-offset 0.0s0)
        )
 
   (defun change-phase (p)
@@ -99,6 +118,16 @@ clara:*im*
 	     (aref a (+ offset (+ 2 (* colors i)))) #b01010101)))) 
 
   (change-phase 0)
+
+  (defun draw-disk-fan (&key (radius 1.0) (n 17))
+    (gl:with-pushed-matrix
+      (gl:scale radius radius radius)
+      (gl:with-primitive :triangle-fan
+	(gl:vertex 0.0 0.0)
+	(dotimes (i n)
+	  (let ((phi (* i (/ (* 2.0 (coerce pi 'single-float)) n))))
+	    (gl:vertex (cos phi) (sin phi))))
+	(gl:vertex 1.0 0.0))))
 
   (defun obtain-sectioned-slice (&key (accumulate 1))
     (when clara:*im*
@@ -194,49 +223,58 @@ clara:*im*
        (gui:destroy tex)))
     ;; draw SECTIONed image next to it
     (gl:with-pushed-matrix
-      (gl:translate 256 0 0)
       (when *section-im*
 	(let ((tex (make-instance 'gui::texture :data *section-im*
 				  :scale 80s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
+	    (gl:translate w 0 0)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex)))
       ;; draw accumulated widefield image below
-      (gl:translate 0 256 0)
       (when *widefield-im*
 	(let ((tex (make-instance 'gui::texture :data *widefield-im*
 				  :scale 1s0 :offset 0.0s0
 				  )))
 	  (destructuring-bind (w h) (array-dimensions *widefield-im*)
+	    (gl:translate 0 h 0)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex))))
     ;; draw an image with only out of focus light in the lower left
     (gl:with-pushed-matrix
-      (gl:translate 0 256 0)
       (when *unfocused-im*
 	(let ((tex (make-instance 'gui::texture :data *unfocused-im*
 				  :scale 1s0 :offset 0.0s0)))
 	  (destructuring-bind (w h) (array-dimensions *section-im*)
+	    (gl:translate 0 h 0)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex))))
     ;; draw the image that is displayed on the mma
     (when *mma-contents*
       (gl:with-pushed-matrix
-	(gl:translate 0 512 0)
 	(let ((p (elt *mma-contents* *mma-select*))) 
 	  (let ((tex (make-instance 'gui::texture :data p
 				    :scale 1s0 :offset 0.0s0)))
 	    (destructuring-bind (w h) (array-dimensions p)
+	      (gl:translate 0 (* 2 h) 0)
 	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	    (gui:destroy tex)))))
     
     ;; draw grating for sectioning on the very right
-    (gl:translate 800 0 0)
+    (gl:translate 400 0 0)
     (unless *dark-im*
      (let ((repetition 100f0))
        (gui::with-grating (g a)
 	 (gui:draw g :w (* repetition white-width phases) :h 900.0 :wt repetition))))
-    
+
+    #+nil
+    (gl:with-pushed-matrix
+      (let ((r (/ #xff 255.0))
+	    (g (/ #xff 255.0))
+	    (b (/ #xff 255.0)))
+       (gl:color r g b))
+      (gl:translate (+ 400 -150.0) 530.0 0.0)
+     (draw-disk-fan :radius 4.0))
+
     #+nil
     (gl:with-primitive :lines
       (gl:color 1 0 0) (gl:vertex 0 0) (gl:vertex (* white-width phases 3) 0 0) ;; x axis red
@@ -250,8 +288,10 @@ clara:*im*
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 #+nil
 (progn
-  (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 12)))
-  )
+  (setf *dark-im* nil)
+  (sb-thread:join-thread 
+   (sb-thread:make-thread #'(lambda () (obtain-sectioned-slice :accumulate 12))))
+  (setf *dark-im* t))
 
 (defun select-disk (q)
   (setf *mma-select* q)
@@ -295,7 +335,7 @@ clara:*im*
 #+nil
 (setf *stack-integral*
  (integrate-slices *stack*))
-
+#+nil
 (with-open-file (s "/home/martin/tmp/11_5.dat" :if-does-not-exist :create
 		   :if-exists :supersede :direction :output)
   (dolist (e *stack-integral*)
@@ -303,7 +343,7 @@ clara:*im*
 
 #+nil
 (let* ((x 1)
-       (y 4)
+       (y 2)
        (n 5)
        (q (+ x (* n y))))
   (setf *mma-select* q)
@@ -388,6 +428,17 @@ clara:*im*
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" section)
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" unfocus))
 
+;; gui window on normal screen
 #+nil
-(gui:with-gui (1400 (+ 256 512) (- 1280 512) 100)
-  (draw-screen))
+(sb-thread:make-thread 
+ #'(lambda ()
+     (gui:with-gui (1280 1024 0 0)
+       (draw-screen))))
+
+
+;; gui window on right screen (lcos)
+#+nil
+(sb-thread:make-thread 
+ #'(lambda ()
+     (gui:with-gui (1400 (+ 256 512) (- 1280 512) 100)
+       (draw-screen))))

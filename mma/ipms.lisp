@@ -91,6 +91,19 @@
     (write-data buf :pic-number pic-number)
     buf))
 
+(defun draw-grating (&key (pic-number 1))
+  (declare (values (simple-array (unsigned-byte 16) 2) &optional))
+  (let* ((n 256)
+	 (buf (make-array (list n n) 
+			  :element-type '(unsigned-byte 16))))
+    (declare (type (simple-array (unsigned-byte 16) 2) buf))
+    (dotimes (j n)
+      (dotimes (i n)
+	(setf (aref buf i j) 
+	      (if (= 0 (mod i 2)) 0 #xffff))))
+    (write-data buf :pic-number pic-number)
+    buf))
+
 
 (defun parse-bits (value bits)
   (declare (fixnum value))

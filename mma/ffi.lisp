@@ -48,7 +48,7 @@
 
 
 (in-package :ipms-ffi) 
-(load-shared-object "/home/martin/linux-mma2/64Bit/libIPMS_SLM.so.1.0.0"
+(load-shared-object "/home/martin/linux-mma2_20100916/64Bit/libIPMS_SLM.so.1.0.0"
 		    #+nil "/home/martin/linux-mma2/ipms_slm_shared_lib/32bit/libIPMS_SLM.so.1.0.0")
  
 ;; all functions return 0 on success and <0 if there was an error
