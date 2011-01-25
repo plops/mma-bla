@@ -50,10 +50,8 @@
 
 
 (in-package :ipms-ffi)
-(defparameter *library* "/home/martin/linux-mma2_20101101/Delivery_2010_11_01_KCL/Linux-Board-Control/IPMS_SLM_shared_lib/64Bit/libIPMS_SLM.so.1.0.0") 
-(load-shared-object *library*
-		    #+nil"/home/martin/linux-mma2_20100916/64Bit/libIPMS_SLM.so.1.0.0"
-		    #+nil "/home/martin/linux-mma2/ipms_slm_shared_lib/32bit/libIPMS_SLM.so.1.0.0")
+(defparameter *library* "/home/martin/linux-mma2_20101217/IPMS_SLM_shared_lib/64Bit/libIPMS_SLM.so.1.0.0") 
+(load-shared-object *library*)
  
 ;; all functions return 0 on success and <0 if there was an error
  
