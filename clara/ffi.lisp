@@ -1,6 +1,6 @@
 (in-package :clara)
 
-(load-shared-object "libandor.so")
+(load-shared-object "/usr/local/lib/libandor.so.2.88.30003.0")
 (define-alien-routine ("GetAvailableCameras" get-available-cameras)
     unsigned-int
   (total-cameras int :out))
@@ -39,6 +39,8 @@
   (vstart int)
   (vend int))
 (define-alien-routine ("StartAcquisition" start-acquisition)
+    unsigned-int)
+(define-alien-routine ("PrepareAcquisition" prepare-acquisition)
     unsigned-int)
 (define-alien-routine ("AbortAcquisition" abort-acquisition)
     unsigned-int)

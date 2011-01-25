@@ -3,7 +3,8 @@
 (defmacro check (&body body)
   `(let ((ret ,@body))
      (unless (eq drv-success ret)
-       (error "~a didn't succeed. The error is ~a." ',@body (lookup-error ret)))))
+       (error "~a didn't succeed. The error is ~a." ',@body (lookup-error ret)))
+     t))
 
 (defmacro val2 (fn)
   `(multiple-value-bind (a b)
@@ -152,6 +153,51 @@
 (defvar *displayed-images* nil)
 (defvar *start-series* nil)
 (defparameter *im* nil)
+
+
+(defun init-single-scan (&key (width 32) (height 32) (xpos 0) (ypos 0) (exposure-s 1s0)
+			 (fast-adc t) (external-trigger nil))
+  "Prepare camera, to capture single frames. Use start-acquisition to acquire a new frame."
+  (unless *adc-calibrated* 
+    (let* ((cams (val2 (get-available-cameras)))
+	   (handle (val2 (get-camera-handle (1- cams)))))
+      (check (set-current-camera handle)))
+    (check (initialize "/usr/local/etc/andor"))
+    (setf *adc-calibrated* t))
+  (check (set-read-mode 4)) ;; 0 vertical bin, 1 multitrack, 2 randomtrack, 3 singletrack, 4 image 
+  (check (set-acquisition-mode 1)) ;; 1 sglscan, 2 accum, 3 kinetics, 4 fast kin, 5 run-till-abort
+  (check (set-exposure-time exposure-s))
+  (check (set-ad-channel (if fast-adc 1 0)))
+  (check (set-output-amplifier 0))
+  (check (set-hs-speed 0 0))
+  (check (set-trigger-mode (if external-trigger 6 0))) ;; 0 int, 1 ext, 6 ext start, 10 software
+  
+  (multiple-value-bind (e xdim ydim)
+      (get-detector)
+    (check e)
+    (format t "~a~%" (list 'image xdim ydim))
+    (let* ((xh (floor xdim 2))
+	   (wh (floor width 2))
+	   (xmin (- xh wh))
+	   (xmax (+ xmin width))
+	   (yh (floor ydim 2))
+	   (hh (floor height 2))
+	   (ymin (- yh hh))
+	   (ymax (+ ymin height)))
+      (check (set-image 1 1 (+ xpos (1+ xmin)) (+ xpos xmax)
+			(+ ypos (1+ ymin)) (+ ypos ymax)))))
+  (setf *w* width
+	*h* height)
+  (check (prepare-acquisition))
+  (multiple-value-bind (ret exp acc kin)
+      (get-acquisition-timings)
+    (check ret)
+    (format t
+	    "size: ~dx~d exposure time: ~fs   accumulation time: ~fs   kinetic cycle time: ~fs~%"
+	    *w* *h* exp acc kin)))
+
+#+nil
+(init-single-scan :exposure-s .0163s0 :external-trigger t)
 
 (defun init-run-till-abort (&key (width 32) (height 32) (xpos 0) (ypos 0) (exposure-s 1s0)
 			    (fast-adc t) (external-trigger nil))
