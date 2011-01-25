@@ -2,6 +2,7 @@
   (:use :cl :sb-alien :sb-c-call)
   (:export
    #:init-fast
+   #:init-single-scan
    #:wait-for-image-and-copy
    #:status
    #:stop
@@ -65,4 +66,5 @@
 #:wait-for-acquisition
 #:set-number-accumulations
 
-   ))
+   #:snap-single-image
+   #:init))

@@ -150,10 +150,19 @@
 (defvar *w* 32)
 (defvar *h* 32) 
 (defvar *adc-calibrated* nil)
-(defvar *displayed-images* nil)
+(defvar *displayed-images* 0)
 (defvar *start-series* nil)
 (defparameter *im* nil)
 
+(defun init (&key (width 512) (height 512) (xpos 0) (ypos 0) (exposure-s 1s0)
+	     (fast-adc t) (external-trigger nil))
+  (when *adc-calibrated*
+    (when (is-acquiring-p)
+      (clara:stop)))
+  (init-single-scan :exposure-s exposure-s :width width :height height
+		    :xpos xpos :ypos ypos
+		    :fast-adc fast-adc :external-trigger external-trigger)
+  (status))
 
 (defun init-single-scan (&key (width 32) (height 32) (xpos 0) (ypos 0) (exposure-s 1s0)
 			 (fast-adc t) (external-trigger nil))
@@ -183,9 +192,15 @@
 	   (yh (floor ydim 2))
 	   (hh (floor height 2))
 	   (ymin (- yh hh))
-	   (ymax (+ ymin height)))
-      (check (set-image 1 1 (+ xpos (1+ xmin)) (+ xpos xmax)
-			(+ ypos (1+ ymin)) (+ ypos ymax)))))
+	   (ymax (+ ymin height))
+	   (hbin 1)
+	   (vbin 1)
+	   (hstart (+ xpos (1+ xmin)))
+	   (hend (+ xpos xmax))
+	   (vstart (+ ypos (1+ ymin)))
+	   (vend (+ ypos ymax)))
+      (check (set-image hbin vbin hstart hend vstart vend))
+      (format t "set-image ~a~%" (list hbin vbin hstart hend vstart vend))))
   (setf *w* width
 	*h* height)
   (check (prepare-acquisition))
@@ -193,11 +208,24 @@
       (get-acquisition-timings)
     (check ret)
     (format t
-	    "size: ~dx~d exposure time: ~fs   accumulation time: ~fs   kinetic cycle time: ~fs~%"
+	    "size: ~dx~d exposure time: ~fs~%accumulation time: ~fs~%kinetic cycle time: ~fs~%"
 	    *w* *h* exp acc kin)))
 
 #+nil
 (init-single-scan :exposure-s .0163s0 :external-trigger t)
+#+nil
+(start-acquisition)
+#+nil
+(setf *im*
+      (let* ((img (make-array (list *w* *h*) :element-type '(unsigned-byte 16)))
+	     (img1 (sb-ext:array-storage-vector img)))
+	(sb-sys:with-pinned-objects (img1)
+	  (let ((ret (get-most-recent-image16 (sb-sys:vector-sap img1)
+					      (* *w* *h*))))
+	    (if (eq ret drv-no-new-data)
+		(format t "no new data~%")
+		(check ret))))
+	img))
 
 (defun init-run-till-abort (&key (width 32) (height 32) (xpos 0) (ypos 0) (exposure-s 1s0)
 			    (fast-adc t) (external-trigger nil))
@@ -279,21 +307,39 @@
 	     (lookup-error ret)))
     (eq state drv-acquiring)))
 
+(defun snap-single-image ()
+  (check (start-acquisition))
+  (loop while (clara::is-acquiring-p) 
+    ;; I decided to poll. WaitForAcquisition never returns 
+    do (sleep .05s0))
+  (setf *im*
+	(let* ((img (make-array (list *w* *h*) :element-type '(unsigned-byte 16)))
+	       (img1 (sb-ext:array-storage-vector img)))
+	  (sb-sys:with-pinned-objects (img1)
+	    (let ((ret (get-most-recent-image16 (sb-sys:vector-sap img1)
+						(* *w* *h*))))
+	      (if (eq ret drv-no-new-data)
+		  (return-from snap-single-image *displayed-images*)
+		  (check ret))))
+	  img))
+  (incf *displayed-images*))
+
+
 (defun wait-for-image-and-copy ()
   (when (is-acquiring-p)
-    (check (wait-for-acquisition))
-    (setf *im*
-	  (let* ((img (make-array (list *w* *h*) :element-type '(unsigned-byte 16)))
-		 (img1 (sb-ext:array-storage-vector img)))
-	    (sb-sys:with-pinned-objects (img1)
-	      (let ((ret (get-most-recent-image16 (sb-sys:vector-sap img1)
-						  (* *w* *h*))))
-		(if (eq ret drv-no-new-data)
-		    (return-from wait-for-image-and-copy *displayed-images*)
-		    (check ret))))
-	    img))
-    (incf *displayed-images*)
-    #+nil (check (free-internal-memory))))
+   (check (wait-for-acquisition)))
+  (setf *im*
+	(let* ((img (make-array (list *w* *h*) :element-type '(unsigned-byte 16)))
+	       (img1 (sb-ext:array-storage-vector img)))
+	  (sb-sys:with-pinned-objects (img1)
+	    (let ((ret (get-most-recent-image16 (sb-sys:vector-sap img1)
+						(* *w* *h*))))
+	      (if (eq ret drv-no-new-data)
+		  (return-from wait-for-image-and-copy *displayed-images*)
+		  (check ret))))
+	  img))
+  (incf *displayed-images*)
+  #+nil (check (free-internal-memory)))
 
 (defun status ()
   (multiple-value-bind (e status)
