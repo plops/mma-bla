@@ -43,7 +43,8 @@
 	   #:+volt-column-all+
 	   #:load-calibration-data
 	   #:set-parameter
-	   #:get-parameter))
+	   #:get-parameter
+	   #:reset))
 
 ;; to generate list of functions in this file:
 ;; for i in `cat ipms-ffi.lisp|grep define-ali|cut -d " " -f 3|cut -d ")" -f 1`;do echo \#:$i;done
@@ -284,4 +285,8 @@ deflection has number 1001 and returns a single float."
   (number unsigned-int)
   (value single-float :out)
   (bytes unsigned-int))
+
+(define-alien-routine ("SLM_Reset" reset)
+    int
+  "Reset system software and reboot.")
 
