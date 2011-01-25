@@ -2,32 +2,57 @@
 #.(require :clara)
 #.(require :mma)
 #.(require :focus)
+
+#+nil ;; fill two screens
+(sb-thread:make-thread 
+ #'(lambda ()
+     (gui:with-gui ((* 1280 2) 1024 0 0)
+       (draw-screen)))
+ :name "display")
+
 ;;; Clara CAMERA
 #+nil
-(progn
-  (when clara::*adc-calibrated*
-   (when (clara::is-acquiring-p)
-     (clara:stop)))
-  (clara:init-fast :exposure-s (* 10 .0163s0) :width 256 :height 256 
-		   :x -38 :y 26 :fast-adc t :external-trigger t)
-  (clara:wait-for-image-and-copy)
-  (clara:status)
-  (format t "initialized~%"))
+(clara:init :exposure-s .0163s0 
+	    :fast-adc nil
+	    :external-trigger t
+	    :xpos -290 :ypos 100)
+;; continuously capture new images
+(defparameter *capture-thread* nil)
+(defun start-capture-thread ()
+  (unless *capture-thread*
+   (setf *capture-thread*
+	 (sb-thread:make-thread
+	  #'(lambda ()
+	      (loop
+		 (clara:snap-single-image)))
+	  :name "capture"))))
+
+(defun stop-capture-thread ()
+  (let ((is-running *capture-thread*))
+   (when is-running
+     (sb-thread:terminate-thread *capture-thread*)
+     (setf *capture-thread* nil))
+   is-running))
+#+nil
+(start-capture-thread)
+#+nil
+(stop-capture-thread)
 #+nil
 (clara:stop)
 #+nil
-(clara:start-acquisition)
-#+nil
 (clara:status)
+#+nil
+(clara:snap-single-image)
 #+nil
 (clara:uninit)
 #+nil
 clara:*im*
 
-
 ;;; MMA OVER NETWORK (run sudo ifconfig eth1 192.168.0.1)
 ;; oscilloscope luvcview -d /dev/video1 -s 320x240 -i 5
 ;; mma image    luvcview -d /dev/video0 -s 320x240 -i 5
+;; /usr/local/bin/uvcdynctrl -v -s "Exposure (Absolute)" 10000
+
 #+nil
 (mma:init)
 #+nil
@@ -35,27 +60,39 @@ clara:*im*
 #+nil
 (mma::set-start-mma)
 #+nil
+(mma::set-stop-mma)
+#+nil
 (progn
   (mma::set-stop-mma)
   (mma::set-extern-trigger t)
+  (mma::set-deflection-phase 16s0 16300s0)
   (mma:begin))
 (defvar *mma-contents* nil)
 (defvar *mma-select* 0)
 #+nil
-(mma::select-pictures 15 :n 1 :ready-out-needed t)
+(mma::select-pictures 1 :n 1 :ready-out-needed t)
+
 #+nil
-(progn
-  (mma::end)
-   (mma:load-white :radius 1.0 :pic-number 1)
-  #+nil (mma:load-concentric-circles :n 12)
-  #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
-  #+nil (setf *mma-contents* (mma::load-concentric-circles :dr .1 :n 12))
-  #+nil (setf *mma-contents* (mma:load-disks2 :n 4))
-  #+nil(mma::draw-grating)
-  (mma:begin))
+(mma::draw-ring-cal :pic-number 1)
+#+nil
+(time
+ (progn
+   (mma::end)
+   #+nil (dotimes (i 4090)
+	   (mma::draw-random-cal :pic-number (1+ i)))
+   #+nil (mma:load-white :radius 1.0 :pic-number 1)
+   #+nil (mma:load-concentric-circles :n 12)
+   #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
+   #+nil (setf *mma-contents* (mma::load-concentric-circles :dr .1 :n 12))
+   (setf *mma-contents* (mma:load-disks2 :n 5))
+   (append *mma-contents* (list (mma::draw-disk-cal :pic-number 26)
+				(mma::draw-disk-cal :pic-number 27 :value 0)))
+   #+nil(mma::draw-grating)
+   (mma:begin)))
 #+nil
 (mma:uninit)
-
+#+nil
+(mma::reset)
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
 #+nil
@@ -82,18 +119,21 @@ clara:*im*
 (defvar *dark-im* nil)
 (defvar *stack* nil)
 
+;; OBTAIN
+#+nil
+(obtain-sectioned-slice :accumulate 1)
 
 
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 1)
-       (phases-x 30)
+(let* ((white-width 2)
+       (phases-x 12)
        (phases-y 1)
        (a (make-array (* phases-x phases-y white-width) 
 		      :element-type '(unsigned-byte 8)))
        (phase 0)
        
-       ;(im-scale 40s0) (im-offset 0.56s0)
-       (im-scale 200s0) (im-offset 0.0s0)
+       ;(im-scale 100s0) (im-offset 1.86s0)
+       (im-scale 4000s0) (im-offset 0.0s0)
        )
 
   (defun change-phase (p)
@@ -114,7 +154,7 @@ clara:*im*
 	(gl:vertex 1.0 0.0))))
 
   (defun obtain-sectioned-slice (&key (accumulate 1))
-    (when clara:*im*
+    (let ((capture-was-running (stop-capture-thread)))
       (destructuring-bind (w h) (array-dimensions clara:*im*)
 	(let ((phase-im (make-array (list phases-y phases-x w h) 
 				    :element-type '(signed-byte 64)))
@@ -126,65 +166,59 @@ clara:*im*
 					   :element-type '(unsigned-byte 16)))
 	  ;; capture the phase images, accumulate if requested, update
 	  ;; widefield image as well
-	  (dotimes (py phases-y)
-	    (dotimes (px phases-x)
-	      (change-phase (+ px (* phases-x py)))
-	      (sleep .1)
-	      (clara:wait-for-image-and-copy)
-	      (dotimes (a accumulate)
-		(dotimes (j h)
+	 (dotimes (py phases-y)
+	   (dotimes (px phases-x)
+	     (change-phase (+ px (* phases-x py)))
+	     (format t "~a~%" (list 'px px 'py py))
+	     (sleep 1/60)
+	     (clara:snap-single-image)
+	     (dotimes (a accumulate)
+	       (dotimes (j h)
 		 (dotimes (i w)
 		   (let ((v (aref clara:*im* i j)))
 		     (incf (aref phase-im py px i j) v)
 		     (incf (aref widefield-im i j) v)
 		     (setf (aref *widefield-im* i j)
 			   (clamp-u16 (floor (aref widefield-im i j) 2)))))))))
-	  ;; final widefield image normalize to full 16bit range
-	  (let ((ma 0)
-		(mi (1- (expt 2 64))))
-	    (dotimes (j h)
-	      (dotimes (i w)
-		(let ((v (aref widefield-im i j)))
-		  (setf ma (max v ma)
-			mi (min v mi)))))
-	    (dotimes (j h)
-	      (dotimes (i w)
-		(setf (aref *widefield-im* i j) (floor (- (aref widefield-im i j) mi)
-						       (/ (- ma mi) (1- (expt 2 16)))))))
-	    (format t "values in accumulated widefield image: ~a~%" (list mi ma))
-	  ;; min-max reconstruction
-	    (dotimes (j h)
-	      (dotimes (i w)
-		(let* ((v (aref phase-im 0 0 i j))
-		       (ma v)
-		       (mi v))
-		  (dotimes (py phases-y)
+	 ;; final widefield image normalize to full 16bit range
+	 (let ((ma 0)
+	       (mi (1- (expt 2 64))))
+	   (dotimes (j h)
+	     (dotimes (i w)
+	       (let ((v (aref widefield-im i j)))
+		 (setf ma (max v ma)
+		       mi (min v mi)))))
+	   (dotimes (j h)
+	     (dotimes (i w)
+	       (setf (aref *widefield-im* i j) (floor (- (aref widefield-im i j) mi)
+						      (/ (- ma mi) (1- (expt 2 16)))))))
+	   (format t "values in accumulated widefield image: ~a~%" (list mi ma))
+	   ;; min-max reconstruction
+	   (dotimes (j h)
+	     (dotimes (i w)
+	       (let* ((v (aref phase-im 0 0 i j))
+		      (ma v)
+		      (mi v))
+		 (dotimes (py phases-y)
 		   (dotimes (px phases-x)
 		     (let ((v (aref phase-im py px i j)))
 		       (setf mi (min mi v)
 			     ma (max ma v)))))
-		  (setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
-	  ;; sqrt reconstruction
-	    #+nil
-	    (let ((square-im (make-array (list w h) :element-type '(signed-byte 64))))
-	      (dotimes (j h)
-		(dotimes (i w)
-		  (dotimes (p phases)
-		    (let ((q (- (aref phase-im phase i j) 
-				(aref phase-im (mod (+ p (floor phases 2)) phases) i j))))
-		      (incf (aref square-im i j) 
-			    (* q q))))
-		  (setf (aref *section-im* i j) (floor (sqrt (aref square-im i j)))))))
-	    ;; subtract section image from accumulated widefield image
-	    (setf *unfocused-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
-	    (dotimes (j h)
-	      (dotimes (i w)
-		(setf (aref *unfocused-im* i j)
-		      (clamp-u16 (- (aref *widefield-im* i j) 
-				    (floor (aref *section-im* i j) ;; uses max and min from widefield
-					   (/ (- ma mi) (* 20 (1- (expt 2 16)))))))))))))
-      (format t "maximum value in section ~a~%"
-	      (reduce #'max (sb-ext:array-storage-vector *section-im*)))))
+		 (setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
+
+	   ;; subtract section image from accumulated widefield image
+	   (setf *unfocused-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
+	   (dotimes (j h)
+	     (dotimes (i w)
+	       (setf (aref *unfocused-im* i j)
+		     (clamp-u16 (- (aref *widefield-im* i j) 
+				   (floor (aref *section-im* i j) 
+					  ;; uses max and min from widefield
+					  (/ (- ma mi) (* 20 (1- (expt 2 16))))))))))))
+	(format t "maximum value in section ~a~%"
+		(reduce #'max (sb-ext:array-storage-vector *section-im*))))
+      (when capture-was-running
+	(start-capture-thread))))
   
   (defun obtain-stack (&key (n 30) (dz .1s0) (accumulate 1))
     (let ((center (focus:get-position))
@@ -202,55 +236,54 @@ clara:*im*
     (gl:clear-color 0 0 0 1)
     (gl:clear :color-buffer-bit)
     ;; draw raw camera image on the left
-    (when clara:*im*
-      (clara:wait-for-image-and-copy)
-      (let ((tex (make-instance 'gui::texture :data clara:*im* 
-				:scale im-scale :offset im-offset
-			;;	:scale 40s0 :offset 0.76s0
-				)))
-       (destructuring-bind (w h) (array-dimensions clara:*im*)
-	 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-       (gui:destroy tex)))
-    ;; draw SECTIONed image next to it
     (gl:with-pushed-matrix
-      (when *section-im*
-	(let ((tex (make-instance 'gui::texture :data *section-im*
-				  :scale 500s0 :offset 0.0s0)))
-	  (destructuring-bind (w h) (array-dimensions *section-im*)
-	    (gl:translate w 0 0)
+      (gl:scale .5 .5 1s0)
+      (when clara:*im*
+	(let ((tex (make-instance 'gui::texture :data clara:*im* 
+				  :scale im-scale :offset im-offset)))
+	  (destructuring-bind (w h) (array-dimensions clara:*im*)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	  (gui:destroy tex)))
-      ;; draw accumulated widefield image below
-      (when *widefield-im*
-	(let ((tex (make-instance 'gui::texture :data *widefield-im*
-				  :scale 1s0 :offset 0.0s0
-				  )))
-	  (destructuring-bind (w h) (array-dimensions *widefield-im*)
-	    (gl:translate 0 h 0)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	  (gui:destroy tex))))
-    ;; draw an image with only out of focus light in the lower left
-    (gl:with-pushed-matrix
-      (when *unfocused-im*
-	(let ((tex (make-instance 'gui::texture :data *unfocused-im*
-				  :scale 1s0 :offset 0.0s0)))
-	  (destructuring-bind (w h) (array-dimensions *section-im*)
-	    (gl:translate 0 h 0)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	  (gui:destroy tex))))
-    ;; draw the image that is displayed on the mma
-    (when *mma-contents*
+      ;; draw SECTIONed image next to it
       (gl:with-pushed-matrix
-	(let ((p (elt *mma-contents* *mma-select*))) 
-	  (let ((tex (make-instance 'gui::texture :data p
-				    :scale 1s0 :offset 0.0s0)))
-	    (destructuring-bind (w h) (array-dimensions p)
-	      (gl:translate 0 (* 2 h) 0)
+	(when *section-im*
+	  (let ((tex (make-instance 'gui::texture :data *section-im*
+				    :scale 4000s0 :offset 0.03s0)))
+	    (destructuring-bind (w h) (array-dimensions *section-im*)
+	      (gl:translate w 0 0)
 	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	    (gui:destroy tex)))))
-    
+	    (gui:destroy tex)))
+	;; draw accumulated widefield image below
+	(when *widefield-im*
+	  (let ((tex (make-instance 'gui::texture :data *widefield-im*
+				    :scale 5s0 :offset 0.0s0
+				    )))
+	    (destructuring-bind (w h) (array-dimensions *widefield-im*)
+	      (gl:translate 0 h 0)
+	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	    (gui:destroy tex))))
+      ;; draw an image with only out of focus light in the lower left
+      (gl:with-pushed-matrix
+	(when *unfocused-im*
+	  (let ((tex (make-instance 'gui::texture :data *unfocused-im*
+				    :scale 10s0 :offset 0.0s0)))
+	    (destructuring-bind (w h) (array-dimensions *section-im*)
+	      (gl:translate 0 h 0)
+	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	    (gui:destroy tex))))
+      ;; draw the image that is displayed on the mma
+      #+nil (when *mma-contents*
+	      (gl:with-pushed-matrix
+		(let ((p (elt *mma-contents* *mma-select*))) 
+		  (let ((tex (make-instance 'gui::texture :data p
+					    :scale 1s0 :offset 0.0s0)))
+		    (destructuring-bind (w h) (array-dimensions p)
+		      (gl:translate 0 (* 2 h) 0)
+		      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+		    (gui:destroy tex)))))
+      )    
     ;; draw grating for sectioning on the very right
-    (gl:translate 400 0 0)
+    (gl:translate (+ 280 400) 0 0)
     (unless *dark-im*
      (let ((repetition 900f0))
        (gui::with-grating (g a)
@@ -260,14 +293,12 @@ clara:*im*
 		   :wt repetition
 		   :ht repetition))))
 
-    #+nil
+    ;; FAN
+    ;#+nil
     (gl:with-pushed-matrix
-      (let ((r (/ #xff 255.0))
-	    (g (/ #xff 255.0))
-	    (b (/ #xff 255.0)))
-       (gl:color r g b))
-      (gl:translate (+ 400 -150.0) 530.0 0.0)
-     (draw-disk-fan :radius 100.0))
+      (gl:color 1 1 1)
+      (gl:translate (+ 1000 400 -175.0) 535.0 0.0)
+      (draw-disk-fan :radius 20.0))
 
     #+nil
     (gl:with-primitive :lines
@@ -280,28 +311,22 @@ clara:*im*
 	  (gl:vertex x y)))
       (gl:color 0 1 0) (gl:vertex 0 1) (gl:vertex 0 100 0) ;; y axis green
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
-#+nil ;; OBTAIN
-(progn
-  (setf *dark-im* nil)
-  (sb-thread:join-thread 
-   (sb-thread:make-thread #'(lambda ()
-			      (obtain-sectioned-slice :accumulate 1))))
-  (setf *dark-im* t))
 
 (defun select-disk (q)
   (setf *mma-select* q)
   (mma:select-pictures q :n 1 :ready-out-needed t))
 
 #+nil
-(setf *dark-im* nil)
-#+nil
-(setf *dark-im* t)
+(select-disk 24)
 
 #+nil
-(select-disk 7)
-
-#+nil
-(sb-thread:make-thread #'(lambda () (obtain-stack :dz .3 :accumulate 12)))
+(sb-thread:make-thread 
+ #'(lambda ()
+     (loop
+	(dotimes (i 26)
+	(select-disk i)
+	(sleep .5))))
+ :name "switch-angle")
 
 (defun average-img (img)
   (let ((sum 0))
@@ -319,48 +344,6 @@ clara:*im*
 
 (defparameter *stack-integral* nil)
 
-
-(defparameter *stack05* *stack*)
-(defparameter *stack11* *stack*)
-(defparameter *stack11-4* *stack*)
-(defparameter *stack11-6* *stack*)
-(defparameter *stack11-10* *stack*)
-(defparameter *stack11-10-disk7* *stack*)
-
-#+nil
-(setf *stack-integral*
- (integrate-slices *stack*))
-#+nil
-(with-open-file (s "/home/martin/tmp/11_5.dat" :if-does-not-exist :create
-		   :if-exists :supersede :direction :output)
-  (dolist (e *stack-integral*)
-   (format s "~f ~f~%" (first e) (second e))))
-
-#+nil
-(let* ((x 1)
-       (y 2)
-       (n 5)
-       (q (+ x (* n y))))
-  (setf *mma-select* q)
-  (mma:select-pictures q :n 1 :ready-out-needed t))
-
-
-
-;; scan through different mma positions and capture slices
-#+nil
-(defparameter *mma-scan*
-  (let ((n 5)
-	(result nil))
-    (dotimes (y n)
-      (dotimes (x n)
-	(let ((q (+ x (* n y))))
-	 (setf *mma-select* q)
-	 (mma:select-pictures q :ready-out-needed t))
-	(sb-thread:join-thread 
-	 (sb-thread:make-thread 
-	  #'(lambda () (obtain-sectioned-slice :accumulate 1))))
-	(push (list x y *widefield-im* *section-im* *unfocused-im*) result)))
-    result))
 
 (defun write-pgm (filename img)
   (declare (simple-string filename)
@@ -386,15 +369,14 @@ clara:*im*
   (declare (simple-string filename)
            ((array (unsigned-byte 16) 2) img)
            (values null &optional))
-  (destructuring-bind (h w)
-      (array-dimensions img)
+  (destructuring-bind (h w) (array-dimensions img)
     (declare ((integer 0 65535) w h))
     (with-open-file (s filename
                        :direction :output
                        :if-exists :supersede
                        :if-does-not-exist :create)
       (declare (stream s))
-      (format s "P5~%~D ~D~%255~%" w h))
+      (format s "P5~%~D ~D~%65535~%" w h))
     (with-open-file (s filename 
                        :element-type '(unsigned-byte 16)
                        :direction :output
@@ -423,17 +405,3 @@ clara:*im*
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" section)
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" unfocus))
 
-;; gui window on normal screen
-#+nil
-(sb-thread:make-thread 
- #'(lambda ()
-     (gui:with-gui (1280 1024 0 0)
-       (draw-screen))))
-
-
-;; gui window on right screen (lcos)
-#+nil
-(sb-thread:make-thread 
- #'(lambda ()
-     (gui:with-gui (1400 (+ 256 512) (- 1280 512) 100)
-       (draw-screen))))
