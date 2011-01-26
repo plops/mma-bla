@@ -19,8 +19,8 @@
 	    (matrix-mode :color)
 	    (with-pushed-matrix 
 	      (load-identity)
-	      (translate (- offset) (- offset) (- offset))
 	      (scale scale scale scale)
+	      (translate (- offset) (- offset) (- offset))
 	      (tex-image-2d target 0 :luminance16 w h 0 :luminance
 			    :unsigned-short data-sap))
 	    (matrix-mode :modelview)))))))

@@ -15,15 +15,18 @@
 (clara:init :exposure-s .0163s0 
 	    :fast-adc nil
 	    :external-trigger t
-	    :xpos -290 :ypos 100)
+	    ;;:xpos -290 :ypos 100
+	    :width 1392 :height 1040)
 ;; continuously capture new images
 (defparameter *capture-thread* nil)
-(defun start-capture-thread ()
+(defun start-capture-thread (&optional (delay nil))
   (unless *capture-thread*
    (setf *capture-thread*
 	 (sb-thread:make-thread
 	  #'(lambda ()
 	      (loop
+		 (when delay
+		  (sleep delay))
 		 (clara:snap-single-image)))
 	  :name "capture"))))
 
@@ -34,7 +37,7 @@
      (setf *capture-thread* nil))
    is-running))
 #+nil
-(start-capture-thread)
+(start-capture-thread .16s0)
 #+nil
 (stop-capture-thread)
 #+nil
@@ -65,12 +68,12 @@ clara:*im*
 (progn
   (mma::set-stop-mma)
   (mma::set-extern-trigger t)
-  (mma::set-deflection-phase 16s0 16300s0)
+  (mma::set-deflection-phase 0s0 16300s0)
   (mma:begin))
 (defvar *mma-contents* nil)
 (defvar *mma-select* 0)
 #+nil
-(mma::select-pictures 1 :n 1 :ready-out-needed t)
+(mma::select-pictures 25 :n 1 :ready-out-needed t)
 
 #+nil
 (mma::draw-ring-cal :pic-number 1)
@@ -84,7 +87,7 @@ clara:*im*
    #+nil (mma:load-concentric-circles :n 12)
    #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
    #+nil (setf *mma-contents* (mma::load-concentric-circles :dr .1 :n 12))
-   (setf *mma-contents* (mma:load-disks2 :n 5))
+   (setf *mma-contents* (mma:load-disks2 :n 3))
    (append *mma-contents* (list (mma::draw-disk-cal :pic-number 26)
 				(mma::draw-disk-cal :pic-number 27 :value 0)))
    #+nil(mma::draw-grating)
@@ -132,8 +135,8 @@ clara:*im*
 		      :element-type '(unsigned-byte 8)))
        (phase 0)
        
-       ;(im-scale 100s0) (im-offset 1.86s0)
-       (im-scale 4000s0) (im-offset 0.0s0)
+       (im-scale 100s0) (im-offset 1.86s0)
+       ;(im-scale 30s0) (im-offset 0.0s0)
        )
 
   (defun change-phase (p)
@@ -237,7 +240,7 @@ clara:*im*
     (gl:clear :color-buffer-bit)
     ;; draw raw camera image on the left
     (gl:with-pushed-matrix
-      (gl:scale .5 .5 1s0)
+      (gl:scale .25 .25 1s0)
       (when clara:*im*
 	(let ((tex (make-instance 'gui::texture :data clara:*im* 
 				  :scale im-scale :offset im-offset)))
@@ -298,7 +301,7 @@ clara:*im*
     (gl:with-pushed-matrix
       (gl:color 1 1 1)
       (gl:translate (+ 1000 400 -175.0) 535.0 0.0)
-      (draw-disk-fan :radius 20.0))
+      (draw-disk-fan :radius 100.0))
 
     #+nil
     (gl:with-primitive :lines
