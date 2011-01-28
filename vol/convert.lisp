@@ -284,7 +284,7 @@
 			 result))))
     `(progn ,@result)))
 
-(def-normalize-functions (1 2 3) (ub8 sf df) (ub8 sf df))
+(def-normalize-functions (1 2 3) (ub8 ub16 sf df) (ub8 ub16 sf df))
 
 #+nil
 (normalize-1-sf/sf (make-array 3 :element-type 'single-float
