@@ -7,9 +7,12 @@
 (in-package :run-ics)
 (declaim (optimize (speed 1) (safety 3) (debug 3)))
 
+(defparameter icf nil)
+(defparameter *kern* nil)
+(defparameter icd nil)
 (defparameter *initial-nuclear-diameter* 21s0)
-(defparameter *noise-threshold-2d* .1s0)
-(defparameter *noise-threshold-3d* .1s0)
+(defparameter *noise-threshold-2d* .8s0)
+(defparameter *noise-threshold-3d* .2s0)
 (defparameter *min-drop* .3s0)
 (defparameter *max-ray-change* 1.5s0)
 (defparameter *min-ray-change* .333s0)
@@ -78,7 +81,7 @@
 (biggest-part
  (point-list-sort (nuclear-seeds icf)) .92)
 
-(defun mark-nuclear-seeds (vol)
+(defun mark-nuclear-seeds (vol &key (value (coerce 0 (array-element-type vol))))
   (let ((res (make-array (array-dimensions vol)
 			 :element-type (array-element-type vol)))
 	(points (biggest-part
@@ -88,7 +91,7 @@
 	(setf (aref res k j i) (aref vol k j i))))
     (dolist (p points)
       (destructuring-bind (e (z y x)) p
-	(setf (aref res z y x) 0s0)))
+	(setf (aref res z y x) value)))
     res))
 
 (defun mark-max (vol)
@@ -124,9 +127,8 @@
 
 
 
-#+nil
-(time
- (defparameter *kern*
+(defun calc-kern ()
+ (setf *kern*
    (destructuring-bind (z y x) (array-dimensions icd)
      (let* ((kern (make-array (array-dimensions icd)
 			      :element-type '(complex single-float)))
@@ -203,17 +205,17 @@
 	 (format t "*"))
        (format t "~%"))))
 
-#+nil ;; histogram of 3d maxima
-(multiple-value-call #'print-histogram
-  (point-list-histogram *nuclear-center-set* 10))
-
-#+nil ;; histogram of 2d maxima
-(let ((res ()))
- (loop for i from 0 below 40 do
-   (dolist (c (mark-max-slice icf i))
-     (push c res)))
+(defun print-hist-3d ()
  (multiple-value-call #'print-histogram
-   (point-list-histogram res 20)))
+   (point-list-histogram *nuclear-center-set* 20)))
+
+(defun print-hist-2d ()
+ (let ((res ()))
+   (loop for i from 0 below 40 do
+	(dolist (c (mark-max-slice icf i))
+	  (push c res)))
+   (multiple-value-call #'print-histogram
+     (point-list-histogram res 20))))
 
 
 
@@ -330,13 +332,17 @@
 			  (avg-radius (/ ravg n))
 			  (centroid (list (/ py n) (/ px n))))
 		     (push (list avg-radius centroid) (aref centroids k))))))))
-      #+nil
+      
       (let ((nuclei (assign-all-polygons)))
 	(dolist (nucleus nuclei)
 	  (destructuring-bind ((r (z y x)) polygons) nucleus
-	    (draw-egg vol (* .8 r) (* 1s0 z) (* 1s0 y) (* 1s0 x)))))
+	    (draw-egg vol (* .8 r) (* 1s0 z) (* 1s0 y) (* 1s0 x) 255))))
+      
+      (setf *centroids* centroids)
       (vol:write-pgm (format nil "/dev/shm/vol-~3,'0d.pgm" step)
 		     (max-projection vol))
+      (vol:save-stack-ub8 (format nil "/dev/shm/vol~3,'0d/" step)
+			  vol)
       centroids)))
 
 #+nil
@@ -350,6 +356,7 @@
        (dolist (nucleus nuclei)
 	 (destructuring-bind ((r (z y x)) polygons) nucleus
 	   (draw-egg fil r (* 1s0 z) (* 1s0 y) (* 1s0 x) 1)))
+       
        (vol:write-pgm (format nil "/dev/shm/sp~3,'0d.pgm" step) 
 		      (vol:normalize-2-sf/ub8 
 		       (sum-projection fil)))))
@@ -365,22 +372,40 @@
 ;; for i in *.pgm ; do convert $i om.yuv ; cat om.yuv >> omp.yuv;done
 ;; x264 --input-res 290x354 --input-csp i420 -o o.264 omp.yuv
 
+;; montage two videos next to each other
+;; for i in vol*;do nr=`echo $i|cut -d - -f 2`;  montage -geometry 291 o^C$nr $i o.yuv ; cat o.yuv >> f/o.yuv ;done
+;; x264 --input-res 582x354 --input-csp i420 -o o.264 o.yuv
 
+;; combine 3 videos
+;; for i in vol*;do nr=`echo $i|cut -d - -f 2`;  montage -geometry 260 omp$nr $i sp$nr o.yuv  ; cat o.yuv >> f/o.yuv ;done
+;;  x264 --input-res 780x354 --input-csp i420 -o o.264 o.yuv
 (defun process-video-frame (step)
   (setf icd (vol:convert-3-ub16/csf-mul 
-	     (import:read-ics4-stack "/home/martin/cele.ics" step))
-	icf (vol:convert-3-csf/sf-realpart 
+	     (import:read-ics4-stack "/home/martin/cele.ics" step)))
+  (unless *kern*
+    (calc-kern))
+  (setf icf (vol:convert-3-csf/sf-realpart 
 	     (vol:convolve-circ-3-csf icd *kern*))
 	*nuclear-center-set* (nuclear-seeds icf)
 	*centroids* (get-centroids icf step))
   (vol:write-pgm (format nil "/dev/shm/omp~3,'0d.pgm" step)
 		 (max-projection 
 		  (vol:normalize-3-csf/ub8-realpart icd)))
-  (draw-blobs step))
+  (draw-blobs step)
+  (print-hist-2d)
+  (print-hist-3d))
 
 #+nil
-(dotimes (i 91)
-  (process-video-frame i))
+(time
+ (process-video-frame 90))
+
+#+nil
+(time
+ (with-open-file (*standard-output* "/dev/shm/log"
+				    :direction :output
+				    :if-does-not-exist :create)
+   (dotimes (i 91)
+     (process-video-frame i))))
 
 
 (defun draw-egg (vol radius cz cy cx &optional (val 0))
