@@ -30,9 +30,9 @@
     (convolve-circ points (draw-oval-csf radius z y x))))
 
 
-(defun draw-indexed-ovals (radius centers z y x)
+(defun draw-indexed-ovals (radius centers z y x &key (scale-z 5s0))
   "The first oval contains the value 1 the second 2, ..."
-  (declare (single-float radius)
+  (declare (single-float radius scale-z)
 	   (cons centers)
 	   (fixnum z y x)
 	   (values (simple-array (complex my-float) 3) &optional))
@@ -45,6 +45,6 @@
       (incf i)
       (setf (aref points (vec-i-z c) (vec-i-y c) (vec-i-x c))
 	    (complex (+ +one+ i))))
-    (convolve-circ points (draw-oval-csf radius z y x))))
+    (convolve-circ points (draw-oval-csf radius z y x :scale-z scale-z))))
 
 

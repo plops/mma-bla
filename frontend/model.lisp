@@ -75,12 +75,17 @@
   (;; each nucleus drawn with its index+1
    (index-spheres :accessor index-spheres :initarg :index-spheres
 		  :initform (make-array (list 0 0 0) :element-type 'my-float)
-		  :type (simple-array my-float 3))))
+		  :type (simple-array my-float 3))
+   (radius :accessor radius :initarg :radius :initform 12s0
+	   :type my-float)
+   (scale-z :accessor scale-z :initarg :scale-z :initform 5s0
+	    :type my-float)))
 
 (defmethod initialize-instance :after ((model sphere-model-angular) &key)
-  (with-slots (dimensions centers index-spheres) model
+  (with-slots (dimensions centers index-spheres radius scale-z) model
    (destructuring-bind (z y x) dimensions
-     (setf index-spheres (draw-indexed-ovals 12s0 centers z y x)))))
+     (setf index-spheres (draw-indexed-ovals radius centers z y x
+					     :scale-z scale-z)))))
 
 (defmethod print-object ((model sphere-model-angular) stream)
   (with-slots (dimensions centers dx dy dz) model

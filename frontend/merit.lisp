@@ -110,8 +110,9 @@ theta."
 circle to position X,Y inside the BFP with radius RR. Scale the unit
 circle to the window-radius R."
   (declare ((complex double-float) z)
-	   ((double-float -1d0 1d0) x/rr y/rr)
-	   ((double-float 0d0 1d0) r/rr)
+	   ;((double-float -1d0 1d0) x/rr y/rr)
+	   ;((double-float 0d0 1d0) r/rr)
+	   (double-float x/rr y/rr r/rr)
 	   (double-float rr)
 	   (values (complex double-float) &optional))
   (+ (complex (* x/rr rr) (* y/rr rr))
