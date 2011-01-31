@@ -81,11 +81,13 @@
 (biggest-part
  (point-list-sort (nuclear-seeds icf)) .92)
 
-(defun mark-nuclear-seeds (vol &key (value (coerce 0 (array-element-type vol))))
+(defun mark-nuclear-seeds (vol &key (value (coerce 0 (array-element-type vol)))
+			   (threshold .92))
   (let ((res (make-array (array-dimensions vol)
 			 :element-type (array-element-type vol)))
 	(points (biggest-part
-		 (point-list-sort (nuclear-seeds vol)) .92)))
+		 (point-list-sort (nuclear-seeds vol))
+		 threshold)))
     (destructuring-bind (z y x) (array-dimensions vol)
       (vol:do-region ((k j i) (z y x))
 	(setf (aref res k j i) (aref vol k j i))))
