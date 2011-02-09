@@ -84,6 +84,7 @@ to the onboard TCP Server.")
 (define-alien-routine ("SLM_Disconnect" disconnect)
     int
   "Close socket connection with the board.")
+
  
 (define-alien-routine ("SLM_LoadConfiguration" load-configuration)
     int

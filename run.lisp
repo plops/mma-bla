@@ -98,7 +98,25 @@ clara:*im*
 #+nil
 (select-disk *mma-bright*)
 #+nil
-(mma::draw-ring-cal :pic-number 1)
+(dotimes (j 12)
+ (let ((n 30)
+       (dr/2 .025s0))
+   (dotimes (i n) 
+     (let ((r (+ dr/2 (* (- 1s0 (* 2 dr/2))
+			 (/ (* 1s0 i) n)))))
+       (mma::draw-disk-cal :r-small (- r dr/2) :r-big (+ r dr/2) :pic-number 5))
+     #+nil (sleep .1))))
+
+#+nil ;; draw some arbitrary data
+(let* ((n 256)
+       (m (make-array (list n n) :element-type '(unsigned-byte 12))))
+  (dotimes (j (floor n 2))
+    (dotimes (i n)
+      (setf (aref m j i) (* i 16))))
+  (mma:draw-array-cal m :pic-number 5)
+  nil)
+
+(defvar *mma-contents* nil)
 #+nil
 (time
  (progn
@@ -108,6 +126,7 @@ clara:*im*
    #+nil (mma:load-white :radius 1.0 :pic-number 1)
    #+nil (mma:load-concentric-circles :n 12)
    #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
+   #+nil (setf *mma-contents* (mma::draw-ring-cal :r-small .3 :r-big .8))
    #+nil (setf *mma-contents* (mma::load-concentric-circles :dr .1 :n 12))
    (let ((n 3))
      (setf *mma-contents* (mma:load-disks2 :n n)
@@ -203,7 +222,7 @@ clara:*im*
 
 
 
-;; OBBTTAIN
+;; OBTAIN
 #+nil
 (obtain-sectioned-slice)
 #+nil
@@ -449,7 +468,7 @@ clara:*im*
   (mma:select-pictures q :n 1 :ready-out-needed t))
 
 #+nil
-(select-disk 24)
+(select-disk 4)
 
 #+nil
 (sb-thread:make-thread 

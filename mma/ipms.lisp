@@ -12,7 +12,8 @@
    #:load-concentric-circles
    #:status
    #:set-nominal-deflection-nm
-   #:get-nominal-deflection-nm))
+   #:get-nominal-deflection-nm
+   #:draw-array-cal))
 
 (in-package :mma)
  
@@ -163,13 +164,31 @@
 	(let* ((x (* 2.0 1/n (- i nh cx)) )
 	       (y (* 2.0 1/n (- j nh cy)))
 	       (r (sqrt (+ (* x x) (* y y))))
-	       (v (if (< r-small r r-big) 
+	       (v (if (<= r-small r r-big) 
 		      value
 		      0)))
 	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
 		(aref buf i j 1) (ldb (byte 8 8) v)))))
     (write-data-cal buf :pic-number pic-number)
     buf))
+
+(defun draw-array-cal (img &key (pic-number 1))
+  "Store 12bit image in 24bit chunks. Zero is dark."
+  (declare (type (simple-array (unsigned-byte 12) (256 256)) img)
+	   (type fixnum pic-number)
+	   (values ))
+  (destructuring-bind (h w) (array-dimensions img)
+    (assert (= 256 h w))
+    (let* ((n 256)
+	   (buf (make-array (list n n 3) 
+			    :element-type '(unsigned-byte 8))))
+     (dotimes (j h)
+       (dotimes (i w)
+	 (let ((v (aref img j i)))
+	   (setf (aref buf j i 0) (ldb (byte 8 0) v) 
+		 (aref buf j i 1) (ldb (byte 8 8) v)))))
+     (write-data-cal buf :pic-number pic-number)
+     (the (simple-array (unsigned-byte 8) (256 256 3)) buf))))
 
 #+nil
 (progn
@@ -231,9 +250,10 @@
     (unless (= 0 retval)
       (format t "read-status didn't return 0.~%"))
     (if (not (= 0 error))
-	(format t "error(s) detected:~%~a~%status: ~a~%retval: ~a~%"
-		(list 'error error 'error-bits (parse-error-bits error)) 
-		'status-bits (parse-status-bits status) 'retval retval)
+	(format t "error: ~a~%error-bits:~%~a~% status-bits:~%~a~%retval: ~a~%"
+		error (parse-error-bits error)
+		(parse-status-bits status)
+		retval)
 	(format t "status ~a~%" (parse-status-bits status)))
     (parse-status-bits status)))
 #+nil 
@@ -312,6 +332,7 @@
   (end)
   (set-power-off)
   (disconnect)
+
 #+nil  (sb-alien:unload-shared-object ipms-ffi::*library*))
 
 (defun set-nominal-deflection-nm (&optional (value 118.25s0))
