@@ -51,7 +51,7 @@
   (unless (= 0 (connect))
     (error "Library couldn't connect to board."))
   (load-configuration "/home/martin/linux-mma2_20101101/Delivery_2010_11_01_KCL/Linux-Board-Control/TestApplication/64Bit/800803_dmdchanged.ini")
-  (load-calibration-data "/home/martin/linux-mma2_20110121/VC2610_18_87_2010-12-02_Rand-5_0-250nm_Typ1.cal")
+  (load-calibration-data "/home/martin/linux-mma2_20110208/VC2610_13_61_2010-12-02_Rand-5_0-250nm_Typ1.cal")
   ;; (set-voltage +volt-pixel+ 17.5s0)
   ;; (set-voltage +volt-frame-f+ 20.0s0)
   ;; (set-voltage +volt-frame-l+ 20.0s0)
@@ -232,8 +232,8 @@
       (format t "read-status didn't return 0.~%"))
     (if (not (= 0 error))
 	(format t "error(s) detected:~%~a~%status: ~a~%retval: ~a~%"
-		(list error (parse-error-bits error)) 
-		(parse-status-bits status) retval)
+		(list 'error error 'error-bits (parse-error-bits error)) 
+		'status-bits (parse-status-bits status) 'retval retval)
 	(format t "status ~a~%" (parse-status-bits status)))
     (parse-status-bits status)))
 #+nil 
@@ -310,6 +310,7 @@
 
 (defun uninit ()
   (end)
+  (set-power-off)
   (disconnect)
 #+nil  (sb-alien:unload-shared-object ipms-ffi::*library*))
 

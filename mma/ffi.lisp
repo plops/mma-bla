@@ -44,7 +44,9 @@
 	   #:load-calibration-data
 	   #:set-parameter
 	   #:get-parameter
-	   #:reset))
+	   #:reset
+	   #:get-cycle-time
+	   #:set-cycle-time))
 
 ;; to generate list of functions in this file:
 ;; for i in `cat ipms-ffi.lisp|grep define-ali|cut -d " " -f 3|cut -d ")" -f 1`;do echo \#:$i;done
@@ -290,3 +292,12 @@ deflection has number 1001 and returns a single float."
     int
   "Reset system software and reboot.")
 
+(define-alien-routine ("SLM_GetCycleTime" get-cycle-time)
+    int
+  "Get cycle time, calculated from deflection phase width."
+  (cycle-time-ms single-float :out))
+
+(define-alien-routine ("SLM_SetCycleTime" set-cycle-time)
+    int
+  "Exact picture timing, timespan between two pictures."
+  (cycle-time-ms single-float))

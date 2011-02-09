@@ -6,17 +6,24 @@
 #+nil ;; fill two screens
 (sb-thread:make-thread 
  #'(lambda ()
+     (sb-ext:run-program "/usr/bin/xset"
+			 '("-dpms" "s" "off"))
      (gui:with-gui ((* 1280 2) 1024 0 0)
        (draw-screen)))
  :name "display")
 
+(defparameter *exposure-time-s* .0163s0)
 ;;; Clara CAMERA
 #+nil
-(clara:init :exposure-s .0163s0 
-	    :fast-adc nil
-	    :external-trigger t
-	    ;;:xpos -290 :ypos 100
-	    :width 1392 :height 1040)
+(progn
+  (setf *exposure-time-s* (* .0163s0 1))
+ (clara:init :exposure-s  *exposure-time-s*
+	     :fast-adc t
+	     :external-trigger t
+	     ;;:xpos -290 :ypos 100
+	     ;:width 128 :height 128
+	     :width 1392 :height 1040
+	     ))
 ;; continuously capture new images
 (defparameter *capture-thread* nil)
 (defun start-capture-thread (&optional (delay nil))
@@ -37,7 +44,7 @@
      (setf *capture-thread* nil))
    is-running))
 #+nil
-(start-capture-thread .16s0)
+(start-capture-thread 0s0)
 #+nil
 (stop-capture-thread)
 #+nil
@@ -57,9 +64,13 @@ clara:*im*
 ;; /usr/local/bin/uvcdynctrl -v -s "Exposure (Absolute)" 10000
 
 #+nil
-(mma:init)
+(progn
+ (mma:init)
+ (mma:set-nominal-deflection-nm 118.25))
 #+nil
 (mma:status)
+#+nil
+(mma:get-nominal-deflection-nm)
 #+nil
 (mma::set-start-mma)
 #+nil
@@ -68,13 +79,24 @@ clara:*im*
 (progn
   (mma::set-stop-mma)
   (mma::set-extern-trigger t)
-  (mma::set-deflection-phase 0s0 16300s0)
+  (let* ((e-ms (* 1000 *exposure-time-s*))
+	(e-us (* 1000 e-ms)))
+    (mma::set-deflection-phase 0s0 e-us)
+    (mma::set-cycle-time (* 2 e-ms)))
   (mma:begin))
+#+nil
+(mma::get-cycle-time)
+#+nil
+
 (defvar *mma-contents* nil)
 (defvar *mma-select* 0)
-#+nil
-(mma::select-pictures 25 :n 1 :ready-out-needed t)
 
+(defparameter *mma-dark* 26)
+(defparameter *mma-bright* 25)
+#+nil
+(mma::select-pictures 0 :n 9 :ready-out-needed t)
+#+nil
+(select-disk *mma-bright*)
 #+nil
 (mma::draw-ring-cal :pic-number 1)
 #+nil
@@ -87,15 +109,23 @@ clara:*im*
    #+nil (mma:load-concentric-circles :n 12)
    #+nil (setf *mma-contents* (mma::load-concentric-disks :n 12))
    #+nil (setf *mma-contents* (mma::load-concentric-circles :dr .1 :n 12))
-   (setf *mma-contents* (mma:load-disks2 :n 3))
-   (append *mma-contents* (list (mma::draw-disk-cal :pic-number 26)
-				(mma::draw-disk-cal :pic-number 27 :value 0)))
+   (let ((n 3))
+     (setf *mma-contents* (mma:load-disks2 :n n)
+	   *mma-bright* (* n n)
+	   *mma-dark* (+ (* n n) 1))
+     (append *mma-contents* 
+	     (list (mma::draw-disk-cal :pic-number (1+ *mma-bright*))
+		   (mma::draw-disk-cal :pic-number (1+ *mma-dark*) 
+				       :value 0))))
    #+nil(mma::draw-grating)
    (mma:begin)))
 #+nil
 (mma:uninit)
 #+nil
 (mma::reset)
+
+
+
 
 ;;; FOCUS STAGE OVER SERIAL (look for pl2303 converter in dmesg)
 #+nil
@@ -109,6 +139,31 @@ clara:*im*
 #+nil
 (focus:disconnect)
 
+
+(defvar *section-im* nil)
+(defvar *widefield-im* nil)
+(defvar *unfocused-im* nil)
+(defvar *dark-im* nil)
+(defvar *bright-im* nil)
+(defvar *stack* nil)
+
+(defparameter *data-dir* "/home/martin/d0128/")
+
+(defmacro dir (&rest rest)
+  `(concatenate 'string *data-dir* ,@rest))
+
+(defun  obtain-image (&optional (mma-image *mma-bright*))
+  (select-disk mma-image)
+  (setf *dark-im* nil)
+  (setf *bright-im* t)
+  (sleep .1)
+  (clara:snap-single-image)
+  (write-pgm16 (dir (format nil "snap~3,'0d.pgm" mma-image)) 
+	       clara:*im*)
+  (setf *bright-im* nil
+	*dark-im* nil)
+  (select-disk *mma-bright*))
+
 (defun clamp-u16 (a)
   (declare (values (unsigned-byte 16) &optional))
   (let ((ma #.(1- (expt 2 16))))
@@ -116,27 +171,56 @@ clara:*im*
 	 ((< ma a) ma)
 	 (t a))))
 
-(defvar *section-im* nil)
-(defvar *widefield-im* nil)
-(defvar *unfocused-im* nil)
-(defvar *dark-im* nil)
-(defvar *stack* nil)
-
-;; OBTAIN
+;; capture image with angular illumination
 #+nil
-(obtain-sectioned-slice :accumulate 1)
+(progn
+  (setf *bright-im* t
+	*dark-im* nil)
+  (sleep .1)
+  (dotimes (i *mma-dark*)
+   (obtain-image i)
+   (sleep 1))
+ (setf *bright-im* nil
+       *dark-im* t)
+ (obtain-image *mma-dark*))
+
+;; store MMA images
+#+nil
+(let ((i 0))
+ (dolist (e *mma-contents*)
+   (let ((r (make-array (butlast (array-dimensions e))
+			:element-type '(unsigned-byte 8))))
+     (destructuring-bind (y x) (array-dimensions r)
+       (dotimes  (j y)
+	 (dotimes (i x)
+	   (setf (aref r j i) (aref e j i 0)))))
+    (write-pgm (dir (format nil "mma~3,'0d.pgm" i)) r))
+   (incf i)))
+
+#+nil
+(obtain-image)
 
 
+
+
+;; OBBTTAIN
+#+nil
+(obtain-sectioned-slice)
+#+nil
+(progn
+ (obtain-stack :n 20 :offset 3 :dz 2s0)
+ nil)
+(declaim (optimize (speed 1) (debug 3) (safety 3)))
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
 (let* ((white-width 2)
-       (phases-x 12)
+       (phases-x 8)
        (phases-y 1)
        (a (make-array (* phases-x phases-y white-width) 
 		      :element-type '(unsigned-byte 8)))
        (phase 0)
        
-       (im-scale 100s0) (im-offset 1.86s0)
-       ;(im-scale 30s0) (im-offset 0.0s0)
+       ;(im-scale 100s0) (im-offset 1.86s0)
+       (im-scale 20s0) (im-offset 0.019s0)
        )
 
   (defun change-phase (p)
@@ -156,9 +240,39 @@ clara:*im*
 	    (gl:vertex (cos phi) (sin phi))))
 	(gl:vertex 1.0 0.0))))
 
-  (defun obtain-sectioned-slice (&key (accumulate 1))
+  (defun obtain-sectioned-slice (&key (mma-image *mma-bright*)
+				 (accumulate 1) (z 0))
     (let ((capture-was-running (stop-capture-thread)))
       (destructuring-bind (w h) (array-dimensions clara:*im*)
+	
+	(let ((dark-im (make-array (list w h)
+				   :element-type '(unsigned-byte 16))))
+	  ;; capture a dark image
+	  (setf *dark-im* t) ;; dark LCOS
+	  (select-disk *mma-dark*)
+	  (sleep 1/60)
+	  (clara:snap-single-image)
+	  (dotimes (j h)
+	    (dotimes (i w)
+	      (setf (aref dark-im i j) (aref clara:*im* i j))))
+	  (write-pgm16 (dir (format nil "~3,'0d-0-dark.pgm" z))
+		       dark-im)
+	  ;; capture bright widefield image
+	  (select-disk *mma-bright*)
+	  (setf *dark-im* nil)
+	  (setf *bright-im* t)
+	  (sleep 1/60)
+	  (clara:snap-single-image)
+	  (dotimes (j h)
+	    (dotimes (i w)
+	      (setf (aref dark-im i j) (aref clara:*im* i j))))
+	  (write-pgm16 (dir (format nil "~3,'0d-0-bright.pgm" z))
+		       dark-im)
+	  (setf *bright-im* nil
+		*dark-im* nil)
+	  (select-disk mma-image)
+	  (sleep 1/60))
+	(format t "dark and bright image captured~%")
 	(let ((phase-im (make-array (list phases-y phases-x w h) 
 				    :element-type '(signed-byte 64)))
 	      (widefield-im (make-array (list w h) 
@@ -172,8 +286,8 @@ clara:*im*
 	 (dotimes (py phases-y)
 	   (dotimes (px phases-x)
 	     (change-phase (+ px (* phases-x py)))
-	     (format t "~a~%" (list 'px px 'py py))
-	     (sleep 1/60)
+	     (format t "~a~%" (list 'z z "phase" 'px px 'py py))
+	     (sleep .5)
 	     (clara:snap-single-image)
 	     (dotimes (a accumulate)
 	       (dotimes (j h)
@@ -182,7 +296,10 @@ clara:*im*
 		     (incf (aref phase-im py px i j) v)
 		     (incf (aref widefield-im i j) v)
 		     (setf (aref *widefield-im* i j)
-			   (clamp-u16 (floor (aref widefield-im i j) 2)))))))))
+			   (clamp-u16 (floor (aref widefield-im i j) 2)))))))
+	     (write-pgm16 (dir (format nil "~3,'0d-1-phase~3,'0d-~3,'0d.pgm"
+				       z py px))
+			  clara:*im*)))
 	 ;; final widefield image normalize to full 16bit range
 	 (let ((ma 0)
 	       (mi (1- (expt 2 64))))
@@ -193,46 +310,56 @@ clara:*im*
 		       mi (min v mi)))))
 	   (dotimes (j h)
 	     (dotimes (i w)
-	       (setf (aref *widefield-im* i j) (floor (- (aref widefield-im i j) mi)
-						      (/ (- ma mi) (1- (expt 2 16)))))))
+	       (setf (aref *widefield-im* i j) 
+		     (floor (- (aref widefield-im i j) mi)
+			    (/ (- ma mi) (1- (expt 2 16)))))))
 	   (format t "values in accumulated widefield image: ~a~%" (list mi ma))
 	   ;; min-max reconstruction
-	   (dotimes (j h)
-	     (dotimes (i w)
-	       (let* ((v (aref phase-im 0 0 i j))
-		      (ma v)
-		      (mi v))
-		 (dotimes (py phases-y)
-		   (dotimes (px phases-x)
-		     (let ((v (aref phase-im py px i j)))
-		       (setf mi (min mi v)
-			     ma (max ma v)))))
-		 (setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
-
+	   (progn
+	    (dotimes (j h)
+	      (dotimes (i w)
+		(let* ((v (aref phase-im 0 0 i j))
+		       (ma v)
+		       (mi v))
+		  (dotimes (py phases-y)
+		    (dotimes (px phases-x)
+		      (let ((v (aref phase-im py px i j)))
+			(setf mi (min mi v)
+			      ma (max ma v)))))
+		  (setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
+	    (write-pgm16 
+	     (dir (format nil "~3,'0d-2-section.pgm" z))
+	     *section-im*))
+	   
 	   ;; subtract section image from accumulated widefield image
-	   (setf *unfocused-im* (make-array (list w h) :element-type '(unsigned-byte 16)))
+	   (setf *unfocused-im* (make-array
+				 (list w h)
+				 :element-type '(unsigned-byte 16)))
 	   (dotimes (j h)
 	     (dotimes (i w)
 	       (setf (aref *unfocused-im* i j)
-		     (clamp-u16 (- (aref *widefield-im* i j) 
-				   (floor (aref *section-im* i j) 
-					  ;; uses max and min from widefield
-					  (/ (- ma mi) (* 20 (1- (expt 2 16))))))))))))
+		     (clamp-u16 
+		      (- (aref *widefield-im* i j) 
+			 (floor (aref *section-im* i j) 
+				;; uses max and min from widefield
+				(/ (- ma mi) (* 20 (1- (expt 2 16))))))))))))
 	(format t "maximum value in section ~a~%"
 		(reduce #'max (sb-ext:array-storage-vector *section-im*))))
       (when capture-was-running
 	(start-capture-thread))))
   
-  (defun obtain-stack (&key (n 30) (dz .1s0) (accumulate 1))
+  (defun obtain-stack (&key (n 30) (dz .1s0) (offset (floor n 2)) (accumulate 1))
+    (declare (ignore accumulate))
     (let ((center (focus:get-position))
 	  (result nil))
       (dotimes (k n)
-	(let ((z (+ center (* dz (- k (floor n 2))))))
+	(let ((z (+ center (* dz (- k offset)))))
 	  (format t "slice ~f ~d/~d~%" z (1+ k) n)
 	  (focus:set-position z)
 	  (sleep .1)
-	  (obtain-sectioned-slice :accumulate accumulate)
+	  (obtain-sectioned-slice :z k)
 	  (push (list z *section-im*) result)))
+      (focus:set-position center)
       (setf *stack* (reverse result))))
 
   (defun draw-screen ()
@@ -240,7 +367,9 @@ clara:*im*
     (gl:clear :color-buffer-bit)
     ;; draw raw camera image on the left
     (gl:with-pushed-matrix
-      (gl:scale .25 .25 1s0)
+      
+      (gl:scale 2 2 1s0)
+      (gl:translate -450 -200 0)
       (when clara:*im*
 	(let ((tex (make-instance 'gui::texture :data clara:*im* 
 				  :scale im-scale :offset im-offset)))
@@ -251,7 +380,7 @@ clara:*im*
       (gl:with-pushed-matrix
 	(when *section-im*
 	  (let ((tex (make-instance 'gui::texture :data *section-im*
-				    :scale 4000s0 :offset 0.03s0)))
+				    :scale 3000s0 :offset 0.0005s0)))
 	    (destructuring-bind (w h) (array-dimensions *section-im*)
 	      (gl:translate w 0 0)
 	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
@@ -259,7 +388,7 @@ clara:*im*
 	;; draw accumulated widefield image below
 	(when *widefield-im*
 	  (let ((tex (make-instance 'gui::texture :data *widefield-im*
-				    :scale 5s0 :offset 0.0s0
+				    :scale 7s0 :offset 0.3s0
 				    )))
 	    (destructuring-bind (w h) (array-dimensions *widefield-im*)
 	      (gl:translate 0 h 0)
@@ -297,11 +426,11 @@ clara:*im*
 		   :ht repetition))))
 
     ;; FAN
-    ;#+nil
-    (gl:with-pushed-matrix
-      (gl:color 1 1 1)
-      (gl:translate (+ 1000 400 -175.0) 535.0 0.0)
-      (draw-disk-fan :radius 100.0))
+    (when *bright-im*
+     (gl:with-pushed-matrix
+       (gl:color 1 1 1)
+       (gl:translate (+ 1000 400 -175.0) 535.0 0.0)
+       (draw-disk-fan :radius 100.0)))
 
     #+nil
     (gl:with-primitive :lines
@@ -360,7 +489,7 @@ clara:*im*
                        :if-exists :supersede
                        :if-does-not-exist :create)
       (declare (stream s))
-      (format s "P5~%~D ~D~%255~%" w h))
+      (format s "P5~%~D ~D~%255~%" h w))
     (with-open-file (s filename 
                        :element-type '(unsigned-byte 8)
                        :direction :output
@@ -379,7 +508,7 @@ clara:*im*
                        :if-exists :supersede
                        :if-does-not-exist :create)
       (declare (stream s))
-      (format s "P5~%~D ~D~%65535~%" w h))
+      (format s "P5~%~D ~D~%65535~%" h w))
     (with-open-file (s filename 
                        :element-type '(unsigned-byte 16)
                        :direction :output
