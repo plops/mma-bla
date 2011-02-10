@@ -6,6 +6,60 @@
 ;#.(require :rayt)
 
 
+(defun extract (a &key (start nil) (center nil) (size nil))
+  (let ((b (make-array size :element-type (array-element-type a))))
+    (destructuring-bind (w h) (array-dimensions a)
+     (destructuring-bind (yy xx) size
+       (let* ((centert (if center
+			   center
+			   (mapcar #'(lambda (x) (floor x 2))
+				   (list h w)))) 
+	      (startt (if start
+			  start
+			  (mapcar #'- centert
+				  (mapcar #'(lambda (x) (floor x 2))
+					  size))))
+	      (a1 (sb-ext:array-storage-vector a)))
+	 (destructuring-bind (sy sx) startt
+	   (vol:do-region ((j i) (yy xx))
+	     (setf (aref b j i) (aref a1 (+ (+ sx i) (* w (+ sy j))))))
+	   b))))))
+;;
+(load "../../0126/bead-eval/bead-eval.lisp")
+
+(defun extract-stack (stack)
+  (let* ((h 600)
+	(w 700)
+	(n (list-length stack))
+	(vol (make-array (list n h w) :element-type 'single-float)))
+    (dotimes (k n)
+      (destructuring-bind (z img) (elt stack k)
+	(declare (ignore z))
+	(let ((slice (vol:convert-2-ub16/sf-mul 
+		      (bead-eval:byte-swap (extract img
+						    :start '(264 420)
+						    :size (list h w))))))
+	  (vol:do-region ((j i) (h w))
+	    (setf (aref vol k j i) (aref slice j i))))))
+    (the (simple-array single-float 3) vol)))
+
+#+nil
+(defparameter *p*
+ (extract-stack *stack*))
+
+(defparameter *g3* (bead-eval:make-gauss3 *p* :sigma-x-pixel 5s0))
+(defparameter *bp* (vol:convert-3-csf/sf-realpart 
+		    (vol:convolve-circ-3-csf *g3* (vol:convert-3-sf/csf-mul *p*))))
+(vol:save-stack-ub8 (dir "filtered-stack") (vol:normalize-3-sf/ub8 *bp*))
+
+
+(vol:save-stack-ub8 (dir "seeds")
+		(vol:normalize-3-sf/ub8
+		 (run-ics::mark-nuclear-seeds *bp* :threshold .3)))
+
+
+
+;; for homology
 
 (deftype num () `single-float)
 (deftype vec () `(simple-array num (3)))
