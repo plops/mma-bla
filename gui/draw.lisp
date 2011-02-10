@@ -16,11 +16,11 @@
 	(sb-sys:with-pinned-objects (data)
 	  (let* ((data1 (sb-ext:array-storage-vector data))
 		 (data-sap (sb-sys:vector-sap data1)))
-	    (matrix-mode :color)
+	    #+nil (matrix-mode :color)
 	    (with-pushed-matrix 
-	      (load-identity)
-	      (scale scale scale scale)
-	      (translate (- offset) (- offset) (- offset))
+	      #+nil (load-identity)
+	      #+nil (scale scale scale scale)
+	      #+nil (translate (- offset) (- offset) (- offset))
 	      (tex-image-2d target 0 :luminance16 w h 0 :luminance
 			    :unsigned-short data-sap))
 	    (matrix-mode :modelview)))))))

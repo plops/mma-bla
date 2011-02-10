@@ -2,15 +2,79 @@
 #.(require :clara)
 #.(require :mma)
 #.(require :focus)
+(push "../../0131/rayt/" asdf:*central-registry*)
+;#.(require :rayt)
 
-#+nil ;; fill two screens
+
+
+(deftype num () `single-float)
+(deftype vec () `(simple-array num (3)))
+(deftype mat () `(simple-array num (3 3)))
+
+(declaim (inline vx vy vz))
+(defun vx (v) (declare (type vec v)) (the num (aref v 0)))
+(defun vy (v) (declare (type vec v)) (the num (aref v 1)))
+(defun vz (v) (declare (type vec v)) (the num (aref v 2)))
+
+(defun v (&optional (x 0s0) (y 0s0) (z 0s0))
+  (the vec (make-array 3 :element-type 'num :initial-contents (list (float x) 
+								    (float y)
+								    (float z)))))
+
+#+nil
+(vx (v 1 2 34))
+
+(defun m (a b c d e f g h i)
+  (declare (type num a b c d e f g h i))
+  (the mat 
+    (make-array '(3 3)
+		:element-type 'num
+		:initial-contents (list (list a b c)
+					(list d e f)
+					(list g h i)))))
+
+(defun m* (matrix vect)
+  "Multiply MATRIX with VECT."
+  (declare (type mat matrix) (type vec vect))
+  (let ((res (v)))
+    (dotimes (i 3)
+      (dotimes (j 3)
+        (incf (aref res i)
+              (* (aref matrix i j) (aref vect j)))))
+    res))
+
+
+(defun .s (s a)
+  "scalar multiplication"
+  (declare (type num s)
+	   (type vec a))
+  (let ((r (v)))
+    (dotimes (i (length a))
+      (setf (aref r i) (* s (aref a i))))
+    r))
+
+(defun cam->lcos (cam)
+  (declare (type vec cam))
+  (let* ((slcos (m* (m -1.0437 0.02797 1339.98
+		       .001000 1.05462 -6.178
+		       2.64e-6 2.48e-5 .986)
+		    cam)))
+    (the vec (.s (/ (vz slcos)) slcos))))
+
+#+nil
+(cam->lcos (v 0 0 1))
+
+
+#+nil ;; FILL two screens
 (sb-thread:make-thread 
  #'(lambda ()
      (sb-ext:run-program "/usr/bin/xset"
 			 '("-dpms" "s" "off"))
-     (gui:with-gui ((* 1280 2) 1024 0 0)
+     (gui:with-gui ((+ 1280 1366) 1024 -1 -1)
        (draw-screen)))
  :name "display")
+
+
 
 (defparameter *exposure-time-s* .0163s0)
 ;;; Clara CAMERA
@@ -20,7 +84,7 @@
  (clara:init :exposure-s  *exposure-time-s*
 	     :fast-adc t
 	     :external-trigger t
-	     ;;:xpos -290 :ypos 100
+	     ;:xpos -290 :ypos 100
 	     ;:width 128 :height 128
 	     :width 1392 :height 1040
 	     ))
@@ -172,7 +236,7 @@ clara:*im*
 (defvar *bright-im* nil)
 (defvar *stack* nil)
 
-(defparameter *data-dir* "/home/martin/d0128/")
+(defparameter *data-dir* "/home/martin/d0210/")
 
 (defmacro dir (&rest rest)
   `(concatenate 'string *data-dir* ,@rest))
@@ -227,7 +291,6 @@ clara:*im*
 
 
 
-
 ;; OBTAIN
 #+nil
 (obtain-sectioned-slice)
@@ -238,7 +301,7 @@ clara:*im*
 (declaim (optimize (speed 1) (debug 3) (safety 3)))
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
 (let* ((white-width 2)
-       (phases-x 8)
+       (phases-x 4)
        (phases-y 1)
        (a (make-array (* phases-x phases-y white-width) 
 		      :element-type '(unsigned-byte 8)))
@@ -390,11 +453,11 @@ clara:*im*
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
     (gl:clear :color-buffer-bit)
-    ;; draw raw camera image on the left
+    ;; BACK draw raw camera image on the left
     (gl:with-pushed-matrix
       
-      (gl:scale 2 2 1s0)
-      (gl:translate -450 -200 0)
+      (gl:scale .25 .25 1s0)
+      (gl:translate 0 900 0)
       (when clara:*im*
 	(let ((tex (make-instance 'gui::texture :data clara:*im* 
 				  :scale im-scale :offset im-offset)))
@@ -420,7 +483,7 @@ clara:*im*
 	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
 	    (gui:destroy tex))))
       ;; draw an image with only out of focus light in the lower left
-      (gl:with-pushed-matrix
+      #+nil(gl:with-pushed-matrix
 	(when *unfocused-im*
 	  (let ((tex (make-instance 'gui::texture :data *unfocused-im*
 				    :scale 10s0 :offset 0.0s0)))
@@ -440,22 +503,25 @@ clara:*im*
 		    (gui:destroy tex)))))
       )    
     ;; draw grating for sectioning on the very right
-    (gl:translate (+ 280 400) 0 0)
-    (unless *dark-im*
-     (let ((repetition 900f0))
-       (gui::with-grating (g a)
-	 (gui:draw g 
-		   :w (* repetition white-width phases-x)
-		   :h (* repetition white-width phases-y)
-		   :wt repetition
-		   :ht repetition))))
+    (gl:with-pushed-matrix 
+      (gl:translate (+ 280 400) 0 0)
+      (unless *dark-im*
+	(let ((repetition 900f0))
+	  (gui::with-grating (g a)
+	    (gui:draw g 
+		      :w (* repetition white-width phases-x)
+		      :h (* repetition white-width phases-y)
+		      :wt repetition
+		      :ht repetition)))))
 
     ;; FAN
     (when *bright-im*
      (gl:with-pushed-matrix
+       (gl:translate 1366 0 0)
        (gl:color 1 1 1)
-       (gl:translate (+ 1000 400 -175.0) 535.0 0.0)
-       (draw-disk-fan :radius 100.0)))
+       (let ((c (cam->lcos (v  (/ 1392 2) (+ 120 (/ 1040 2)) 1))))
+	 (gl:translate (vx c) (vy c) 0.0))
+       (draw-disk-fan :radius 10.0)))
 
     #+nil
     (gl:with-primitive :lines
@@ -561,4 +627,3 @@ clara:*im*
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" wide)
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" section)
  (save-bfp-mosaic "/home/martin/tmp/mosaic7" unfocus))
-
