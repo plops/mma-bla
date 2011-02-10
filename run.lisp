@@ -68,7 +68,11 @@ clara:*im*
  (mma:init)
  (mma:set-nominal-deflection-nm 118.25))
 #+nil
+(mma:set-nominal-deflection-nm 118.25)
+#+nil
 (mma:status)
+#+nil
+(mma::set-power-off)
 #+nil
 (mma:get-nominal-deflection-nm)
 #+nil
@@ -110,11 +114,13 @@ clara:*im*
 #+nil ;; draw some arbitrary data
 (let* ((n 256)
        (m (make-array (list n n) :element-type '(unsigned-byte 12))))
-  (dotimes (j (floor n 2))
+  (dotimes (j n)
     (dotimes (i n)
-      (setf (aref m j i) (* i 16))))
+      (setf (aref m j i) (* 4095 (mod j 2)))))
   (mma:draw-array-cal m :pic-number 5)
   nil)
+#+nil
+(select-disk 4)
 
 (defvar *mma-contents* nil)
 #+nil

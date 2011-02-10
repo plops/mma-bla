@@ -1,4 +1,4 @@
 (asdf:defsystem clara
-  :components ((:module "clara" :components ((:file "package")
+  :components ((:module "clara" :serial t :components ((:file "package")
 					     (:file "ffi")
 					     (:file "clara")))))
