@@ -1,16 +1,24 @@
-#.(require :gui) ;; make sure DISPLAY is exported
-#.(require :clara)
-#.(require :mma)
-#.(require :focus)
-(push "../../0131/rayt/" asdf:*central-registry*)
-#.(require :rayt)
 
+(eval-when (:compile-toplevel :execute :load-toplevel)
+  (require :gui) ;; make sure DISPLAY is exported
+  (require :clara)
+ (require :mma)
+ (require :focus)
+ (setf asdf:*central-registry*
+       '("../../0102/woropt-cyb-0628/"
+	 "../../0131/rayt/"
+	 "../../0126/bead-eval/"))
+ (require :rayt)
+ (require :vol)
+ (require :bead-eval))
 #+nil ;; for saveing lisp datastructures
 (require :cl-store)
 #+nil ;; save data
-(cl-store:store *stack* (dir "stack.store"))
+(progn
+ (cl-store:store *stack* (dir "stack.store"))
+ nil)
 #+nil ;; load data again
-(defparameter *stack2* (cl-store:restore (dir "stack.store")))
+(defparameter *stack* (cl-store:restore (dir "stack.store")))
 
 
 (defun extract (a &key (start nil) (center nil) (size nil))
@@ -32,7 +40,7 @@
 	     (setf (aref b j i) (aref a1 (+ (+ sx i) (* w (+ sy j))))))
 	   b))))))
 ;;
-(load "../../0126/bead-eval/bead-eval.lisp")
+;(load "../../0126/bead-eval/bead-eval.lisp")
 
 ;; set this to y x of the upper left edge of the region of interest
 (defparameter *extract-offset* '(264 420))
