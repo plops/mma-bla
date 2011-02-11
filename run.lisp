@@ -18,6 +18,10 @@
 (progn
  (cl-store:store *stack* (dir "stack.store"))
  nil)
+
+(progn
+  (cl-store:store *bfps* (dir "bfps.store"))
+  nil)
 #+nil ;; load data again
 (defparameter *stack* (cl-store:restore (dir "auswert/stack.store")))
 
@@ -91,7 +95,7 @@
 			     (list z y x)))
 		  (subseq (run-ics::point-list-sort 
 			   (run-ics::nuclear-seeds *bp*))
-			  0 4)))))
+			  0 5)))))
   (setf rayt-model:*centers-fix*
 	(make-array (length l)
 		    :element-type 'rayt-model::vec
@@ -150,24 +154,35 @@
 		(vol:normalize-2-ub8/ub8 bfp))
      bfp)))
 
-#+nil ;; illuminate several points inside ffp
-(time
- (dotimes (nuc (length rayt-model:*centers*))
-   (defparameter *bfp-sum*
-     (let ((bfp (rayt::make-image 256)))
-       (dotimes (protect 11)
-	 (multiple-value-bind (bfp2 ffp)
-	     (simple-rayt:sum-bfp-raster
-	      bfp nuc protect
-	      :radius-ffp-mm 3s-3
-	      :radius-project-mm 2s-3
-	      :w-ffp 256)
-	   (when (= protect nuc) ;; store LCoS image
-	     (write-pgm (dir "ffp-~3,'0d.pgm" nuc)
-			(vol:normalize-2-ub8/ub8 ffp)))))
-       (write-pgm (dir "bfp-sum-00-~3,'0d.pgm" nuc)
-		  (vol:normalize-2-ub8/ub8 bfp))
-       bfp))))
+;; illuminate several points inside ffp INVERT
+(defun prepare-bfps ()
+ (let* ((n  (length rayt-model:*centers*))
+	(bfps ()))
+   (dotimes (nuc n)
+     (defparameter *bfp-sum*
+       (let ((bfp (rayt::make-image 256)))
+	 (dotimes (protect n)
+	   (multiple-value-bind (bfp2 ffp)
+	       (simple-rayt:sum-bfp-raster
+		bfp nuc protect
+		:radius-ffp-mm 3s-3
+		:radius-project-mm 2s-3
+		:w-ffp 100)
+	     (declare (ignore bfp2))
+	     (when (= protect nuc) ;; store LCoS image
+	       (write-pgm (dir "ffp-~3,'0d.pgm" nuc)
+			  (vol:normalize-2-ub8/ub8 ffp)))))
+	 (let ((nor (vol:normalize-2-ub8/ub8 bfp))
+	       (inv (make-array (list 256 256)
+				:element-type '(unsigned-byte 12))))
+	   (write-pgm (dir "bfp-sum-00-~3,'0d.pgm" nuc) nor)
+	   (vol:do-region ((j i) (256 256))
+	     (setf (aref inv j i) (* 16 (- 255 (aref nor j i)))))
+	   (push inv bfps)))))
+   bfps))
+
+#+nil
+(defparameter *bfps* (prepare-bfps))
 
 #+nil ;; EXPORT a 3D model
 (with-open-file (s (dir "model.asy") :direction :output
@@ -299,9 +314,9 @@
 ;;; Clara CAMERA
 #+nil
 (progn
-  (setf *exposure-time-s* (* .0163s0 4))
+  (setf *exposure-time-s* (* .0163s0 80))
  (clara:init :exposure-s  *exposure-time-s*
-	     :fast-adc t
+	     :fast-adc nil
 	     :external-trigger t
 	     ;:xpos -290 :ypos 100
 	     ;:width 128 :height 128
@@ -389,7 +404,7 @@ clara:*im*
 (mma::set-start-mma)
 #+nil
 (mma::set-stop-mma)
-#+nil
+#+nil ;; TRIGGER
 (progn
   (mma::set-stop-mma)
   (mma::set-extern-trigger t)
@@ -560,26 +575,81 @@ clara:*im*
     (setf (aref *illum-target* 2) z-stage-um)))
 
 #+nil
-(select-illumination-target)
-
-(defun capture-nucleus (nuc)
- #+nil (let ((start-z (focus:get-position)))
-    (focus:set-position (vz *illum-target*))
-    ;; do things here
-    (focus:set-position start-z))
- (setf *dark-im* t) ;; don't show grating
- (setf *bright-im* t)
- (select-illumination-target nuc)
- (sleep .1)
- (clara:snap-single-image)
- (write-pgm16 (dir "snap~3,'0d.pgm" nuc) 
-	      clara:*im*)
- (setf *bright-im* nil
-       *dark-im* t))
+(select-illumination-target 0)
 
 #+nil
-(dolist (e '(3 7 0 5))
- (capture-nucleus e))
+(defparameter *white-mma*
+  (let* ((n 256)
+	 (m (make-array (list n n) :element-type '(unsigned-byte 12))))
+    (dotimes (j n)
+      (dotimes (i n)
+	(setf (aref m j i) (* 16 255))))
+    m))
+
+#+nil ;; JUMP FIXME always go back even when killed
+(let ((start-z (focus:get-position)))
+ (dotimes (j 10)
+   (format t "~d~%" j)
+   (dotimes (i (length rayt-model:*centers*))
+     (focus:set-position (aref *illum-target* 2))
+     (sleep .2)
+     
+     
+     (select-illumination-target i)
+     (mma:draw-array-cal (elt *bfps* i) :pic-number 5)
+     (sleep .1)
+     (clara:snap-single-image)
+     (write-pgm16 (dir "snap-angle-illum-~3,'0d-~3,'0d.pgm" j i) 
+		  clara:*im*)
+     
+     (mma:draw-array-cal *white-mma*
+ :pic-number 5)
+     (sleep .1)
+     (clara:snap-single-image)
+     (write-pgm16 (dir "snap-full-illum-~3,'0d-~3,'0d.pgm" j i) 
+		  clara:*im*)
+     ))
+ (focus:set-position start-z))
+#+nil
+(progn
+ (setf *bright-im* t)
+ (start-capture-throead))
+#+nil
+(mma::set-stop-mma)
+#+nil
+(stop-capture-thread)
+#+nil ;; position that we originally focussed on
+(first (fourth *stack*))
+
+
+
+
+(defmacro with-focus (z &body body)
+  "Store current z-Position go to given Position (in um) and return to
+  original position."
+  `(let ((start-z (focus:get-position)))
+     (focus:set-position ,z)
+     (sleep .1)
+     ,@body
+     (focus:set-position start-z)
+     (sleep .1)))
+
+(defun capture-nucleus (nuc)
+  (with-focus (aref *illum-target* 2)
+    (setf *dark-im* t) ;; don't show grating
+    (setf *bright-im* t) ;; show disk
+    (select-illumination-target nuc)
+    (sleep .1)
+    (clara:snap-single-image)
+    (write-pgm16 (dir "snap~3,'0d.pgm" nuc) 
+		 clara:*im*)
+    (setf *bright-im* nil
+	  *dark-im* t)))
+
+#+nil
+(dolist (e '(0 1 2 3))
+  (capture-nucleus e))
+
 
 ;; OBTAIN
 #+nil
@@ -808,8 +878,8 @@ clara:*im*
      (gl:with-pushed-matrix
        ;(gl:translate 1366 0 0)
        (gl:color 1 1 1)
-       (gl:translate (vx *illum-target*) (vy *illum-target*) 0.0)
-       (draw-disk-fan :radius 1000.0)))
+       (gl:translate (- (vx *illum-target*) 25) (- (vy *illum-target*) 220) 0.0)
+       (draw-disk-fan :radius 25s0)))
 
     #+nil
     (gl:with-primitive :lines

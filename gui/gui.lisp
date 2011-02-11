@@ -60,5 +60,3 @@
 		   :pos-x ,x :pos-y ,y 
 		   :draw-func #'(lambda ()
 				  ,@body))))
-
-
