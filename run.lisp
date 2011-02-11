@@ -100,9 +100,10 @@
   (setf rayt-model:*data-dz-mm* 2s-3)
  (setf rayt-model:*data-dx-mm* .1s-3)
  ;; assume that the center of the camera lies on the optical axis
- (defparameter *data-center-x-px* (* .5 1392))
- (defparameter *data-center-y-px* (* .5 1040))
- (setf rayt-model:*data-width-px* (array-dimension *p* 2))
+ (destructuring-bind (z y x) (array-dimensions *p*)
+  (defparameter *data-center-x-px* (* .5 x))
+     (defparameter *data-center-y-px* (* .5 y)) 
+   (setf rayt-model:*data-width-px* x))
  ;; coordinates of the nuclei in mm, relative to center of camera and first slice
  (setf rayt-model:*centers*
        (make-array 
@@ -131,19 +132,39 @@
        (write-pgm (dir "lcos-~3,'0d.pgm" i) img)))
 
 
-#+nil ;; illuminate 4 (close to objective) and protect others
-(defparameter *bfp*
-  (let ((bfp (rayt::make-image 256))
-	(nuc 4))
-    (dotimes (protect 11)
-      (simple-rayt:project-nucleus-into-bfp 
-       bfp nuc protect
-       (let ((e (aref rayt-model:*centers* nuc)))
-	 (v 0 (vy e) (vx e)))
-       :radius-mm 16s-3))
-    (write-pgm (dir "bfp-00-~3,'0d.pgm" nuc)
-	      (vol:normalize-2-ub8/ub8 bfp))
-   bfp))
+#+nil ;; illuminate center of one nucleus NUC protect others
+(dotimes (nuc (length rayt-model:*centers*))
+ (defparameter *bfp*
+   (let ((bfp (rayt::make-image 256)))
+     (dotimes (protect 11)
+       (simple-rayt:project-nucleus-into-bfp 
+	bfp nuc protect
+	(let ((e (aref rayt-model:*centers* nuc)))
+	  (v 0 (vy e) (vz e))) ; careful
+	:radius-mm 2s-3))
+     (write-pgm (dir "bfp-00-~3,'0d.pgm" nuc)
+		(vol:normalize-2-ub8/ub8 bfp))
+     bfp)))
+
+#+nil ;; illuminate several points inside ffp
+(time
+ (dolist (w-ffp '(32 64 128 256 512))
+  (dotimes (nuc (length rayt-model:*centers*))
+    (defparameter *bfp-sum*
+      (let ((bfp (rayt::make-image 256)))
+	(dotimes (protect 11)
+	  (multiple-value-bind (bfp2 ffp)
+	      (simple-rayt:sum-bfp-raster
+	       bfp nuc protect
+	       :radius-ffp-mm 3s-3
+	       :radius-project-mm 2s-3
+	       :w-ffp w-ffp)
+	    (when (= protect nuc) ;; store LCoS image
+	      (write-pgm (dir "ffp-~3,'0d-~3,'0d.pgm" w-ffp nuc)
+			 (vol:normalize-2-ub8/ub8 ffp)))))
+	(write-pgm (dir "bfp-sum-~3,'0d-00-~3,'0d.pgm" w-ffp nuc)
+		   (vol:normalize-2-ub8/ub8 bfp))
+	bfp)))))
 
 #+nil ;; EXPORT a 3D model
 (with-open-file (s (dir "model.asy") :direction :output
@@ -164,14 +185,17 @@
 	(asy "import three;~%import grid3;")
 	(asy "size(300,300);")
 	(dotimes (i (length rayt-model:*centers*))
-	  (let ((pos (coord (.s ri (aref rayt-model:*centers* i)))))
+	  (let ((pos (.s ri (aref rayt-model:*centers* i)))
+		(rad (* ri 1.5s-3)))
 	   (asy "draw(shift(~a)*scale3(~f)*unitsphere,~a);"
-		pos
-		(* ri 1.5s-3)
-		(if (= i 7)
+		(coord pos) rad
+		(if (= i 0)
 		    "red+opacity(0.7)"
 		    "lightgreen+opacity(0.5)"))
-	   (asy "label(~s,~a);" (format nil "~d" i) pos)))
+	   (asy "draw(~a--~a);" ;; line from bottom of nucleus to 0
+		(coord (rayt::.- pos (v rad)))
+		(coord (v 0 (vy pos) (vz pos)))) ; careful
+	   (asy "label(~s,~a);" (format nil "~d" i) (coord pos))))
 	;; draw 20um segment in z-direction
 	(asy "draw(~a--~a);" 
 	     (coord (.s ri (aref rayt-model:*centers* 0)))
