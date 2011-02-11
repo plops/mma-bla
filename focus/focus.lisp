@@ -15,6 +15,8 @@
 	(error "dmesg output doesn't contain ttyUSB assignment. This can happen when the system ran a long time. You could reattach the USB adapter that is connected to the microscope.")
 	port)))
 
+#+nil
+(find-zeiss-usb-adapter)
 
 (defun connect (&optional (devicename (find-zeiss-usb-adapter)))
   (multiple-value-bind (s fd)

@@ -3,7 +3,14 @@
 #.(require :mma)
 #.(require :focus)
 (push "../../0131/rayt/" asdf:*central-registry*)
-;#.(require :rayt)
+#.(require :rayt)
+
+#+nil ;; for saveing lisp datastructures
+(require :cl-store)
+#+nil ;; save data
+(cl-store:store *stack* (dir "stack.store"))
+#+nil ;; load data again
+(defparameter *stack2* (cl-store:restore (dir "stack.store")))
 
 
 (defun extract (a &key (start nil) (center nil) (size nil))
@@ -27,6 +34,9 @@
 ;;
 (load "../../0126/bead-eval/bead-eval.lisp")
 
+;; set this to y x of the upper left edge of the region of interest
+(defparameter *extract-offset* '(264 420))
+
 (defun extract-stack (stack)
   (let* ((h 600)
 	(w 700)
@@ -37,7 +47,7 @@
 	(declare (ignore z))
 	(let ((slice (vol:convert-2-ub16/sf-mul 
 		      (bead-eval:byte-swap (extract img
-						    :start '(264 420)
+						    :start *extract-offset*
 						    :size (list h w))))))
 	  (vol:do-region ((j i) (h w))
 	    (setf (aref vol k j i) (aref slice j i))))))
@@ -46,17 +56,135 @@
 #+nil
 (defparameter *p*
  (extract-stack *stack*))
-
+#+nil
 (defparameter *g3* (bead-eval:make-gauss3 *p* :sigma-x-pixel 5s0))
+#+nil
 (defparameter *bp* (vol:convert-3-csf/sf-realpart 
 		    (vol:convolve-circ-3-csf *g3* (vol:convert-3-sf/csf-mul *p*))))
+#+nil
 (vol:save-stack-ub8 (dir "filtered-stack") (vol:normalize-3-sf/ub8 *bp*))
 
-
+#+nil
 (vol:save-stack-ub8 (dir "seeds")
 		(vol:normalize-3-sf/ub8
 		 (run-ics::mark-nuclear-seeds *bp* :threshold .3)))
+#+nil ;; select the biggest 11 maxima in 27 neighbourhood, these are the beads
+(subseq (run-ics::point-list-sort (run-ics::nuclear-seeds *bp*))
+	0 11)
 
+#+nil ;; determine the bead positions in the camera coordinate system
+(let ((l (destructuring-bind (yo xo) *extract-offset*
+	   (mapcar #'(lambda (l) (destructuring-bind (h (z y x)) l
+			     (declare (ignore h))
+			     (list z y x)))
+		  (subseq (run-ics::point-list-sort 
+			   (run-ics::nuclear-seeds *bp*))
+			  0 11)))))
+  (setf rayt-model:*centers-fix*
+	(make-array (length l)
+		    :element-type 'rayt-model::vec
+		    :initial-contents
+		    (mapcar #'(lambda (q)
+				(destructuring-bind (z y x) q
+				  (declare (type fixnum z y x))
+				  (v z y x)))
+			    l)))
+  (setf rayt-model:*data-dz-mm* 2s-3)
+ (setf rayt-model:*data-dx-mm* .1s-3)
+ ;; assume that the center of the camera lies on the optical axis
+ (defparameter *data-center-x-px* (* .5 1392))
+ (defparameter *data-center-y-px* (* .5 1040))
+ (setf rayt-model:*data-width-px* (array-dimension *p* 2))
+ ;; coordinates of the nuclei in mm, relative to center of camera and first slice
+ (setf rayt-model:*centers*
+       (make-array 
+	(length l)
+	:element-type 'rayt::vec
+	:initial-contents
+	(mapcar #'(lambda (q)
+		    (destructuring-bind (z y x) q
+		      (declare (type fixnum z y x))
+		      (v       (* rayt-model:*data-dz-mm* z) 
+			       (* rayt-model:*data-dx-mm* 
+				  (- y *data-center-y-px*))
+			       (* rayt-model:*data-dx-mm* 
+				  (- x *data-center-x-px*))
+			       )))
+		l))))
+#+nil
+(loop for k below 20 collect
+ (rayt-model::get-nuclei-in-slice k 2))
+
+#+nil ;; draw nuclei into each slice
+(loop for i below 20 do
+     (let ((img (make-array (list 100 100) :element-type '(unsigned-byte 8))))
+       (dolist (e (rayt-model::get-nuclei-in-slice i 2))
+	 (rayt-model::draw-nucleus img e))
+       (write-pgm (dir "lcos-~3,'0d.pgm" i) img)))
+
+
+#+nil ;; illuminate 4 (close to objective) and protect others
+(defparameter *bfp*
+  (let ((bfp (rayt::make-image 256))
+	(nuc 4))
+    (dotimes (protect 11)
+      (simple-rayt:project-nucleus-into-bfp 
+       bfp nuc protect
+       (let ((e (aref rayt-model:*centers* nuc)))
+	 (v 0 (vy e) (vx e)))
+       :radius-mm 16s-3))
+    (write-pgm (dir "bfp-00-~3,'0d.pgm" nuc)
+	      (vol:normalize-2-ub8/ub8 bfp))
+   bfp))
+
+#+nil ;; EXPORT a 3D model
+(with-open-file (s (dir "model.asy") :direction :output
+		   :if-exists :supersede
+		   :if-does-not-exist :create)
+  (macrolet ((asy (str &rest rest)
+	       `(progn
+		  (format s ,str ,@rest)
+		  (terpri s))))
+    (flet ((coord (v)
+	     (format nil "(~f,~f,~f)"
+		     (vz v) (vy v) (vx v)))) ; careful
+      (let* ((f (rayt-model:find-focal-length 63s0))
+	     (na 1.4s0)
+	     (ri 1.515s0)
+	     (rif (* ri f))
+	     (r (rayt::find-bfp-radius na f)))
+	(asy "import three;~%import grid3;")
+	(asy "size(300,300);")
+	(dotimes (i (length rayt-model:*centers*))
+	  (let ((pos (coord (.s ri (aref rayt-model:*centers* i)))))
+	   (asy "draw(shift(~a)*scale3(~f)*unitsphere,~a);"
+		pos
+		(* ri 1.5s-3)
+		(if (= i 7)
+		    "red+opacity(0.7)"
+		    "lightgreen+opacity(0.5)"))
+	   (asy "label(~s,~a);" (format nil "~d" i) pos)))
+	;; draw 20um segment in z-direction
+	(asy "draw(~a--~a);" 
+	     (coord (.s ri (aref rayt-model:*centers* 0)))
+	     (coord (rayt::.+ (v .01 0 0)
+			      (.s ri (aref rayt-model:*centers* 0)))))
+	#+nil (progn ;; draw rest of objective
+	  ;; bfp
+	 (asy "draw(shift(~f,~f,~f)*scale3(~f)*unitsquare3);"
+	      (- r) (- r)
+	      (* -1 (+ rif f))
+	      (* 2 r))
+	 ;; field
+	 (let ((field .1))
+	   (asy "draw(shift(~f,~f,0)*scale3(~f)*unitsquare3);"
+		(- field) (- field)
+		(* 2 field)))
+	 ;; lens
+	 (asy "draw(shift(0,0,~f)*scale3(~f)*unitcircle3);"
+	      (- rif)
+	      r))
+       (asy "grid3(XYZgrid);")))))
 
 
 ;; for homology
@@ -292,8 +420,8 @@ clara:*im*
 
 (defparameter *data-dir* "/home/martin/d0210/")
 
-(defmacro dir (&rest rest)
-  `(concatenate 'string *data-dir* ,@rest))
+(defmacro dir (str &rest rest)
+  `(concatenate 'string *data-dir* (format nil ,str ,@rest)))
 
 (defun  obtain-image (&optional (mma-image *mma-bright*))
   (select-disk mma-image)
@@ -301,7 +429,7 @@ clara:*im*
   (setf *bright-im* t)
   (sleep .1)
   (clara:snap-single-image)
-  (write-pgm16 (dir (format nil "snap~3,'0d.pgm" mma-image)) 
+  (write-pgm16 (dir "snap~3,'0d.pgm" mma-image) 
 	       clara:*im*)
   (setf *bright-im* nil
 	*dark-im* nil)
@@ -337,7 +465,7 @@ clara:*im*
        (dotimes  (j y)
 	 (dotimes (i x)
 	   (setf (aref r j i) (aref e j i 0)))))
-    (write-pgm (dir (format nil "mma~3,'0d.pgm" i)) r))
+     (write-pgm (dir "mma~3,'0d.pgm" i) r))
    (incf i)))
 
 #+nil
@@ -397,7 +525,7 @@ clara:*im*
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (setf (aref dark-im i j) (aref clara:*im* i j))))
-	  (write-pgm16 (dir (format nil "~3,'0d-0-dark.pgm" z))
+	  (write-pgm16 (dir "~3,'0d-0-dark.pgm" z)
 		       dark-im)
 	  ;; capture bright widefield image
 	  (select-disk *mma-bright*)
@@ -408,7 +536,7 @@ clara:*im*
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (setf (aref dark-im i j) (aref clara:*im* i j))))
-	  (write-pgm16 (dir (format nil "~3,'0d-0-bright.pgm" z))
+	  (write-pgm16 (dir "~3,'0d-0-bright.pgm" z)
 		       dark-im)
 	  (setf *bright-im* nil
 		*dark-im* nil)
@@ -439,8 +567,8 @@ clara:*im*
 		     (incf (aref widefield-im i j) v)
 		     (setf (aref *widefield-im* i j)
 			   (clamp-u16 (floor (aref widefield-im i j) 2)))))))
-	     (write-pgm16 (dir (format nil "~3,'0d-1-phase~3,'0d-~3,'0d.pgm"
-				       z py px))
+	     (write-pgm16 (dir "~3,'0d-1-phase~3,'0d-~3,'0d.pgm"
+			       z py px)
 			  clara:*im*)))
 	 ;; final widefield image normalize to full 16bit range
 	 (let ((ma 0)
@@ -470,7 +598,7 @@ clara:*im*
 			      ma (max ma v)))))
 		  (setf (aref *section-im* i j) (clamp-u16 (- ma mi))))))
 	    (write-pgm16 
-	     (dir (format nil "~3,'0d-2-section.pgm" z))
+	     (dir "~3,'0d-2-section.pgm" z)
 	     *section-im*))
 	   
 	   ;; subtract section image from accumulated widefield image
