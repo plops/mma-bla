@@ -18,10 +18,6 @@
 (progn
  (cl-store:store *stack* (dir "stack.store"))
  nil)
-
-(progn
-  (cl-store:store *bfps* (dir "bfps.store"))
-  nil)
 #+nil ;; load data again
 (defparameter *stack* (cl-store:restore (dir "auswert/stack.store")))
 
@@ -165,8 +161,8 @@
 	   (multiple-value-bind (bfp2 ffp)
 	       (simple-rayt:sum-bfp-raster
 		bfp nuc protect
-		:radius-ffp-mm 3s-3
-		:radius-project-mm 2s-3
+		:radius-ffp-mm 4s-3
+		:radius-project-mm 3s-3
 		:w-ffp 100)
 	     (declare (ignore bfp2))
 	     (when (= protect nuc) ;; store LCoS image
@@ -174,10 +170,22 @@
 			  (vol:normalize-2-ub8/ub8 ffp)))))
 	 (let ((nor (vol:normalize-2-ub8/ub8 bfp))
 	       (inv (make-array (list 256 256)
-				:element-type '(unsigned-byte 12))))
+				:element-type '(unsigned-byte 12)))
+	       (inv8 (make-array (list 256 256)
+				 :element-type '(unsigned-byte 8))))
 	   (write-pgm (dir "bfp-sum-00-~3,'0d.pgm" nuc) nor)
 	   (vol:do-region ((j i) (256 256))
-	     (setf (aref inv j i) (* 16 (- 255 (aref nor j i)))))
+	     (let* ((x (- i 128))
+		    (y (- j 128))
+		    (v (if  (< (* 128 128)
+			       (+ (* x x) (* y y)))
+			   0 ;; outside of bfp circle
+			   (if (< 2 (aref nor j i))
+			       0
+			       255))))
+	      (setf (aref inv j i) (* 16 v)
+		    (aref inv8 j i) v)))
+	   (write-pgm (dir "bfp-inv-nuc~3,'0d.pgm" nuc) inv8)
 	   (push inv bfps)))))
    bfps))
 
@@ -424,7 +432,7 @@ clara:*im*
   (mma:begin))
 #+nil
 (mma::get-cycle-time)
-#+nil
+
 
 (defvar *mma-contents* nil)
 (defvar *mma-select* 0)
@@ -591,22 +599,23 @@ clara:*im*
  (dotimes (j 10)
    (format t "~d~%" j)
    (dotimes (i (length rayt-model:*centers*))
+     (select-illumination-target i)
      (focus:set-position (aref *illum-target* 2))
      (sleep .2)
      
      
-     (select-illumination-target i)
+     
      (mma:draw-array-cal (elt *bfps* i) :pic-number 5)
      (sleep .1)
-     (clara:snap-single-image)
-     (write-pgm16 (dir "snap-angle-illum-~3,'0d-~3,'0d.pgm" j i) 
+     ;(clara:snap-single-image)
+   #+nil  (write-pgm16 (dir "snap-angle-illum-~3,'0d-~3,'0d.pgm" j i) 
 		  clara:*im*)
      
      (mma:draw-array-cal *white-mma*
  :pic-number 5)
      (sleep .1)
      (clara:snap-single-image)
-     (write-pgm16 (dir "snap-full-illum-~3,'0d-~3,'0d.pgm" j i) 
+   #+nil  (write-pgm16 (dir "snap-full-illum-~3,'0d-~3,'0d.pgm" j i) 
 		  clara:*im*)
      ))
  (focus:set-position start-z))
@@ -615,11 +624,13 @@ clara:*im*
  (setf *bright-im* t)
  (start-capture-throead))
 #+nil
-(mma::set-stop-mma)
+(mma::set-start-mma)
 #+nil
 (stop-capture-thread)
 #+nil ;; position that we originally focussed on
 (first (fourth *stack*))
+#+nil
+(focus:set-position 19.45)
 
 
 
