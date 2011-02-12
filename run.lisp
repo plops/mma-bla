@@ -313,14 +313,25 @@
 
 (defun cam->lcos (cam)
   (declare (type vec cam))
-  (let* ((slcos (m* (m -1.0437 0.02797 1339.98
-		       .001000 1.05462 -6.178
-		       2.64e-6 2.48e-5 .986)
+  (let* ((slcos (m* (m -1.04631 0.0171617 1346.59
+		       .0143984 1.081 -6.64348
+		       5.43139e-6 9.59122e-6 .99192)
 		    cam)))
     (the vec (.s (/ (vz slcos)) slcos))))
 
 #+nil
-(cam->lcos (v 0 0 1))
+(cam->lcos (v 100 100 1))
+
+(defun lcos->cam (lcos)
+  (declare (type vec lcos))
+  (let* ((scam (m* (m -.949 .00371 1288.3
+		      .01295 .94498 -11.2454
+		      5.0712e-6 -9.1577e-6 1.0012)
+		    lcos)))
+    (the vec (.s (/ (vz scam)) scam))))
+
+#+nil
+(lcos->cam (v 0 0 1))
 
 (defparameter *window-overlap* 300)
 
@@ -336,8 +347,10 @@
  :name "display")
 
 (defparameter *exposure-time-s* .0163s0)
-(defvar *scaled-clara-im* nil)
-(defvar *swapped-clara-im* nil)
+(progn
+  (defvar *scaled-clara-im* nil)
+  (defvar *scale-clara-fac* 4))
+(declaim (type (unsigned-byte 8) *scale-clara-fac*))
 ;;; Clara CAMERA
 #+nil
 (progn
@@ -351,38 +364,35 @@
 	     )
  (setf *scaled-clara-im* nil))
 ;; continuously capture new images
-(defparameter *capture-thread* nil)
+(defvar *capture-thread* nil)
 
 #+nil ;; CONVERT
 (time (scale-clara->ub8))
 
 (defun scale-clara->ub8 ()
   (declare (optimize (speed 3))
-	   (type (simple-array (unsigned-byte 16) 2) clara:*im* *swapped-clara-im*)
+	   (type (simple-array (unsigned-byte 16) 2) clara:*im*)
 	   (type (simple-array (unsigned-byte 8) 2) *scaled-clara-im*))	       
-  (destructuring-bind (h w) (array-dimensions clara:*im*)
+  (destructuring-bind (h w) (array-dimensions *scaled-clara-im*)
     (declare (type (integer 0 10000) w h))
-    (vol:do-region ((j i) (h w))
-      (let ((v (aref clara:*im* j i)))
-	(declare (type (unsigned-byte 16) v))
-	(setf (aref *swapped-clara-im* j i)
-	      (+ (* 255 (ldb (byte 8 0) v))
-		 (ldb (byte 8 8) v)))))
-    (let* ((i1 (sb-ext:array-storage-vector *swapped-clara-im*))
-	   (mi (reduce #'min i1))
-	   (ma (reduce #'max i1))
-	   (s (/ 255s0 (- ma mi))))
-      (declare (type (unsigned-byte 16) ma mi)
-	       (type single-float s))
-      (format t "~a~%" (list 'mi mi 'ma ma))
+    (let* ((mi (aref clara:*im* 0 0))
+	   (ma mi))
       (vol:do-region ((j i) (h w))
-	(let* ((v (- (aref *swapped-clara-im* j i) mi))
-	       (vs (* v s)))
-	  (declare (type (signed-byte 64) v)
-		   (type single-float vs))
-	  (setf (aref *scaled-clara-im* j i)
-		(truncate vs))))
-      (write-pgm "/dev/shm/o.pgm" *scaled-clara-im*))))
+	(let* ((v (aref clara:*im*
+			(* *scale-clara-fac* j)
+			(* *scale-clara-fac* i))))
+	  (when (< v mi)
+	    (setf mi v))
+	  (when (< ma v)
+	    (setf ma v))))
+      (let ((s (/ 255s0 (- ma mi))))
+       (vol:do-region ((j i) (h w))
+	 (let* ((v (- (aref clara:*im*
+			    (* *scale-clara-fac* j)
+			    (* *scale-clara-fac* i)) mi))
+		(vs (* v s)))
+	   (setf (aref *scaled-clara-im* j i)
+		 (truncate vs))))))))
 
 (defun start-capture-thread (&optional (delay nil))
   (unless *capture-thread*
@@ -393,13 +403,13 @@
 		 (when delay
 		   (sleep delay))
 		 (clara:snap-single-image)
-		 (unless *scaled-clara-im*
+		 (unless *scaled-clara-im* ;; use every fifth pixel
 		   (setf *scaled-clara-im* (make-array 
-					    (array-dimensions clara:*im*)
-					    :element-type '(unsigned-byte 8)))
-		   (setf *swapped-clara-im* (make-array 
-					     (array-dimensions clara:*im*)
-					    :element-type '(unsigned-byte 16))))
+					    (mapcar #'(lambda (x) (floor
+							      x
+							      *scale-clara-fac*))
+						    (array-dimensions clara:*im*))
+					    :element-type '(unsigned-byte 8))))
 		 (scale-clara->ub8)))
 	  :name "capture"))))
 
@@ -707,6 +717,7 @@ clara:*im*
 #+nil
 (floor (expt 2 16) (reduce #'max (sb-ext:array-storage-vector clara:*im*)))
 
+
 (defmacro with-focus (z &body body)
   "Store current z-Position go to given Position (in um) and return to
   original position."
@@ -897,58 +908,11 @@ clara:*im*
       (setf *stack* (reverse result))))
 
   (defun draw-screen ()
-    (gl:clear-color .4 0 0 1)
-    (gl:clear :color-buffer-bit)
-    ;; BACK draw raw camera image on the left
-    (gl:with-pushed-matrix
-      
-      (gl:scale .2 .2 1s0)
-      (gl:translate 20 600 0)
-      (when clara:*im*
-	(let ((tex (make-instance 'gui::texture :data *scaled-clara-im*
-				  )))
-	  (destructuring-bind (h w) (array-dimensions clara:*im*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		      :wt 1s0 :ht 1s0))
-	  (gui:destroy tex)))
-      ;; draw SECTIONed image next to it
-      #+nil (gl:with-pushed-matrix
-	(when *section-im*
-	  (let ((tex (make-instance 'gui::texture :data *section-im*
-				    :scale 3000s0 :offset 0.0005s0)))
-	    (destructuring-bind (w h) (array-dimensions *section-im*)
-	      (gl:translate w 0 0)
-	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	    (gui:destroy tex)))
-	;; draw accumulated widefield image below
-	#+nil(when *widefield-im*
-	  (let ((tex (make-instance 'gui::texture :data *widefield-im*
-				    :scale 7s0 :offset 0.3s0
-				    )))
-	    (destructuring-bind (w h) (array-dimensions *widefield-im*)
-	      (gl:translate 0 h 0)
-	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	    (gui:destroy tex))))
-      ;; draw an image with only out of focus light in the lower left
-      #+nil(gl:with-pushed-matrix
-	(when *unfocused-im*
-	  (let ((tex (make-instance 'gui::texture :data *unfocused-im*
-				    :scale 10s0 :offset 0.0s0)))
-	    (destructuring-bind (w h) (array-dimensions *section-im*)
-	      (gl:translate 0 h 0)
-	      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-	    (gui:destroy tex))))
-      ;; draw the image that is displayed on the mma
-      #+nil (when *mma-contents*
-	      (gl:with-pushed-matrix
-		(let ((p (elt *mma-contents* *mma-select*))) 
-		  (let ((tex (make-instance 'gui::texture :data p
-					    :scale 1s0 :offset 0.0s0)))
-		    (destructuring-bind (w h) (array-dimensions p)
-		      (gl:translate 0 (* 2 h) 0)
-		      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
-		    (gui:destroy tex)))))
-      )    
+    (gl:clear-color 0 0 0 1)
+    (gl:clear :color-buffer-bit #+nil :depth-buffer-bit)
+    ;(gl:enable :depth-test)
+    
+        
     ;; draw grating for sectioning on the very right
     (gl:with-pushed-matrix 
       ;(gl:translate (+ 280 400) 0 0)
@@ -961,28 +925,47 @@ clara:*im*
 		      :wt repetition
 		      :ht repetition)))))
 
-    ;; FAN
-    (let ((radius 25s0))
-     (when t ;*bright-im*
-       (gl:with-pushed-matrix
-	 (gl:translate *window-overlap* 0 0)
-	 (gl:color 1 1 1)
-	 (gl:translate (- (vx *illum-target*) 25) 
-		       (- (vy *illum-target*) 220) 0.0)
-	 (draw-disk-fan :radius radius)))
+    (gl:with-pushed-matrix
+      (gl:translate 10 100 0)
      (gl:with-pushed-matrix
-       (gl:translate 12 12 0)
-       (gl:scale .1 .1 1)
-       
-       (gl:color .5 .5 .5)
-       (gl:with-primitive :line-loop
-	 (gl:vertex 0 0) (gl:vertex 1280 0)
-	 (gl:vertex 1280 1024) (gl:vertex 0 1024))
-       (gl:color 1 1 1)
-       (gl:translate (- (vx *illum-target*) 25) 
-		     (- (vy *illum-target*) 220) 0.0)
-       
-       (draw-disk-fan :radius radius)))
+       ;; TEX draw raw camera image on the left  
+       (gl:scale .2 .2 1s0)
+					;(gl:translate 20 600 .3)
+       (when (and clara:*im* *scaled-clara-im*)
+	 (let ((tex (make-instance 'gui::texture :data *scaled-clara-im*
+				   )))
+	   (destructuring-bind (h w) (array-dimensions clara:*im*)
+	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		       :wt 1s0 :ht 1s0))
+	   (gui:destroy tex)))      )
+     (let ((radius 25s0)) ;; FAN
+       (when t ;*bright-im*
+	 (gl:with-pushed-matrix
+	   (gl:translate *window-overlap* 0 0)
+	   (gl:color 1 1 1)
+	   (gl:line-width 3s0)
+	   (gl:translate (- (vx *illum-target*) 25) 
+			 (- (vy *illum-target*) 220) 0.0)
+	   (draw-disk-fan :radius radius))
+	 (gl:with-pushed-matrix ;; small version for me to see
+	   (gl:scale .2 .2 1s0)
+	   (gl:color 1 .3 .2)
+	   (macrolet ((tr (x y)
+			`(lcos->cam (v ,x ,y 1))))
+	     (let ((a (tr 0 0))
+		   (b (tr 1280 1024))
+		   (c (tr (vx *illum-target*)
+			  (vy *illum-target*))))
+	      (gl:with-primitive :line-loop
+		(gl:vertex (vx a) (vy a))
+		(gl:vertex (vx b) (vy a))
+		(gl:vertex (vx b) (vy b))
+		(gl:vertex (vx a) (vy b)))
+					;(gl:color 1 1 1)
+	      (gl:translate (vx c) (vy c) 0.0)
+	     
+	      (draw-disk-fan :radius (* .2 radius))))))))
+    
     (gl:check-error "draw")
     #+nil
     (gl:with-primitive :lines
@@ -1062,7 +1045,7 @@ clara:*im*
                        :if-exists :supersede
                        :if-does-not-exist :create)
       (declare (stream s))
-      (format s "P5~%~D ~D~%65535~%" h w))
+      (format s "P5~%~D ~D~%65535~%" w h))
     (with-open-file (s filename 
                        :element-type '(unsigned-byte 16)
                        :direction :output
