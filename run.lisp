@@ -11,6 +11,23 @@
  (require :vol)
  (require :bead-eval))
 
+(defparameter *data-dir* "/home/martin/d0212/")
+(defmacro dir (str &rest rest)
+  `(concatenate 'string *data-dir* (format nil ,str ,@rest)))
+
+(defvar *section-im* nil)
+(defvar *widefield-im* nil)
+(defvar *unfocused-im* nil)
+(defvar *dark-im* t)
+(defvar *bright-im* nil)
+(defvar *stack* nil)
+
+(defun show-disk (&optional (on t))
+ (setf *bright-im* on))
+
+(defun show-grating (&optional (on t))
+ (setf *dark-im* (not on)))
+
 
 #+nil ;; for saveing lisp datastructures
 (require :cl-store)
@@ -19,7 +36,7 @@
  (cl-store:store *stack* (dir "stack.store"))
  nil)
 #+nil ;; load data again
-(defparameter *stack* (cl-store:restore (dir "auswert/stack.store")))
+(defparameter *stack* (cl-store:restore "/data/dat/d0210/auswert/stack.store"))
 
 
 (defun extract (a &key (start nil) (center nil) (size nil))
@@ -40,8 +57,6 @@
 	   (vol:do-region ((j i) (yy xx))
 	     (setf (aref b j i) (aref a1 (+ (+ sx i) (* w (+ sy j))))))
 	   b))))))
-;;
-;(load "../../0126/bead-eval/bead-eval.lisp")
 
 ;; set this to y x of the upper left edge of the region of interest
 (defparameter *extract-offset* '(264 420))
@@ -80,9 +95,12 @@
 (vol:save-stack-ub8 (dir "seeds")
 		(vol:normalize-3-sf/ub8
 		 (run-ics::mark-nuclear-seeds *bp* :threshold .1)))
+
+(defvar *num-points* 10)
+
 #+nil ;; select the biggest 11 maxima in 27 neighbourhood, these are the beads
 (subseq (run-ics::point-list-sort (run-ics::nuclear-seeds *bp*))
-	0 5)
+	0 *num-points*)
 
 #+nil ;; determine the bead positions in the camera coordinate system
 (let ((l (destructuring-bind (yo xo) *extract-offset*
@@ -91,7 +109,7 @@
 			     (list z y x)))
 		  (subseq (run-ics::point-list-sort 
 			   (run-ics::nuclear-seeds *bp*))
-			  0 5)))))
+			  0 *num-points*)))))
   (setf rayt-model:*centers-fix*
 	(make-array (length l)
 		    :element-type 'rayt-model::vec
@@ -304,34 +322,71 @@
 #+nil
 (cam->lcos (v 0 0 1))
 
+(defparameter *window-overlap* 300)
 
 #+nil ;; FILL two screens
 (sb-thread:make-thread 
  #'(lambda ()
-     (sb-ext:run-program "/usr/bin/xset"
+     #+nil(sb-ext:run-program "/usr/bin/xset"
 			 '("-dpms" "s" "off"))
-     (gui:with-gui #+nil ((+ 1280 1366) 1024 -1 -1)
-		   (1280 1024 (+ 1366 -1) -1)
+     (gui:with-gui ((+ 1280 *window-overlap*) 1024 (+ 1366 
+						      (- *window-overlap*) 
+						      -1) -1)
        (draw-screen)))
  :name "display")
 
-
-
-
 (defparameter *exposure-time-s* .0163s0)
+(defvar *scaled-clara-im* nil)
 ;;; Clara CAMERA
 #+nil
 (progn
-  (setf *exposure-time-s* (* .0163s0 80))
+  (setf *exposure-time-s* (* .0163s0 1))
  (clara:init :exposure-s  *exposure-time-s*
-	     :fast-adc nil
+	     :fast-adc t
 	     :external-trigger t
 	     ;:xpos -290 :ypos 100
 	     ;:width 128 :height 128
 	     :width 1392 :height 1040
-	     ))
+	     )
+ (setf *scaled-clara-im* nil))
 ;; continuously capture new images
 (defparameter *capture-thread* nil)
+
+#+nil
+(time (scale-clara->ub8))
+
+(defun scale-clara->ub8 ()
+  (declare (optimize (speed 3)))
+  (destructuring-bind (w h) (array-dimensions clara:*im*)
+    (let* (#+nil (i1 (sb-ext:array-storage-vector clara:*im*))
+	   (mi (aref clara:*im* 0 0)
+	     #+nil (loop for i below (length i1) minimize (aref i1 i))
+	     #+nil (reduce #'min i1))
+	   (ma mi 
+	     #+nil (loop for i below (length i1) maximize (aref i1 i))
+	     #+nil (reduce #'max i1))
+	   )
+      (declare (type (simple-array (unsigned-byte 16) 2) clara:*im*)
+	       (type (simple-array (unsigned-byte 8) 2) *scaled-clara-im*)
+	       (type (unsigned-byte 16) ma mi)
+	       (type (integer 0 10000) w h))
+      (vol:do-region ((j i) (h w))
+	(let ((v (aref clara:*im* i j)))
+	  (when (< v mi)
+	    (setf mi v))
+	  (when (< ma v)
+	    (setf ma v))))
+      (let* ((diff (- ma mi))
+	     (s (floor 255 diff)))
+	(declare ; (type fixnum s)
+		 (type (unsigned-byte 32) s diff))
+       (vol:do-region ((j i) (h w))
+	 (let* ((v (- (aref clara:*im* i j) mi))
+		(vs (* s v)))
+	   (declare (type fixnum v vs))
+	   (setf (aref *scaled-clara-im* j i) vs))))
+      #+nil (write-pgm "/dev/shm/o.pgm" *scaled-clara-im*))))
+
 (defun start-capture-thread (&optional (delay nil))
   (unless *capture-thread*
    (setf *capture-thread*
@@ -339,8 +394,14 @@
 	  #'(lambda ()
 	      (loop
 		 (when delay
-		  (sleep delay))
-		 (clara:snap-single-image)))
+		   (sleep delay))
+		 (clara:snap-single-image)
+		 (unless *scaled-clara-im*
+		   (setf *scaled-clara-im* (make-array 
+					    (reverse
+					     (array-dimensions clara:*im*))
+					    :element-type '(unsigned-byte 8))))
+		 (scale-clara->ub8)))
 	  :name "capture"))))
 
 (defun stop-capture-thread ()
@@ -359,6 +420,7 @@
 	      :fast-adc t
 	      :external-trigger t
 	      :width 32 :height 32)
+  (setf *scaled-clara-im* nil)
   (start-capture-thread 0s0))
 
 (defun set-automatic ()
@@ -369,9 +431,16 @@
 	      :external-trigger t
 	      :width 1392 :height 1040
 	      )
+  (setf *scaled-clara-im* nil)
   (mma::set-start-mma)
   (setf *bright-im* nil))
 
+(defun set-idle ()
+  (mma::set-stop-mma))
+#+nil
+(set-idle)
+(defun unset-idle ()
+  (mma::set-start-mma))
 #+nil
 (set-manual)
 #+nil
@@ -507,24 +576,10 @@ clara:*im*
 (focus:disconnect)
 
 
-(defvar *section-im* nil)
-(defvar *widefield-im* nil)
-(defvar *unfocused-im* nil)
-(defvar *dark-im* nil)
-(defvar *bright-im* nil)
-(defvar *stack* nil)
 
-#+nil ;; show disk
-(setf *bright-im* t)
-#+nil ;; show grating
-(setf *dark-im* t)
 
-(defparameter *data-dir* "/home/martin/d0211/")
+(defparameter *illum-target* (v 512s0 512s0))
 
-(defparameter *illum-target* (v))
-
-(defmacro dir (str &rest rest)
-  `(concatenate 'string *data-dir* (format nil ,str ,@rest)))
 
 (defun  obtain-image (&optional (mma-image *mma-bright*))
   (select-disk mma-image)
@@ -577,11 +632,13 @@ clara:*im*
 (defun select-illumination-target (nuc)
   (let* ((b (aref rayt-model:*centers-fix* nuc))
 	 (z-stage-um (first (elt *stack* (floor (vx b)))))     ; careful
-	 (x-cam-px (+ (second *extract-offset*) (vz b)))	     ; careful
-	 (y-cam-px (+ (second *extract-offset*) (vy b))))
+	 (x-cam-px (+ (vz b) (second *extract-offset*) ))	     ; careful
+	 (y-cam-px (+ (vy b) (second *extract-offset*) )))
     (setf *illum-target* (cam->lcos (v x-cam-px y-cam-px 1)))
-    (setf (aref *illum-target* 2) z-stage-um)))
-
+    (setf (aref *illum-target* 2) z-stage-um)
+    (format t "~a~%" (list 'cam 'x x-cam-px 'y y-cam-px
+			   'target *illum-target*))))
+ 
 #+nil
 (select-illumination-target 0)
 
@@ -594,31 +651,35 @@ clara:*im*
 	(setf (aref m j i) (* 16 255))))
     m))
 
-#+nil ;; JUMP FIXME always go back even when killed
+#+nil ;; JUMP 
 (let ((start-z (focus:get-position)))
- (dotimes (j 10)
-   (format t "~d~%" j)
-   (dotimes (i (length rayt-model:*centers*))
-     (select-illumination-target i)
-     (focus:set-position (aref *illum-target* 2))
-     (sleep .2)
+  (unwind-protect
+       (setf *bright-im* t)
+   (dotimes (j 3)
+     (format t "~d~%" j)
+     (dotimes (i (length rayt-model:*centers*))
+       (select-illumination-target i)
+       (focus:set-position (aref *illum-target* 2))
+       (sleep .2)
      
      
      
-     (mma:draw-array-cal (elt *bfps* i) :pic-number 5)
-     (sleep .1)
-     ;(clara:snap-single-image)
-   #+nil  (write-pgm16 (dir "snap-angle-illum-~3,'0d-~3,'0d.pgm" j i) 
-		  clara:*im*)
+       ;(mma:draw-array-cal (elt *bfps* i) :pic-number 5)
+       (sleep .1)
+					;(clara:snap-single-image)
+       #+nil  (write-pgm16 (dir "snap-angle-illum-~3,'0d-~3,'0d.pgm" j i) 
+			   clara:*im*)
      
-     (mma:draw-array-cal *white-mma*
- :pic-number 5)
-     (sleep .1)
-     (clara:snap-single-image)
-   #+nil  (write-pgm16 (dir "snap-full-illum-~3,'0d-~3,'0d.pgm" j i) 
-		  clara:*im*)
-     ))
- (focus:set-position start-z))
+       #+nil (mma:draw-array-cal *white-mma*
+			   :pic-number 5)
+       (sleep .1)
+       (clara:snap-single-image)
+       #+nil  (write-pgm16 (dir "snap-full-illum-~3,'0d-~3,'0d.pgm" j i) 
+			   clara:*im*)
+       ))
+    (progn
+      (setf *bright-im* nil)
+     (focus:set-position start-z))))
 #+nil
 (progn
  (setf *bright-im* t)
@@ -632,18 +693,29 @@ clara:*im*
 #+nil
 (focus:set-position 19.45)
 
-
-
+#+nil ;; generate testimage
+(progn
+ (setf clara:*im* (second (elt *stack* 12)))
+ nil)
+#+nil
+(vol:do-region ((j i) (500 500))
+  (setf (aref clara:*im* j i) (* j (floor (1- (expt 2 16)) 500))))
+#+nil
+(floor (expt 2 16) (reduce #'max (sb-ext:array-storage-vector clara:*im*)))
 
 (defmacro with-focus (z &body body)
   "Store current z-Position go to given Position (in um) and return to
   original position."
   `(let ((start-z (focus:get-position)))
-     (focus:set-position ,z)
-     (sleep .1)
-     ,@body
-     (focus:set-position start-z)
-     (sleep .1)))
+     (unwind-protect 
+      (progn 
+	(focus:set-position ,z)
+	(sleep .1)
+	,@body)
+      (progn
+	(focus:set-position start-z)
+	(sleep .1)))))
+
 
 (defun capture-nucleus (nuc)
   (with-focus (aref *illum-target* 2)
@@ -671,7 +743,7 @@ clara:*im*
  nil)
 (declaim (optimize (speed 1) (debug 3) (safety 3)))
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
-(let* ((white-width 2)
+(let* ((white-width 4)
        (phases-x 4)
        (phases-y 1)
        (a (make-array (* phases-x phases-y white-width) 
@@ -679,7 +751,7 @@ clara:*im*
        (phase 0)
        
        ;(im-scale 100s0) (im-offset 1.86s0)
-       (im-scale 20s0) (im-offset 0.019s0)
+       (im-scale 2114s0) (im-offset 0.0s0)
        )
 
   (defun change-phase (p)
@@ -821,21 +893,22 @@ clara:*im*
       (setf *stack* (reverse result))))
 
   (defun draw-screen ()
-    (gl:clear-color 0 0 0 1)
+    (gl:clear-color .4 0 0 1)
     (gl:clear :color-buffer-bit)
     ;; BACK draw raw camera image on the left
     (gl:with-pushed-matrix
       
-      (gl:scale .25 .25 1s0)
-      (gl:translate 0 900 0)
-      #+nil (when clara:*im*
-	(let ((tex (make-instance 'gui::texture :data clara:*im* 
-				  :scale im-scale :offset im-offset)))
+      (gl:scale .2 .2 1s0)
+      (gl:translate 20 600 0)
+      (when clara:*im*
+	(let ((tex (make-instance 'gui::texture :data *scaled-clara-im*
+				  )))
 	  (destructuring-bind (w h) (array-dimensions clara:*im*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)))
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex)))
       ;; draw SECTIONed image next to it
-      #+nil(gl:with-pushed-matrix
+      #+nil (gl:with-pushed-matrix
 	(when *section-im*
 	  (let ((tex (make-instance 'gui::texture :data *section-im*
 				    :scale 3000s0 :offset 0.0005s0)))
@@ -885,13 +958,28 @@ clara:*im*
 		      :ht repetition)))))
 
     ;; FAN
-    (when *bright-im*
+    (let ((radius 25s0))
+     (when t ;*bright-im*
+       (gl:with-pushed-matrix
+	 (gl:translate *window-overlap* 0 0)
+	 (gl:color 1 1 1)
+	 (gl:translate (- (vx *illum-target*) 25) 
+		       (- (vy *illum-target*) 220) 0.0)
+	 (draw-disk-fan :radius radius)))
      (gl:with-pushed-matrix
-       ;(gl:translate 1366 0 0)
+       (gl:translate 12 12 0)
+       (gl:scale .1 .1 1)
+       
+       (gl:color .5 .5 .5)
+       (gl:with-primitive :line-loop
+	 (gl:vertex 0 0) (gl:vertex 1280 0)
+	 (gl:vertex 1280 1024) (gl:vertex 0 1024))
        (gl:color 1 1 1)
-       (gl:translate (- (vx *illum-target*) 25) (- (vy *illum-target*) 220) 0.0)
-       (draw-disk-fan :radius 25s0)))
-
+       (gl:translate (- (vx *illum-target*) 25) 
+		     (- (vy *illum-target*) 220) 0.0)
+       
+       (draw-disk-fan :radius radius)))
+    (gl:check-error "draw")
     #+nil
     (gl:with-primitive :lines
       (gl:color 1 0 0) (gl:vertex 0 0) (gl:vertex (* white-width phases 3) 0 0) ;; x axis red
