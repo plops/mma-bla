@@ -337,6 +337,7 @@
 
 (defparameter *exposure-time-s* .0163s0)
 (defvar *scaled-clara-im* nil)
+(defvar *swapped-clara-im* nil)
 ;;; Clara CAMERA
 #+nil
 (progn
@@ -352,40 +353,36 @@
 ;; continuously capture new images
 (defparameter *capture-thread* nil)
 
-#+nil
+#+nil ;; CONVERT
 (time (scale-clara->ub8))
 
 (defun scale-clara->ub8 ()
-  (declare (optimize (speed 3)))
-  (destructuring-bind (w h) (array-dimensions clara:*im*)
-    (let* (#+nil (i1 (sb-ext:array-storage-vector clara:*im*))
-	   (mi (aref clara:*im* 0 0)
-	     #+nil (loop for i below (length i1) minimize (aref i1 i))
-	     #+nil (reduce #'min i1))
-	   (ma mi 
-	     #+nil (loop for i below (length i1) maximize (aref i1 i))
-	     #+nil (reduce #'max i1))
-	   )
-      (declare (type (simple-array (unsigned-byte 16) 2) clara:*im*)
-	       (type (simple-array (unsigned-byte 8) 2) *scaled-clara-im*)
-	       (type (unsigned-byte 16) ma mi)
-	       (type (integer 0 10000) w h))
+  (declare (optimize (speed 3))
+	   (type (simple-array (unsigned-byte 16) 2) clara:*im* *swapped-clara-im*)
+	   (type (simple-array (unsigned-byte 8) 2) *scaled-clara-im*))	       
+  (destructuring-bind (h w) (array-dimensions clara:*im*)
+    (declare (type (integer 0 10000) w h))
+    (vol:do-region ((j i) (h w))
+      (let ((v (aref clara:*im* j i)))
+	(declare (type (unsigned-byte 16) v))
+	(setf (aref *swapped-clara-im* j i)
+	      (+ (* 255 (ldb (byte 8 0) v))
+		 (ldb (byte 8 8) v)))))
+    (let* ((i1 (sb-ext:array-storage-vector *swapped-clara-im*))
+	   (mi (reduce #'min i1))
+	   (ma (reduce #'max i1))
+	   (s (/ 255s0 (- ma mi))))
+      (declare (type (unsigned-byte 16) ma mi)
+	       (type single-float s))
+      (format t "~a~%" (list 'mi mi 'ma ma))
       (vol:do-region ((j i) (h w))
-	(let ((v (aref clara:*im* i j)))
-	  (when (< v mi)
-	    (setf mi v))
-	  (when (< ma v)
-	    (setf ma v))))
-      (let* ((diff (- ma mi))
-	     (s (floor 255 diff)))
-	(declare ; (type fixnum s)
-		 (type (unsigned-byte 32) s diff))
-       (vol:do-region ((j i) (h w))
-	 (let* ((v (- (aref clara:*im* i j) mi))
-		(vs (* s v)))
-	   (declare (type fixnum v vs))
-	   (setf (aref *scaled-clara-im* j i) vs))))
-      #+nil (write-pgm "/dev/shm/o.pgm" *scaled-clara-im*))))
+	(let* ((v (- (aref *swapped-clara-im* j i) mi))
+	       (vs (* v s)))
+	  (declare (type (signed-byte 64) v)
+		   (type single-float vs))
+	  (setf (aref *scaled-clara-im* j i)
+		(truncate vs))))
+      (write-pgm "/dev/shm/o.pgm" *scaled-clara-im*))))
 
 (defun start-capture-thread (&optional (delay nil))
   (unless *capture-thread*
@@ -398,11 +395,16 @@
 		 (clara:snap-single-image)
 		 (unless *scaled-clara-im*
 		   (setf *scaled-clara-im* (make-array 
-					    (reverse
-					     (array-dimensions clara:*im*))
-					    :element-type '(unsigned-byte 8))))
+					    (array-dimensions clara:*im*)
+					    :element-type '(unsigned-byte 8)))
+		   (setf *swapped-clara-im* (make-array 
+					     (array-dimensions clara:*im*)
+					    :element-type '(unsigned-byte 16))))
 		 (scale-clara->ub8)))
 	  :name "capture"))))
+
+#+nil
+(start-capture-thread)
 
 (defun stop-capture-thread ()
   (let ((is-running *capture-thread*))
@@ -410,6 +412,8 @@
      (sb-thread:terminate-thread *capture-thread*)
      (setf *capture-thread* nil))
    is-running))
+#+nil
+(stop-capture-thread)
 
 (defun set-manual ()
   (stop-capture-thread)
@@ -903,7 +907,7 @@ clara:*im*
       (when clara:*im*
 	(let ((tex (make-instance 'gui::texture :data *scaled-clara-im*
 				  )))
-	  (destructuring-bind (w h) (array-dimensions clara:*im*)
+	  (destructuring-bind (h w) (array-dimensions clara:*im*)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex)))
@@ -1037,7 +1041,9 @@ clara:*im*
                        :if-exists :supersede
                        :if-does-not-exist :create)
       (declare (stream s))
-      (format s "P5~%~D ~D~%255~%" h w))
+      (format s "P5~%~D ~D~%255~%" w h)) 
+    ;; w h stores image in the correct orientation, when the lisp
+    ;; array has the dimensions (list h w)
     (with-open-file (s filename 
                        :element-type '(unsigned-byte 8)
                        :direction :output
