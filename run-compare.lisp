@@ -30,7 +30,7 @@
 		   )))
 
 (defmacro tmp (&rest rest)
-  `(concatenate 'string "/home/martin/tmp/a0130/" ,@rest))
+  `(concatenate 'string "/home/martin/tmp/a0208/" ,@rest))
 
 #+nil
 (progn

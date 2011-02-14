@@ -76,10 +76,21 @@
 		    ,(def 'ub8 'csf)
 		    ,(def 'ub8 'cdf)
 		    
+		    ,(def 'ub12 'sf)
+		    ,(def 'ub12 'df)
+		    ,(def 'ub12 'csf)
+		    ,(def 'ub12 'cdf)
+
 		    ,(def 'ub16 'sf)
 		    ,(def 'ub16 'df)
 		    ,(def 'ub16 'csf)
 		    ,(def 'ub16 'cdf)
+		    
+		    
+		    ,(def 'ub64 'sf)
+		    ,(def 'ub64 'df)
+		    ,(def 'ub64 'csf)
+		    ,(def 'ub64 'cdf)
 		    
 		    ,(def 'fix 'sf)
 		    ,(def 'fix 'df)
@@ -265,10 +276,15 @@
 		     (/ (- ma mi)))))
 	 (dotimes (i n)
 	   (let ((v (* s (- (aref a1 i) mi))))
-	     (setf (aref result1 i) ,(if (eq 'ub8 out_type)
-					 `(floor (* 255 v))
-					 `(* (coerce 1 ',long-out-type) v)))))
+	     (setf (aref result1 i) ,(cond ((eq 'ub8 out_type)
+					    `(floor (* (1- (expt 2 8)) v)))
+					   ((eq 'ub12 out_type)
+					    `(floor (* (1- (expt 2 12)) v)))
+					   ((eq 'ub16 out_type)
+					    `(floor (* (1- (expt 2 16)) v)))
+					   (t `(* (coerce 1 ',long-out-type) v))))))
 	 result))))
+
 #+nil
 (def-normalize-rank-type-out_type 1 df ub8)
 #+nil
@@ -284,7 +300,8 @@
 			 result))))
     `(progn ,@result)))
 
-(def-normalize-functions (1 2 3) (ub8 ub16 sf df) (ub8 ub16 sf df))
+(def-normalize-functions (1 2 3) (ub8 ub12 ub16 ub64 sf df)
+  (ub8 ub12 ub16 ub64 sf df))
 
 #+nil
 (normalize-1-sf/sf (make-array 3 :element-type 'single-float
