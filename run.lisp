@@ -1,3 +1,4 @@
+(require :asdf)
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (require :gui) ;; make sure DISPLAY is exported
   (require :clara)
@@ -11,7 +12,7 @@
  (require :vol)
  (require :bead-eval))
 
-(defparameter *data-dir* "/home/martin/d0214/")
+(defparameter *data-dir* "/home/martin/d0215/")
 (defmacro dir (str &rest rest)
   `(concatenate 'string *data-dir* (format nil ,str ,@rest)))
 
@@ -37,6 +38,8 @@
  nil)
 #+nil ;; load data again
 (defparameter *stack* (cl-store:restore "/data/dat/d0210/auswert/stack.store"))
+
+
 
 
 (defun extract (a &key (start nil) (center nil) (size nil))
@@ -274,9 +277,9 @@
 	   (multiple-value-bind (bfp2 ffp)
 	       (simple-rayt:sum-bfp-raster
 		bfp nuc protect
-		:radius-ffp-mm 10s-3
+		:radius-ffp-mm 2.5s-3
 		:radius-project-mm 2s-3
-		:w-ffp 200)
+		:w-ffp 100)
 	     (declare (ignore bfp2))
 	     (when (= protect nuc) ;; store LCoS image
 	       (write-pgm (dir "ffp-~3,'0d.pgm" nuc)
@@ -392,14 +395,72 @@
 
 ;;; Clara CAMERA
 #+nil
-(let ((w 1392) (h 1040))
-  (setf *exposure-time-s* (* .0163s0 1))
- (clara:init :exposure-s  *exposure-time-s*
+(time
+ (clara:init :exposure-s .0163s0
 	     :fast-adc t
 	     :external-trigger t
-	     :width w :height h)
- (make-scaled-clara-im h w)
- nil)
+	     :width 1392 :height 1040))
+
+(defun init-clara-and-mma (&key (h 1040) (w 1392) (exp-s (* .0163s0 10)))
+  (setf *exposure-time-s* exp-s)
+  (stop-capture-thread)
+  (clara:init :exposure-s  *exposure-time-s*
+	      :fast-adc t
+	      :external-trigger t
+	      :width w :height h)
+  (make-scaled-clara-im h w)
+  (let* ((e-ms (* 1000 *exposure-time-s*))
+	 (e-us (* 1000 e-ms)))
+    (mma::set-deflection-phase 0s0 e-us)
+    (mma::set-cycle-time (* 2 e-ms))))
+
+#+nil
+(init-clara-and-mma :exp-s (* .0163s0 1))
+
+#+nil
+(progn
+  (format t "~a~%" (mma::set-power-on))
+  (format t "~a~%" (mma::set-start-mma))
+  )
+#+nil
+(start-capture-thread)
+
+#+nil
+(progn
+  (format t "~a~%" (clara::status))
+  (start-capture-thread)
+  (sleep .04)
+  (format t "~a~%" (clara::status)))
+
+#+NIL
+(progn
+  (mma::set-power-on)
+  (mma::set-start-mma)
+  (clara::status)
+  (start-capture-thread))
+
+#+nil
+(progn
+  (mma::set-stop-mma)
+  (mma::set-power-off)
+  (stop-capture-thread))
+
+#+nil
+(clara:status)
+
+#+nil
+(mma::status)
+#+nil
+#+nil
+(mma::set-stop-mma)
+#+nil
+(mma::set-power-off)
+
+#+NIL
+(start-capture-thread :mma t)
+#+nil
+(stop-capture-thread :mma t)
+
 ;; continuously capture new images
 (defvar *capture-thread* nil)
 
@@ -443,33 +504,49 @@
 			     :element-type '(unsigned-byte 8))))
   (scale-clara->ub8))
 
+(defmacro cm (cmd)
+  `(let ((res ,cmd))
+     (unless (= 0 res)
+       (break "mma command ~a returned ~a instead of 0."
+	      ',cmd res))))
 
-(defun start-capture-thread (&optional (delay nil))
+(defvar *capture-thread* nil)
+
+(defun start-capture-thread (&key (exp-s .0163s0) (delay nil))
+  (init-clara-and-mma :exp-s exp-s)
+
+  (mma::set-power-on)
+  (mma::set-start-mma)
+  (clara::status)
   (unless *capture-thread*
-   (setf *capture-thread*
-	 (sb-thread:make-thread
-	  #'(lambda ()
-	      (loop
-		 (when delay
-		   (sleep delay))
-		 (snap-image-and-decimate)))
-	  :name "capture"))))
+    (setf *capture-thread*
+	  (sb-thread:make-thread
+	   #'(lambda ()
+	       (loop
+		  (when delay
+		    (sleep delay))
+		  (snap-image-and-decimate)))
+	   :name "capture"))))
 
 #+nil
-(start-capture-thread)
+(start-capture-thread :exp-s (* 6 .0163s0)) 
 
 (defun stop-capture-thread ()
   (let ((is-running *capture-thread*))
-   (when is-running
-     (sb-thread:terminate-thread *capture-thread*)
-     (setf *capture-thread* nil))
-   is-running))
+    (when is-running
+      (mma::set-stop-mma)
+      (mma::set-power-off)
+      (sb-thread:terminate-thread *capture-thread*)
+      (setf *capture-thread* nil))
+    is-running))
 #+nil
 (stop-capture-thread)
 
+#+nil
 (defun set-manual ()
   (stop-capture-thread)
   (mma::set-stop-mma)
+  (mma::set-power-off)
   (setf *bright-im* t)
   (setf *exposure-time-s* (* .0163s0 184))
   (clara:init :exposure-s  *exposure-time-s*
@@ -478,38 +555,41 @@
 	      :width 1392 :height 1040
 	      )
   (setf *scaled-clara-im* nil)
-  (start-capture-thread 0s0))
+  (start-capture-thread :mma nil))
 
 (defun set-automatic ()
   (stop-capture-thread)
-  (setf *exposure-time-s* (* .0163s0 4))
+  (setf *exposure-time-s* (* .0163s0 1))
   (clara:init :exposure-s  *exposure-time-s*
 	      :fast-adc t
 	      :external-trigger t
 	      :width 1392 :height 1040
 	      )
   (setf *scaled-clara-im* nil)
+  (mma::set-power-on)
   (mma::set-start-mma)
   (setf *bright-im* nil))
 #+nil
 (set-automatic)
 #+nil
-(start-capture-thread)
+(start-capture-thread :exp-s (* 5 .0163))
 #+nil
 (stop-capture-thread)
 
 (defun set-idle ()
-  (mma::set-stop-mma))
+  (mma::set-stop-mma)
+  (mma::set-power-off))
 #+nil
 (set-idle)
 (defun unset-idle ()
+  (mma::set-power-on)
   (mma::set-start-mma))
 #+nil
 (set-manual)
 #+nil
 (set-automatic)
 #+nil
-(start-capture-thread 0s0)
+(start-capture-thread)
 #+nil
 (stop-capture-thread)
 #+nil
@@ -584,19 +664,21 @@ clara:*im*
 			 (/ (* 1s0 i) n)))))
        (mma::draw-disk-cal :r-small (- r dr/2) :r-big (+ r dr/2) :pic-number 5))
      #+nil (sleep .1))))
+#+nil
+(mma::draw-disk-cal :r-small .48s0 :r-big .66s0 :pic-number 1)
 
 #+nil ;; draw some ARBITRARY data
 (let* ((n 256)
        (m (make-array (list n n) :element-type '(unsigned-byte 12))))
   (dotimes (j n)
-    (dotimes (i n)
+    (dotimes (i (floor n 2))
       (setf (aref m j i) (* #+nil (* (mod i 2) (mod j 2)) 4095))))
   (mma:draw-array-cal m :pic-number 5)
   nil)
 #+nil ;; draw calibration ring for 10x phase
 (mma::draw-disk-cal :r-small .48s0 :r-big .66s0 :pic-number 5)
 #+nil
-(select-disk 4)
+(select-disk 0)
 
 (defvar *mma-contents* nil)
 #+nil
@@ -823,7 +905,7 @@ clara:*im*
 (progn
   (make-scaled-clara-im)
   (time
-   (obtain-stack :n 8 :offset 1 :dz 2s0))
+   (obtain-stack :n 18 :offset 1 :dz 2s0))
  (time (find-beads))
  nil)
 

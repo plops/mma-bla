@@ -26,7 +26,7 @@
 
 #+nil
 (load-calibration-data 
- "/home/martin/cyberpower-mit/mma-essentials-0209/VC2610_13_61_2010-12-02_Rand-5_0-250nm_Typ1.cal")
+ "/home/martin/cyberpower-mit/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")
 
 
 #+nil
@@ -69,13 +69,15 @@
 #+nil
 (mma::set-start-mma)
 
+#+nil
+(mma:select-pictures 0 :n 1 :ready-out-needed t)
 
 #+nil
 (let* ((n 256)
        (m (make-array (list n n) :element-type '(unsigned-byte 12))))
   (dotimes (j n)
     (dotimes (i n)
-      (setf (aref m j i) (* #+nil (* (mod i 2) (mod j 2)) 4095))))
+      (setf (aref m j i) (* 0    (* (mod i 2) #+nil (mod j 2)) 4095))))
   (mma:draw-array-cal m :pic-number 1)
   nil)
 
@@ -85,3 +87,4 @@
 (mma::set-power-off)
 #+nil
 (disconnect)
+
