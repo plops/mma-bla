@@ -87,15 +87,15 @@
    
 (defun find-beads ()
   (setf *p*
-	(extract-stack *stack*))
+  	(extract-stack *stack*))
   (setf *g3* (bead-eval:make-gauss3 *p* :sigma-x-pixel 3.1s0))
   (setf *bp* (vol:convert-3-csf/sf-realpart 
-		      (vol:convolve-circ-3-csf 
-		       *g3* (vol:convert-3-sf/csf-mul *p*))))
+  		      (vol:convolve-circ-3-csf 
+  		       *g3* (vol:convert-3-sf/csf-mul *p*))))
 
   (vol:save-stack-ub8 (dir "seeds")
-		      (vol:normalize-3-sf/ub8
-		       (run-ics::mark-nuclear-seeds *bp* :threshold .3)))
+  		      (vol:normalize-3-sf/ub8
+  		       (run-ics::mark-nuclear-seeds *bp* :threshold .3)))
   
   (let ((l (run-ics::nuclear-seeds *bp*)))
     (multiple-value-bind (hist n mi ma) (run-ics::point-list-histogram l)
@@ -393,7 +393,7 @@
 ;;; Clara CAMERA
 #+nil
 (let ((w 1392) (h 1040))
-  (setf *exposure-time-s* (* .0163s0 13))
+  (setf *exposure-time-s* (* .0163s0 1))
  (clara:init :exposure-s  *exposure-time-s*
 	     :fast-adc t
 	     :external-trigger t
@@ -531,7 +531,7 @@ clara:*im*
 #+nil
 (progn
  (mma:init)
- (mma:set-nominal-deflection-nm 118.25))
+ #+nil(mma:set-nominal-deflection-nm 118.25))
 #+nil
 (mma:set-nominal-deflection-nm 118.25)
 #+nil
@@ -1019,7 +1019,16 @@ clara:*im*
 	   (destructuring-bind (h w) (array-dimensions clara:*im*)
 	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		       :wt 1s0 :ht 1s0))
-	   (gui:destroy tex)))      )
+	   (gui:destroy tex))))
+     
+     #+nil
+     (TODO 
+      introduce a list of all the nuclei in the order they should be processed
+      show them in the order of slices
+      display mma image and a circle on the camera image
+      that was true, when the currently displayed image was captured 
+      )
+
      (let ((radius 25s0)) ;;FAN
        (when *bright-im*
 	 (gl:with-pushed-matrix

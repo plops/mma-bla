@@ -20,9 +20,9 @@
 (defun set-extern-trigger (&optional (on t))
   (if on
       (unless (= 0 (enable-extern-start))
-	(error "enable-extern-start didn't return 0."))
+	(break "enable-extern-start didn't return 0."))
       (unless (= 0 (disable-extern-start))
-	(error "disable-extern-start didn't return 0."))))
+	(break "disable-extern-start didn't return 0."))))
 
 (defun check-network ()
   "Returns empty string when there is no connection to control board."
@@ -51,17 +51,42 @@
 		       4001)
   (unless (= 0 (connect))
     (error "Library couldn't connect to board."))
-  #+nil (load-configuration "/home/martin/linux-mma2_20101101/Delivery_2010_11_01_KCL/Linux-Board-Control/TestApplication/64Bit/800803_dmdchanged.ini")
+  (format t "connected to board~%")
+  (status)
+  
+  #+nil (load-configuration "/home/martin/cyberpower-mit/mma-essentials-0209/800803_dmdl6_20110215.ini")
+  (load-configuration "3ini")
+  (format t "loaded configureation~%")
+  (status)
   (load-calibration-data "/home/martin/cyberpower-mit/mma-essentials-0209/VC2610_13_61_2010-12-02_Rand-5_0-250nm_Typ1.cal")
-  ;; (set-voltage +volt-pixel+ 17.5s0)
-  ;; (set-voltage +volt-frame-f+ 20.0s0)
-  ;; (set-voltage +volt-frame-l+ 20.0s0)
-  ;; (set-voltage +volt-dmd-l+ 6.0s0)
-  (set-extern-ready 16s0 16300s0)
-  (set-deflection-phase 16s0 16300s0)
-  (set-power-on)
-  (load-white)
-  (begin))
+  (format t "loaded calibration data~%")
+  (status)
+  ;; ;; (set-voltage +volt-pixel+ 17.5s0)
+  ;; ;; (set-voltage +volt-frame-f+ 20.0s0)
+  ;; ;; (set-voltage +volt-frame-l+ 20.0s0)
+  ;; ;; (set-voltage +volt-dmd-l+ 6.0s0)
+  ;; (set-extern-ready 16s0 16300s0)
+  ;; (format t "set-extern-ready status:~%")
+  ;; (status)
+  ;; (set-deflection-phase 16s0 16300s0)
+  ;; (format t "set-deflection-phase status:~%")
+  ;; (status)
+
+  ;; (mma::set-cycle-time 90s0)
+  ;; (format t "set-cycle-time status:~%")
+  ;; (status)
+
+  ;; (set-power-on)
+  ;; (format t "set-power-on status:~%")
+  ;; (status)
+  
+  ;; (load-white)
+  ;; (format t "load-white status:~%")
+  ;; (status)
+
+
+  ;; (begin)
+  )
 
 (defun write-data (buf &key (pic-number 1))
   "Write a 256x256 unsigned-short buffer to the device."
@@ -233,34 +258,42 @@
   (declare (fixnum value))
   (let ((result nil))
     (loop for (name x) in bits do
-	 (when (logand value x)
+	 (when (= x (logand value x))
 	   (push name result)))
     result))
+
 (defun parse-status-bits (value)
   (parse-bits 
    value '((peltier-on #x1000) (power-on #x4000) (start-matrix #x8000)
 	   (smart-adr-on #x10000) (extern-start-en #x40000))))
+
 (defun parse-error-bits (value)
   (parse-bits value
 	      '((mirror-voltage #x01) (module-error #x02) (calibration-error #x04)
 		(temperature-alert #x10) (matrix-ready-error #x20) (channel-overflow #x40)
 		(ram-test-error #x100) (supply-error #x200) (config-error #x400))))
+
 (defun status ()
   (multiple-value-bind (retval status error) (read-status)
     (unless (= 0 retval)
-      (format t "read-status didn't return 0.~%"))
-    (if (not (= 0 error))
+      (format t "read-status didn't return 0 but ~d.~%" retval))
+    (if (/= 0 error)
 	(format t "error: ~a~%error-bits:~%~a~% status-bits:~%~a~%retval: ~a~%"
 		error (parse-error-bits error)
 		(parse-status-bits status)
 		retval)
 	(format t "status-bits ~a~%" (parse-status-bits status)))
     (parse-status-bits status)))
+
+(defun plain-status ()
+  (multiple-value-bind (retval status error) (read-status)
+    (format t "read-status returned (retval,status,error)=~a~%" (list retval status error))))
 #+nil 
 (status)
 (defun begin ()
   (set-start-mma)
   (sleep 1)
+  (format t "set-start-mma status ~%")
   (status))
 (defun end ()
   (set-stop-mma))
