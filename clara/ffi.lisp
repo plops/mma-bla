@@ -1,6 +1,9 @@
 (in-package :clara)
 
-(load-shared-object "/usr/local/lib/libandor.so.2.88.30003.0")
+(defparameter *clara-library* 
+ (load-shared-object "/usr/local/lib/libandor.so.2.88.30003.0"))
+
+
 (define-alien-routine ("GetAvailableCameras" get-available-cameras)
     unsigned-int
   (total-cameras int :out))

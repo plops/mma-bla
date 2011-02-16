@@ -261,9 +261,11 @@ celsius."
     int
   "Disable cooling system.")
 
+#+nil
 (define-alien-routine ("SLM_UpdateBitstream" update-bitstream)
     int)
 
+#+nil
 (define-alien-routine ("SLM_UpdateEmbeddedSW" update-embedded-software)
     int)
 

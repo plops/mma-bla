@@ -77,7 +77,7 @@
        (m (make-array (list n n) :element-type '(unsigned-byte 12))))
   (dotimes (j n)
     (dotimes (i n)
-      (setf (aref m j i) (* 0    (* (mod i 2) #+nil (mod j 2)) 4095))))
+      (setf (aref m j i) (*  #+nil  (* (mod i 2) #+nil (mod j 2)) 4095))))
   (mma:draw-array-cal m :pic-number 1)
   nil)
 

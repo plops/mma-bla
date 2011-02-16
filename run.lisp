@@ -12,7 +12,7 @@
  (require :vol)
  (require :bead-eval))
 
-(defparameter *data-dir* "/home/martin/d0215/")
+(defparameter *data-dir* "/home/martin/d0216/")
 (defmacro dir (str &rest rest)
   `(concatenate 'string *data-dir* (format nil ,str ,@rest)))
 
@@ -22,13 +22,18 @@
 (defvar *dark-im* t)
 (defvar *bright-im* nil)
 (defvar *stack* nil)
+(defvar *white-lcos* nil)
 
 (defun show-disk (&optional (on t))
  (setf *bright-im* on))
-
+#+nil
+(show-disk)
 (defun show-grating (&optional (on t))
  (setf *dark-im* (not on)))
 
+
+(defun show-white (&optional (on t))
+  (setf *white-lcos* on))
 
 #+nil ;; for saveing lisp datastructures
 (require :cl-store)
@@ -87,7 +92,10 @@
 (defvar *bp* nil)
 (defvar *data-center-x-px* 0) ;; make pixel on optical axis
 (defvar *data-center-y-px* 0) ;; the origin
-   
+
+
+(defvar *bfps* nil)
+(defvar *bfps8* nil)   
 (defun find-beads ()
   (setf *p*
   	(extract-stack *stack*))
@@ -104,16 +112,18 @@
     (multiple-value-bind (hist n mi ma) (run-ics::point-list-histogram l)
       (run-ics::print-histogram hist n (* 1s10 mi) (* 1s10 ma))
       (terpri)
-      (setf *num-points* (reduce #'+ (subseq hist 1)))))
+      (setf *num-points* (reduce #'+ (subseq hist 5)))))
 
   ;; determine the bead positions in the camera coordinate system
-  (let ((l (destructuring-bind (yo xo) *extract-offset*
+  (let* ((l-intens (destructuring-bind (yo xo) *extract-offset*
 	     (mapcar #'(lambda (l) (destructuring-bind (h (z y x)) l
 				(declare (ignore h))
 				(list z y x)))
 		     (subseq (run-ics::point-list-sort 
 			      (run-ics::nuclear-seeds *bp*))
-			     0 *num-points*)))))
+			     0 *num-points*))))
+	;; sort by z position
+	(l (sort l-intens #'< :key #'first)))  
     (setf rayt-model:*centers-fix*
 	  (make-array (length l)
 		      :element-type 'rayt-model::vec
@@ -150,7 +160,9 @@
   
   ;; EXPORT a 3D model
   (export-3d-model)
-  (defparameter *bfps* (prepare-bfps)))
+  (multiple-value-bind (b b8) (prepare-bfps)
+    (setf *bfps* b)
+    (setf *bfps8* b8)))
 #+nil
 (time
  (find-beads))
@@ -258,18 +270,19 @@
 		      255
 		      0))))
 	 (write-pgm (dir "bfp-bw-~a.pgm" extra-filename) img8)
-	 (let ((co (mirror-on-horizontal
-		    (vol:convert-2-csf/sf-realpart
-		     (vol:convolve-circ-2-csf *g2* imgcsf)))))
-	   (write-pgm (dir "bfp-co-~a.pgm" extra-filename)
-		      (vol::normalize-2-sf/ub8 co))
-	   (vol::normalize-2-sf/ub12 co)))))))
+	 (let* ((co (mirror-on-horizontal
+		     (vol:convert-2-csf/sf-realpart
+		      (vol:convolve-circ-2-csf *g2* imgcsf))))
+		(co8 (vol::normalize-2-sf/ub8 co)))
+	   (write-pgm (dir "bfp-co-~a.pgm" extra-filename) co8)
+	   (values (vol::normalize-2-sf/ub12 co) co8)))))))
 
 
 ;; illuminate several points inside ffp INVERT
 (defun prepare-bfps ()
  (let* ((n  (length rayt-model:*centers*))
-	(bfps ()))
+	(bfps ())
+	(bfps8 ()))
    (dotimes (nuc n)
      (defparameter *bfp-sum*
        (let ((bfp (rayt::make-image 256 :type '(unsigned-byte 64))))
@@ -285,11 +298,15 @@
 	       (write-pgm (dir "ffp-~3,'0d.pgm" nuc)
 			  (vol:normalize-2-sf/ub8 
 			   (vol::convert-2-ub64/sf-mul ffp))))))
-	 (push (select-low-quartile bfp (format nil "~3,'0d" nuc))
-	       bfps))))
-   bfps))
+	 (multiple-value-bind (co co8)
+	     (select-low-quartile bfp (format nil "~3,'0d" nuc))
+	   (push co bfps)
+	   (push co8 bfps8)))))
+   (values bfps bfps8)))
 #+nil
-(defparameter *bfps* (prepare-bfps))
+(multiple-value-bind (b b8) (prepare-bfps)
+ (defparameter *bfps* b)
+ (defparameter *bfps8* b8))
 
 
 
@@ -396,12 +413,22 @@
 ;;; Clara CAMERA
 #+nil
 (time
- (clara:init :exposure-s .0163s0
-	     :fast-adc t
-	     :external-trigger t
-	     :width 1392 :height 1040))
+ (progn
+   (clara:init :exposure-s .0163s0
+	      :fast-adc t
+	      :external-trigger t
+	      :width 1392 :height 1040)
+  (clara:cooler-on)
+  (format t "~a~%" (clara:get-temperature-f))))
 
-(defun init-clara-and-mma (&key (h 1040) (w 1392) (exp-s (* .0163s0 10)))
+#+nil
+(clara:get-temperature-f)
+#+nil
+(clara:is-cooler-on)
+#+nil
+(clara:cooler-on)
+
+(defun init-clara-and-mma (&key (h 1040) (w 1392) (exp-s (* .0163s0 5)) (mma t))
   (setf *exposure-time-s* exp-s)
   (stop-capture-thread)
   (clara:init :exposure-s  *exposure-time-s*
@@ -409,13 +436,25 @@
 	      :external-trigger t
 	      :width w :height h)
   (make-scaled-clara-im h w)
-  (let* ((e-ms (* 1000 *exposure-time-s*))
-	 (e-us (* 1000 e-ms)))
-    (mma::set-deflection-phase 0s0 e-us)
-    (mma::set-cycle-time (* 2 e-ms))))
+  (when mma
+   (let* ((e-ms (* 1000 *exposure-time-s*))
+	  (e-us (* 1000 e-ms)))
+     (mma::set-deflection-phase 0s0 e-us)
+     (mma::set-cycle-time (* 2.01 e-ms)))))
+#+nil
+(let* ((e-ms (* 1000 *exposure-time-s*))
+       (e-us (* 1000 e-ms)))
+  (cm (mma::set-deflection-phase 0s0 e-us))
+  (cm (mma::set-cycle-time (* 2.01 e-ms))))
 
 #+nil
-(init-clara-and-mma :exp-s (* .0163s0 1))
+(mma::get-cycle-time)
+
+#+nil
+(mma::set-cycle-time 500s0)
+
+#+nil
+(init-clara-and-mma :exp-s (* .0163s0 10))
 
 #+nil
 (progn
@@ -424,42 +463,6 @@
   )
 #+nil
 (start-capture-thread)
-
-#+nil
-(progn
-  (format t "~a~%" (clara::status))
-  (start-capture-thread)
-  (sleep .04)
-  (format t "~a~%" (clara::status)))
-
-#+NIL
-(progn
-  (mma::set-power-on)
-  (mma::set-start-mma)
-  (clara::status)
-  (start-capture-thread))
-
-#+nil
-(progn
-  (mma::set-stop-mma)
-  (mma::set-power-off)
-  (stop-capture-thread))
-
-#+nil
-(clara:status)
-
-#+nil
-(mma::status)
-#+nil
-#+nil
-(mma::set-stop-mma)
-#+nil
-(mma::set-power-off)
-
-#+NIL
-(start-capture-thread :mma t)
-#+nil
-(stop-capture-thread :mma t)
 
 ;; continuously capture new images
 (defvar *capture-thread* nil)
@@ -512,12 +515,20 @@
 
 (defvar *capture-thread* nil)
 
-(defun start-capture-thread (&key (exp-s .0163s0) (delay nil))
-  (init-clara-and-mma :exp-s exp-s)
+(defun start-capture-thread (&key (exp-s .0163s0) (delay nil)
+			     (mma t))
+  (format t "trying to set camera to ~a s exposure time~%" exp-s)
+  (time (init-clara-and-mma :exp-s exp-s :mma mma))
+  (format t "camera exposure time is set~%")
+  (format t "camera status: ~a~%" (clara::status))
+  
+  (when mma
+    (format t "turn on mma~%")
+    (mma::set-power-on)
+    (mma::set-start-mma))
+  (format t "mma status:~%")
+  (mma::status)
 
-  (mma::set-power-on)
-  (mma::set-start-mma)
-  (clara::status)
   (unless *capture-thread*
     (setf *capture-thread*
 	  (sb-thread:make-thread
@@ -529,52 +540,25 @@
 	   :name "capture"))))
 
 #+nil
-(start-capture-thread :exp-s (* 6 .0163s0)) 
+(start-capture-thread :exp-s (* 10 .0163s0) :mma nil) 
+#+nil
+(start-capture-thread :exp-s (* 10 .0163s0) :mma t) 
 
 (defun stop-capture-thread ()
   (let ((is-running *capture-thread*))
     (when is-running
       (mma::set-stop-mma)
       (mma::set-power-off)
+      (format t "mma status:~%")
+      (mma::status)
+  
       (sb-thread:terminate-thread *capture-thread*)
+      (format t "camera status: ~a~%" (clara::status))
       (setf *capture-thread* nil))
     is-running))
 #+nil
 (stop-capture-thread)
 
-#+nil
-(defun set-manual ()
-  (stop-capture-thread)
-  (mma::set-stop-mma)
-  (mma::set-power-off)
-  (setf *bright-im* t)
-  (setf *exposure-time-s* (* .0163s0 184))
-  (clara:init :exposure-s  *exposure-time-s*
-	      :fast-adc t
-	      :external-trigger t
-	      :width 1392 :height 1040
-	      )
-  (setf *scaled-clara-im* nil)
-  (start-capture-thread :mma nil))
-
-(defun set-automatic ()
-  (stop-capture-thread)
-  (setf *exposure-time-s* (* .0163s0 1))
-  (clara:init :exposure-s  *exposure-time-s*
-	      :fast-adc t
-	      :external-trigger t
-	      :width 1392 :height 1040
-	      )
-  (setf *scaled-clara-im* nil)
-  (mma::set-power-on)
-  (mma::set-start-mma)
-  (setf *bright-im* nil))
-#+nil
-(set-automatic)
-#+nil
-(start-capture-thread :exp-s (* 5 .0163))
-#+nil
-(stop-capture-thread)
 
 (defun set-idle ()
   (mma::set-stop-mma)
@@ -735,7 +719,7 @@ clara:*im*
 
 
 (defun  obtain-image (&optional (mma-image *mma-bright*))
-  (select-disk mma-image)
+  ;;(select-disk mma-image)
   (setf *dark-im* nil)
   (setf *bright-im* t)
   (sleep .1)
@@ -744,7 +728,7 @@ clara:*im*
 	       clara:*im*)
   (setf *bright-im* nil
 	*dark-im* nil)
-  (select-disk *mma-bright*))
+  #+nil(select-disk *mma-bright*))
 
 (defun clamp-u16 (a)
   (declare (values (unsigned-byte 16) &optional))
@@ -782,19 +766,26 @@ clara:*im*
 #+nil
 (obtain-image)
 
+(defun nucleus-cam-coordinates (nuc)
+  (let* ((b (aref rayt-model:*centers-fix* nuc))
+	 (x-cam-px (+ (vz b) (second *extract-offset*)))	     ; careful
+	 (y-cam-px (+ (vy b) (first *extract-offset*))))
+    (values x-cam-px y-cam-px)))
+
 (defun select-illumination-target (nuc)
   (let* ((b (aref rayt-model:*centers-fix* nuc))
 	 (z-stage-um (first (elt *stack* (floor (vx b)))))     ; careful
-	 (x-cam-px (+ (vz b) (second *extract-offset*) ))	     ; careful
-	 (y-cam-px (+ (vy b) (first *extract-offset*) )))
-    (setf *illum-target* (cam->lcos (v x-cam-px y-cam-px 1)))
-    (setf (aref *illum-target* 2) z-stage-um)
-    (format t "~a~%" (list 'cam 'x x-cam-px 'y y-cam-px
-			   'target *illum-target*))))
+	 )
+    (multiple-value-bind (x-cam-px y-cam-px) (nucleus-cam-coordinates nuc)
+	(setf *illum-target* (cam->lcos (v x-cam-px y-cam-px 1)))
+      (setf (aref *illum-target* 2) z-stage-um)
+      (format t "~a~%" (list 'cam 'x x-cam-px 'y y-cam-px
+			     'target *illum-target*)))))
  
 #+nil
-(select-illumination-target 0)
+(select-illumination-target 5)
 
+(setf *illum-target* (v))
 
 (defparameter *white-mma*
   (let* ((n 256)
@@ -804,25 +795,33 @@ clara:*im*
 	(setf (aref m j i) (* 16 255))))
     m))
 
+(defvar *last-captured-bead* nil)
+
 #+nil ;; JUMP 
 (let* ((do-focus t)
        (do-save t)
        (do-mma t)
        (start-z (when do-focus 
 		  (focus:get-position))))
+  
+  (mma::set-power-on)
+  (mma::set-start-mma)
+  (format t "mma status~%")
+  (mma::status)
   (unwind-protect
        (progn 
-	 (select-disk 4)
+	 (select-disk 1)
 	 (setf *bright-im* t)
-	 (dotimes (j 10) ;let ((j 5))
+	 (dotimes (j 2) ;let ((j 5))
 	   (format t "~d~%" j)
 	   (dotimes (i (length rayt-model:*centers*))
+	     (setf *last-captured-bead* (- i 1))
 	     (select-illumination-target i)
 	     (when do-focus
 	       (focus:set-position (aref *illum-target* 2)))
 	     (sleep .1)
 	     (when do-mma
-	       (mma:draw-array-cal (elt *bfps* i) :pic-number 5)
+	       (mma:draw-array-cal (elt *bfps* i) :pic-number 1)
 	       (sleep .1)
 	       (snap-image-and-decimate)
 	       (when do-save
@@ -831,17 +830,22 @@ clara:*im*
 		  clara:*im*)))
 	     
 	     (mma:draw-array-cal *white-mma*
-				 :pic-number 5)
+				 :pic-number 1)
 	     (sleep .1)
 	     (snap-image-and-decimate)
 	     (when do-save
 	       (write-pgm16 (dir "snap-full-illum-~3,'0d-~3,'0d.pgm" j i) 
 			    clara:*im*))
-	     )))
+	     )
+	   (setf *last-captured-bead* (1- (length rayt-model:*centers*)))))
     (progn
       (setf *bright-im* nil)
       (when do-focus
-	(focus:set-position start-z)))))
+	(focus:set-position start-z))
+      (mma::set-stop-mma)
+      (mma::set-power-off)
+      (format t "mma status~%")
+      (mma:status))))
 
 #+nil
 (progn
@@ -905,10 +909,9 @@ clara:*im*
 (progn
   (make-scaled-clara-im)
   (time
-   (obtain-stack :n 18 :offset 1 :dz 2s0))
+   (obtain-stack :n 20 :offset 1 :dz 2s0))
  (time (find-beads))
- nil)
-
+ (length rayt-model:*centers*))
 
 (declaim (optimize (speed 1) (debug 3) (safety 3)))
 ;;; DRAW INTO OPENGL WINDOW (for LCOS and camera view)
@@ -959,9 +962,11 @@ clara:*im*
 		  (write-pgm16 (dir "dark-~3,'0d.pgm" z)
 			       dark-im))
 	  ;; capture bright widefield image
-	  (select-disk *mma-bright*)
-	  (setf *dark-im* nil)
-	  (setf *bright-im* t)
+	  ;;(select-disk *mma-bright*)
+	  (setf *dark-im* nil
+		*bright-im* t
+		*white-lcos* t)
+	  
 	  (sleep 1/60)
 	  (snap-image-and-decimate)
 	  (dotimes (j h)
@@ -970,8 +975,9 @@ clara:*im*
 	  (write-pgm16 (dir "bright-~3,'0d.pgm" z)
 		       dark-im)
 	  (setf *bright-im* nil
-		*dark-im* nil)
-	  (select-disk mma-image)
+		*dark-im* nil
+		*white-lcos* nil)
+	  ;;(select-disk mma-image)
 	  (sleep 1/60))
 	(format t "dark and bright image captured~%")
 	(let ((phase-im (make-array (list phases-y phases-x w h) 
@@ -1062,8 +1068,10 @@ clara:*im*
 	       (push (list z *section-im*) result))
 	     (when (= k (1- n))
 	       (progn 	  ;; capture a dark image in last z-position
-		  (setf *dark-im* t) ;; dark LCOS
-		  (select-disk *mma-dark*)
+		  (setf *dark-im* t
+			*white-lcos* nil) ;; dark LCOS
+		  (show-disk nil)
+		  ;;(select-disk *mma-dark*)
 		  (sleep 1/60)
 		  (snap-image-and-decimate)
 		  (write-pgm16 (dir "dark-~3,'0d.pgm" k)
@@ -1089,55 +1097,73 @@ clara:*im*
 		      :wt repetition
 		      :ht repetition)))))
 
+    
     (gl:with-pushed-matrix
-      (gl:translate 10 100 0)
-     (gl:with-pushed-matrix
+      #+nil (gl:translate 10 100 0)
+      (gl:with-pushed-matrix
        ;; TEX draw raw camera image on the left  
        (gl:scale .5 .5 1s0)
 					;(gl:translate 20 600 .3)
        (when (and clara:*im* *scaled-clara-im*)
-	 (let ((tex (make-instance 'gui::texture :data *scaled-clara-im*
-				   )))
+	 (let ((tex (make-instance 'gui::texture :data *scaled-clara-im*)))
 	   (destructuring-bind (h w) (array-dimensions clara:*im*)
 	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		       :wt 1s0 :ht 1s0))
 	   (gui:destroy tex))))
      
-     #+nil
-     (TODO 
-      introduce a list of all the nuclei in the order they should be processed
-      show them in the order of slices
-      display mma image and a circle on the camera image
-      that was true, when the currently displayed image was captured 
-      )
+     (gl:with-pushed-matrix ;; MIRROR TEX
+       (gl:translate 10 500 0)
+       (gl:scale .5 .5 1s0)
+       (when (and
+	      *bfps8*
+	      *last-captured-bead*
+	      (< -1 *last-captured-bead* (length rayt-model:*centers*)))
+	 (let* ((co8 (elt *bfps8* *last-captured-bead*))
+		(tex (make-instance 'gui::texture :data co8)))
+	   (destructuring-bind (h w) (array-dimensions co8)
+	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		       :wt 1s0 :ht 1s0))
+	   (gui:destroy tex)))))
 
-     (let ((radius 25s0)) ;;FAN
+    (let ((radius 18s0)) ;;FAN
        (when *bright-im*
 	 (gl:with-pushed-matrix
 	   (gl:translate *window-overlap* 0 0)
 	   (gl:color 1 1 1)
 	   (gl:line-width 3s0)
-	   (gl:translate (vx *illum-target*) (- (vy *illum-target*) 168) 0.0)
+	   (gl:translate (- (vx *illum-target*) 6) (- (vy *illum-target*) 80) 0.0)
 	   (draw-disk-fan :radius radius))
 	 (gl:with-pushed-matrix ;; small version for me to see
+	   #+nil (gl:translate 10 100 0)
 	   (gl:scale .5 .5 1s0)
 	   (gl:color 1 .3 .2)
-	   (macrolet ((tr (x y)
-			`(lcos->cam (v ,x ,y 1))))
-	     (let ((a (tr 0 0))
-		   (b (tr 1280 1024))
-		   (c (tr (vx *illum-target*)
-			  (vy *illum-target*))))
-	      (gl:with-primitive :line-loop
-		(gl:vertex (vx a) (vy a))
-		(gl:vertex (vx b) (vy a))
-		(gl:vertex (vx b) (vy b))
-		(gl:vertex (vx a) (vy b)))
+	   (when (and *last-captured-bead*
+		      (< -1 *last-captured-bead* (length rayt-model:*centers*)))
+	     (macrolet ((tr (x y)
+			  `(lcos->cam (v ,x ,y 1))))
+	       (multiple-value-bind (nx ny) (nucleus-cam-coordinates *last-captured-bead*)
+		 (let* ((a (tr 0 0))
+			(b (tr 1280 1024))
+			(c (tr (vx *illum-target*) (vy *illum-target*))
+			  #+nil(tr nx (- ny 168))))
+		   (gl:with-primitive :line-loop
+		     (gl:vertex (vx a) (vy a))
+		     (gl:vertex (vx b) (vy a))
+		     (gl:vertex (vx b) (vy b))
+		     (gl:vertex (vx a) (vy b)))
 					;(gl:color 1 1 1)
-	      (gl:translate (vx c) (vy c) 0.0)
-	     
-	      (draw-disk-fan :radius 10s0)))))))
-    
+		   (gl:translate (vx c) (vy c) 0.0)
+		   
+		   (draw-disk-fan :radius 10s0))))))))
+    (when *white-lcos* 
+      (let ((radius 108s0)) ;;FAN
+	(gl:with-pushed-matrix
+	  (gl:translate *window-overlap* 0 0)
+	  (gl:color 1 1 1)
+	  (gl:line-width 3s0)
+	  (gl:translate 645 570 0.0)
+	  (draw-disk-fan :radius radius))))
+
     (gl:check-error "draw")
     #+nil
     (gl:with-primitive :lines
@@ -1152,7 +1178,7 @@ clara:*im*
       (gl:color 0 0 1) (gl:vertex 0 0 1) (gl:vertex 0 0 100))))
 
 (defun select-disk (q)
-  (when q
+  #+nil(when q
     (progn
      (setf *mma-select* q)
      (mma:select-pictures q :n 1 :ready-out-needed t))))
