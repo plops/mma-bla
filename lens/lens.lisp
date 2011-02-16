@@ -1,7 +1,7 @@
 ;; for i in `cat lens.lisp|grep "^(defun"|cut -d " " -f2`;do echo \#:$i ;done
 (in-package :lens)
 
-(declaim (optimize (speed 2) (safety 3) (debug 3)))
+;(declaim (optimize (speed 2) (safety 3) (debug 3)))
 
 (defgeneric intersect (ray object))
 
@@ -101,6 +101,7 @@ condition RAY-LOST is signalled."
 ;;             +--------------------
 ;;             |                 /
 
+(defparameter *refract-res* nil)
 ;; 2008 Hwang Simulation of an oil immersion objective lens...
 (defmethod refract ((ray ray) (objective objective))
   "Returns the refracted ray with the starting point on the principle
@@ -108,6 +109,7 @@ sphere of the objective. If the cap of the principal sphere (given by
 NA) is missed then the condition LOST-RAY is signalled."
   (declare (values ray &optional))
   (check-direction-norm ray)
+  (setf *refract-res* nil)
   (with-slots ((start vector::start)
 	       (dir vector::direction)) ray
     (with-slots ((c center)
@@ -120,28 +122,31 @@ NA) is missed then the condition LOST-RAY is signalled."
       (check-unit-norm n)
       ;; call refract for lens and refine the result
       (let* ((lens-ray (call-next-method ray objective))
-             (r (vector::direction lens-ray))
-             (i (vector::start lens-ray)) ;; intersection with lens plane
-             (a (v* n (* f (- ri 1))))
-             (ru (v+ r a))
-             (rho (v- i c))
-             (rho2 (v. rho rho))
-             (nf (* ri f))
-             (nf2 (* nf nf))
-             (rat (- nf2 rho2)))
-        (when (<= rat 0d0) ;; ray doesn't hit principal sphere
-          (error 'ray-lost))
-        (let* ((s (v* dir (- nf (sqrt rat))))
-               (ro (v- ru s))
+	     (r (vector::direction lens-ray))
+	     (i (vector::start lens-ray)) ;; intersection with lens plane
+	     (a (v* n (* f (- ri 1))))
+	     (ru (v+ r a))
+	     (rho (v- i c))
+	     (rho2 (v. rho rho))
+	     (nf (* ri f))
+	     (nf2 (* nf nf))
+	     (rat (- nf2 rho2)))
+	(when (<= rat 0d0) ;; ray doesn't hit principal sphere
+	  (error 'ray-lost))
+	(let* ((s (v* dir (- nf (sqrt rat))))
+	       (ro (v- ru s))
 	       (nro (normalize ro))
-               (cosu (v. nro n))
-               (sinu2 (- 1 (* cosu cosu)))
-               (sinu-max (/ na ri)))
-          (when (<= (* sinu-max sinu-max) sinu2) ;; angle to steep
-            (error 'ray-lost))
-          (make-instance 'ray
-                         :direction ro 
-                         :start (v+ s i)))))))
+	       (cosu (v. nro n))
+	       (sinu2 (- 1 (* cosu cosu)))
+	       (sinu-max (/ na ri)))
+	  (push (vector::start ray) *refract-res*)
+	  (push i *refract-res*)
+	  (push ro *refract-res*)
+	  (when (<= (* sinu-max sinu-max) sinu2) ;; angle to steep
+	    (error 'ray-lost))
+	  (make-instance 'ray
+			 :direction ro 
+			 :start (v+ s i)))))))
 #+nil
 (handler-case 
     (refract (make-instance 'ray 

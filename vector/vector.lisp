@@ -80,6 +80,7 @@
 	      :initial-contents (list x y z)))
 
 (defmacro v (&rest args)
+  "Stores coordinates in order x y z."
   `(make-vec ,@(mapcar #'(lambda (x)
 			   (coerce x 'double-float))
 		       args)))
