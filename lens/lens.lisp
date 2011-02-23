@@ -109,7 +109,6 @@ sphere of the objective. If the cap of the principal sphere (given by
 NA) is missed then the condition LOST-RAY is signalled."
   (declare (values ray &optional))
   (check-direction-norm ray)
-  (setf *refract-res* nil)
   (with-slots ((start vector::start)
 	       (dir vector::direction)) ray
     (with-slots ((c center)
@@ -134,14 +133,19 @@ NA) is missed then the condition LOST-RAY is signalled."
 	(when (<= rat 0d0) ;; ray doesn't hit principal sphere
 	  (error 'ray-lost))
 	(let* ((s (v* dir (- nf (sqrt rat))))
-	       (ro (v- ru s))
+	       (ro (v+ ru s))
 	       (nro (normalize ro))
 	       (cosu (v. nro n))
 	       (sinu2 (- 1 (* cosu cosu)))
 	       (sinu-max (/ na ri)))
-	  (push (vector::start ray) *refract-res*)
-	  (push i *refract-res*)
-	  (push ro *refract-res*)
+	  (push `((start ,(vector::start ray))
+		  (i ,i)
+		  (ro ,ro)
+		  (ru ,ru)
+		  (a ,a)
+		  (r ,r)
+		  (s ,s)) 
+		*refract-res*)
 	  (when (<= (* sinu-max sinu-max) sinu2) ;; angle to steep
 	    (error 'ray-lost))
 	  (make-instance 'ray

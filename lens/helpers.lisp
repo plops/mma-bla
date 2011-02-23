@@ -69,7 +69,7 @@
 	   (phi (atan y-mm x-mm))
 	   (start (v+ center (make-vec (* bfp-radius bfp-x/r)
 				       (* bfp-radius bfp-y/r)
-				       (- f))))
+				       (- f)))) ;; FIXME use normal
 	   (enter (make-instance 'ray  
 				 :start start
 				 :direction (v-spherical theta phi)))
