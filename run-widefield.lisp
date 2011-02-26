@@ -40,5 +40,3 @@
 
 (vol:save-stack-ub8 "/dev/shm/o"
  (vol:normalize-3-sf/ub8 *wf-st*))
-
-(ldb (byte 8 0) 31)
