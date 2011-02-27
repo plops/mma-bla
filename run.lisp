@@ -12,7 +12,7 @@
  (require :vol)
  (require :bead-eval))
 
-(defparameter *data-dir* "/home/martin/d0216/")
+(defparameter *data-dir* "/dev/shm/")
 (defmacro dir (str &rest rest)
   `(concatenate 'string *data-dir* (format nil ,str ,@rest)))
 
@@ -42,7 +42,8 @@
  (cl-store:store *stack* (dir "stack.store"))
  nil)
 #+nil ;; load data again
-(defparameter *stack* (cl-store:restore "/data/dat/d0210/auswert/stack.store"))
+(time
+ (defparameter *stack* (cl-store:restore "/data/dat/d0216/2/stack.store")))
 
 
 
