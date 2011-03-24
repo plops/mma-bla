@@ -236,22 +236,33 @@ lengths in micrometer."
 	(intermediate-integrals-cyl nz nradius (/ u nz) (/ v nradius))
       (vol::interpolate2-cdf i0 2d0 2d0))))
 
-;; size radius is either the extend in x or y (in um) depending on what is bigger
+;; dx is sampling distance in x and y (in um) depending by default
+;; chosen so that the intensity psf is sufficiently sampled
 (defun electric-field-psf
-    (z y x size-z size-radius &key (numerical-aperture (coerce 1.38 'my-float)) 
+    (z y x &key
+     (numerical-aperture (coerce 1.38 'my-float)) 
      (immersion-index (coerce 1.515 'my-float))
      (wavelength (coerce .480 'my-float))
-     (integrand-evaluations 31))
+     (integrand-evaluations 31)
+     (dz (let* ((alpha (asin (/ numerical-aperture immersion-index)))
+		    (dz (/ wavelength (* 2.0 immersion-index (- 1 (cos alpha))))))
+	       (* z dz))) 
+     (dx (/ wavelength (* 4.0 numerical-aperture))))
   (declare (fixnum z y x integrand-evaluations)
-	   (my-float size-z size-radius numerical-aperture immersion-index
+	   (my-float dz dx numerical-aperture immersion-index
 		     wavelength)
 	   (values (simple-array (complex my-float) 3)
 		   (simple-array (complex my-float) 3)
-		   (simple-array (complex my-float) 3) &optional))
+		   (simple-array (complex my-float) 3)
+		   single-float ;dz
+		   single-float ;dx
+		   &optional))
   (init :numerical-aperture numerical-aperture
 	:immersion-index immersion-index
 	:integrand-evaluations integrand-evaluations)
-  (let* ((nradius (1+ (ceiling (* (sqrt (* +one+ 2)) (max x y)))))
+  (let* ((size-z (* dz z))
+	 (size-radius (* dx (max x y)))
+	 (nradius (1+ (ceiling (* (sqrt (* +one+ 2)) (max x y)))))
 	 (nz (ceiling z 2))
 	 (dims (list z y x))
 	 (e0 (make-array dims :element-type '(complex my-float)))
@@ -300,7 +311,7 @@ lengths in micrometer."
 	    (setf (aref e0 (- z k 1) j i) (- (conjugate (aref e0 k j i)))
 		  (aref e1 (- z k 1) j i) (- (conjugate (aref e1 k j i)))
 		  (aref e2 (- z k 1) j i) (conjugate (aref e2 k j i)))))))
-    (values e0 e1 e2)))
+    (values e0 e1 e2 dz dx)))
 
 #+nil
 (progn (electric-field-psf 10 10 10 3.0 3.0) nil)
