@@ -20,10 +20,10 @@
 	     (data-1d (make-array (* h w)
 				  :element-type type
 				  :displaced-to data)))
-	(with-open-file (s filename :element-type type)
-	  (file-position s pos)
-	  (read-sequence data-1d s))
-	data))))
+	(with-open-file (s2 filename :element-type type)
+	  (file-position s2 pos)
+	  (read-sequence data-1d s2))
+       	data))))
 
  
 (defun write-pgm (filename img)

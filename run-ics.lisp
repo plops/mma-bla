@@ -41,7 +41,7 @@
 #+nil
 (defparameter icd
  (vol:convert-3-ub16/csf-mul 
-   (import:read-ics4-stack "/home/martin/cele.ics" 1))) 
+   (import:read-ics4-stack "/home/martin/cele.ics" 32))) 
 
 #+nil
 (vol:write-pgm "/dev/shm/o.pgm"
@@ -52,6 +52,7 @@
 
 #+nil
 (vol:save-stack-ub8 "/dev/shm/a" (vol:normalize-3-csf/ub8-realpart icd))
+
 
 (defun nuclear-seeds (v)
   "Find 3D maxima in 26 neighbourhood. Return list height, list z y x."
