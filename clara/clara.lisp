@@ -375,3 +375,173 @@
   (stop))
 #+nil
 (uninit)
+
+(defun trigger-mode (mode)
+  (declare (type (member :internal
+			 :external
+			 :external-start
+			 :external-exposure
+			 :external-fvb-em
+			 :software) mode))
+  (let ((imode (ecase mode
+		 (:internal 0)
+		 (:external 1)
+		 (:external-start 6)   ;; only in fast kinetics mode
+		 (:external-exposure 7) ;; bulb
+		 (:external-fvb-em 9)   ;; only EM newton in fvb
+		 (:software 10))))
+    (when (check (is-trigger-mode-available imode)))
+   (check (set-trigger-mode imode))))
+
+(defun read-mode (mode)
+  (declare (type (member :full-vertical-binning
+			 :mutli-track
+			 :random-track
+			 :single-track
+			 :image) mode))
+  (check (set-read-mode
+	  (ecase mode
+	    (:full-vertical-binning 0)
+	    (:multi-track 1)
+	    (:random-track 2)
+	    (:single-track 3)
+	    (:image 4)))))
+
+(defun acquisition-mode (mode)
+  (declare (type (member :single-scan :accumulate
+			 :kinetics :fast-kinetics
+			 :run-till-abort)))
+  (check (set-acquisition-mode
+	  (ecase mode
+	    (:single-scan 1)
+	    (:accumulate 2)
+	    (:kinetics 3)
+	    (:fast-kinetics 4)
+	    (:run-till-abort 5)))))
+
+(defun camera-information ()
+ (multiple-value-bind (r a)
+     (get-camera-information 100)
+   (list (when (= 1 (ldb (byte 1 0) a))
+	   'usb-camera-present)
+	 (when (= 1 (ldb (byte 1 1) a))
+	   'all-libraries-loaded)
+	 (when (= (ldb (byte 1 2) a))
+	   'camera-initialized))))
+
+(defun capabilities ()
+ (let* ((n 12)
+	(a (make-array n :element-type '(unsigned-byte 32))))
+   ;; write size of array in bytes into the first element
+   (setf (aref a 0) (* 4 n))
+   (check (get-capabilities (sb-sys:vector-sap a)))
+   (let ((cap
+	  `((acquisition (single run-till-abort accumulate kinetic 
+				 frametransfer fast-kinetics overlap))
+
+	    (read-modes (fullimage subimage singletrack fvb
+				   multitrack randomtrack))
+	    (read-modes-with-frame-transfer
+	     (fullimage subimage singletrack fvb
+			multitrack randomtrack))
+	    (trigger-modes (internal external external-fvb-em
+				     continuous external-start
+				     external-exposure inverted))
+	    (camera-type ,(lambda (x) (ecase x
+				   (0 'pda)
+				   (1 'ixon)
+				   (2 'iccd)
+				   (3 'emccd)
+				   (4 'ccd)
+				   (5 'istar)
+				   (6 'video)
+				   (7 'idus)
+				   (8 'newton)
+				   (9 'surcam)
+				   (10 'usbistar)
+				   (11 'luca)
+				   (12 'reserved)
+				   (13 'ikon)
+				   (14 'in-ga-as)
+				   (15 'ivac)
+				   (17 'clara))))
+	    (pixel-modes (8bit 14bit 16bit 32bit mono rgb cmy))
+	    (set-functions (v-readout h-readout temperature
+				      mcp-gain emccd-gain baseline-clamp
+				      vs-amplitude high-capacity
+				      baseline-offset preamp-gain
+				      crop-mode dma-parameters horizontal-bin
+				      multitrack-h-range randomtrack-no-gaps))
+	    (get-functions (temperature temperature-range
+					detector-size mcp-gain emccd-gain))
+	    (features (polling events spooling shutter shutter-ex
+			       i2c saturation-event fan-control mid-fan-control
+			       temperature-during-acquisition keep-clean-control
+			       ddg-lite frametransfer-external-exposure
+			       kinetic-external-exposure dac-control
+			       metadata ttl-io-control))
+	    (pci-card ,(lambda (x) x))
+	    (em-gain (8bit 12bit linear12 real12)))))
+     (loop for i below (length cap) collect
+	  (destructuring-bind (name vals) (elt cap i)
+	    (list 
+	     name
+	     (cond
+	       ((functionp vals)
+		(funcall vals (aref a i)))
+	       (t
+		(loop for j below (length vals) collect
+		     (list (elt vals j) (= 1 (ldb (byte 1 j) (aref a i)))))))))))))
+
+
+
+(defun all-hs-speeds ()
+  (let ((em-mode nil) ;; clara has no em-mode
+	(ads (val2 (get-number-ad-channels)))
+	(res nil))
+    (loop for ad below ads do
+	 (loop for typ in (if em-mode 
+			      '(0 1)
+			      '(1))
+	    do
+	      (let ((nr-hs (val2 (get-number-hs-speeds ad typ))))
+		(loop for i below nr-hs do
+		  (let ((hss (val2 (get-hs-speed ad typ i))))
+		    (push (list :adc-nr ad :conventional typ :hs-nr i :hs-speed-MHz hss)
+			  res))))))
+    res))
+#+nil
+(all-hs-speeds)
+
+(defun all-vs-speeds ()
+ (loop for i below (val2 (get-number-vs-speeds)) collect
+      `(:vs-nr ,i :vs-speed-us ,(val2 (get-vs-speed i)))))
+
+
+(defmacro check-first-of-2 (cmd)
+  `(multiple-value-bind (a b)
+       ,cmd
+     (list (lookup-error a) b)))
+
+(defmacro check-first-of-3 (cmd)
+  `(multiple-value-bind (a b c)
+       ,cmd
+     (list (lookup-error a) b c)))
+
+(defun save-camera-specs (fn)
+ (with-open-file (*standard-output* 
+		  fn :direction :output
+		  :if-exists :supersede
+		  :if-does-not-exist :create)
+   (write 
+    `((camera-information ,(camera-information))
+      (camera-serial-number ,(val2 (get-camera-serial-number)))
+      (amplifier-number ,(val2 (get-number-amp)))
+      (preamp-gains ,(val2 (get-number-pre-amp-gains)))
+
+      (detector-size ,(cdr (multiple-value-list (get-detector))))
+      (vs-speeds ,(all-vs-speeds))
+      (hs-speeds ,(all-hs-speeds))
+      (capabilities ,(capabilities))
+      (temperature ,(check-first-of-2 (get-temperature-f))
+		   )))))

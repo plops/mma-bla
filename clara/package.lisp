@@ -67,4 +67,7 @@
 #:set-number-accumulations
 
    #:snap-single-image
-   #:init))
+   #:init
+   #:all-hs-speeds
+   #:all-vs-speeds
+   #:save-camera-specs))

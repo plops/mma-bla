@@ -1,7 +1,7 @@
 (in-package :clara)
 
 (defparameter *clara-library* 
- (load-shared-object "/usr/local/lib/libandor.so.2.88.30003.0"))
+  (load-shared-object "/usr/local/lib/libandor.so.2.88.30003.0"))
 
 
 (define-alien-routine ("GetAvailableCameras" get-available-cameras)
@@ -62,6 +62,10 @@
     unsigned-int
   (arr (* int))
   (size unsigned-int))
+(define-alien-routine ("GetAcquiredData16" get-acquired-data16)
+    unsigned-int
+  (arr (* unsigned-short))
+  (size unsigned-long))
 (define-alien-routine ("GetTotalNumberImagesAcquired" get-total-number-images-acquired)
     unsigned-int
   (index int :out))
@@ -152,12 +156,13 @@
   (index int)
   (pa int)
   (status int :out))
+
 (define-alien-routine ("IsInternalMechanicalShutter" is-internal-mechanical-shutter)
     unsigned-int
   (internal-shutter int :out))
-(define-alien-routine ("GetCapabilities" get-capabilities)
-    unsigned-int
-  (caps (array unsigned-int 12) :out))
+;;  (define-alien-routine ("GetCapabilities" get-capabilities)
+;;     unsigned-int
+;;   (caps (array unsigned-int 12) :out))
 (define-alien-routine ("GetTemperature" get-temperature)
     unsigned-int
   (temp int :out))
@@ -195,6 +200,9 @@
 (define-alien-routine ("SetTriggerMode" set-trigger-mode)
     unsigned-int
   (trigger-mode int))
+(define-alien-routine ("IsTriggerModeAvailable" is-trigger-mode-available)
+    unsigned-int
+  (trigger-mode int))
 (define-alien-routine ("GetAcquisitionProgress" get-acquisition-progress)
     unsigned-int
   (acc long :out)  ;; number of accumulation and series scans completed
@@ -206,6 +214,10 @@
 (define-alien-routine ("SetNumberAccumulations" set-number-accumulations)
     unsigned-int
   (number int))
+
+(define-alien-routine ("SetDACOutputScale" set-dac-output-scale)
+    unsigned-int
+  (scale int)) ;; only clara
  
 ;; either use get-number-new-images and get-images or use
 ;; get-most-recent-image (or get-oldest-image)
@@ -314,3 +326,33 @@
 #+nil
 (lookup-error 20075)
 
+
+(define-alien-routine ("GetCameraInformation" get-camera-information)
+    unsigned-int
+  (index int)
+  (information long :out))
+
+(define-alien-routine ("GetCameraSerialNumber" get-camera-serial-number)
+    unsigned-int
+  (number int :out))
+
+
+(define-alien-routine ("GetCapabilities" get-capabilities)
+    unsigned-int
+  (caps (* unsigned-int)))
+
+(define-alien-routine ("GetHeadModel" get-head-model)
+    unsigned-int ;; char array should have length MAX_PATH which isn't defined
+  (name (* char)))
+
+(define-alien-routine ("SetFanMode" set-fan-mode)
+    unsigned-int ;; full=0, low=1, off=2
+  (mode int))
+
+(define-alien-routine ("SetAdvancedTriggerModeState" set-advanced-trigger-mode-state)
+    unsigned-int
+  (icam int))
+
+(define-alien-routine ("SaveAsSif" save-as-sif)
+    unsigned-int
+  (path c-string))

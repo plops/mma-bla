@@ -4,7 +4,7 @@
 (in-package :mma)
 
 #+nil
-(register-board #x0036344B00800803
+(register-board #x0036344B00800809
 		"192.168.0.2"
 		"255.255.255.0"
 		"0.0.0.0" 
@@ -21,7 +21,7 @@
 (plain-status)
 
 #+nil
-(load-configuration "/home/martin/3ini")
+(load-configuration "/home/martin/9ini")
 
 
 #+nil
@@ -30,7 +30,8 @@
 
 
 #+nil
-(set-extern-ready 16s0 16300s0)
+(set-extern-ready (+ 20s0 16s0)
+		  (- 16300s0 20s0)) ;; should start 20us later than deflection
 
 
 #+nil
@@ -42,6 +43,9 @@
 #+nil
 (mma:set-nominal-deflection-nm 118.25)
 
+#+nil
+(let ((cmd "STM#DBE " ))
+  (ipms-ffi::service-command "SEND#SRV" cmd (length cmd)))
 
 #+nil
 (set-power-on)

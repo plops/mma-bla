@@ -85,6 +85,11 @@ to the onboard TCP Server.")
     int
   "Close socket connection with the board.")
 
+(define-alien-routine ("SLM_ServiceCommand" service-command)
+    int
+  (command c-string)
+  (data c-string)
+  (length unsigned-long))
  
 (define-alien-routine ("SLM_LoadConfiguration" load-configuration)
     int
