@@ -21,8 +21,9 @@
 (get-temperature-f)
 
 (trigger-mode :external)
+(trigger-mode :internal)
 
-(set-exposure-time .163)
+(set-exposure-time .0163)
 
 (read-mode :image)
 
