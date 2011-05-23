@@ -5,14 +5,24 @@
   (:use :cl :clara))
 (in-package :run-clara)
 
+(progn
+ (check 
+   (set-current-camera
+    (val2 (get-camera-handle 
+	   (1- (val2 (get-available-cameras)))))))
 
-(check 
-  (set-current-camera
-   (val2 (get-camera-handle 
-	  (1- (val2 (get-available-cameras)))))))
-
+ (check
+   (initialize "/usr/local/etc/andor"))
+ (trigger-mode :external)
+(set-exposure-time .0163)
+(read-mode :image)
+(acquisition-mode :single-scan)
 (check
-  (initialize "/usr/local/etc/andor"))
+ (set-image 1 1
+	    1 1392
+	    1 1040))
+(set-ad-channel 1)
+)
 
 (get-temperature-range)
 
@@ -22,24 +32,16 @@
 (check (set-temperature (val2 (get-temperature-range))))
 (get-temperature-f)
 
-(trigger-mode :external)
+
+
 (trigger-mode :internal)
 
-(set-exposure-time .0163)
 
-(read-mode :image)
-
-(acquisition-mode :single-scan)
 
 
 
 ;; set-accumulation-cycle-time
 ;; aet-number-accumulations (that's just in memory)
-(check
- (set-image 1 1
-	    1 1392
-	    1 1040))
-(set-ad-channel 1)
 
 
 
