@@ -70,4 +70,14 @@
    #:init
    #:all-hs-speeds
    #:all-vs-speeds
-   #:save-camera-specs))
+   #:save-camera-specs
+
+   #:val2
+   #:val3
+   #:check
+
+   #:trigger-mode
+   #:read-mode
+   #:acquisition-mode
+   #:lookup-error
+   #:get-acquired-data16))

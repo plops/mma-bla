@@ -1,9 +1,9 @@
 (require :asdf)
 (push "/home/martin/0505/mma/" asdf:*central-registry*)
 (require :clara)
-(defpackage :run
+(defpackage :run-clara
   (:use :cl :clara))
-(in-package :clara)
+(in-package :run-clara)
 
 
 (check 
@@ -13,6 +13,8 @@
 
 (check
   (initialize "/usr/local/etc/andor"))
+
+(get-temperature-range)
 
 (get-detector)
 (cooler-on)
@@ -39,6 +41,8 @@
 	    1 1040))
 (set-ad-channel 1)
 
+
+
 (defparameter *blub*
   (let* ((w 1392)
 	 (h 1040)
@@ -48,7 +52,7 @@
 	 (sap (sb-sys:vector-sap img1)))
     (progn
       (start-acquisition)
-      (loop while (not (eq 'DRV_IDLE
+      (loop while (not (eq 'clara::DRV_IDLE
 			   (lookup-error (val2 (get-status)))))
 	 do
 	   (sleep .01))

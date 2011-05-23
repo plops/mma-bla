@@ -1,8 +1,10 @@
+(setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
+(ql:quickload "cl-opengl")
 (require :gui)
 (require :clara)
-(defpackage :run2
+(defpackage :run-gui
   (:use :cl :clara :gl))
-(in-package :clara)
+(in-package :run-gui)
 
 (defparameter *blub*
   (let* ((w 1392)
@@ -13,7 +15,7 @@
 	 (sap (sb-sys:vector-sap img1)))
     (progn
       (start-acquisition)
-      (loop while (not (eq 'DRV_IDLE
+      (loop while (not (eq 'clara::DRV_IDLE
 			   (lookup-error (val2 (get-status)))))
 	 do
 	   (sleep .01))
@@ -30,17 +32,44 @@
 (defparameter *white* *blub*)
 (defparameter *dark* *blub*)
 (defparameter *line* *blub*)
+
 (defparameter *t8*
-  (let* ((b (make-array (array-dimensions *blub*)
+  (let* ((dat *diff*)
+	 (b (make-array (array-dimensions dat)
 			:element-type '(unsigned-byte 8)))
 	(b1 (sb-ext:array-storage-vector b))
-	(a1 (sb-ext:array-storage-vector *blub*))
-	(mi 50)
-	(ma 6000))
+	(a1 (sb-ext:array-storage-vector dat))
+	(mi 0s0)
+	(ma .0009s0))
    (dotimes (i (length b1))
-     (setf (aref b1 i) (min 255 (max 0 (floor (* 255 (- (aref a1 i) 50))
+     (setf (aref b1 i) (min 255 (max 0 (floor (* 255 (- (aref a1 i) mi))
 					      (- ma mi) )))))
    b))
+
+(reduce #'max (sb-ext:array-storage-vector *cut*))
+
+(defparameter *fit*
+  (let* ((a (multiple-value-call #'gauss::create 200 200
+				 (gauss::do-fit *cut*)))
+	 (s (gauss::estimate-amplitude *cut*))
+	 (a1 (sb-ext:array-storage-vector a)))
+    (dotimes (i (length a1))
+      (setf (aref a1 i) (* s (aref a1 i))))
+    a))
+
+(gauss::do-fit *cut*)
+
+(defparameter *diff*
+  (let* ((e (make-array (array-dimensions *cut*) :element-type 'single-float))
+	 (e1 (sb-ext:array-storage-vector e))
+	 (a1 (sb-ext:array-storage-vector *fit*))
+	 (c1 (sb-ext:array-storage-vector *cut*)))
+    (dotimes (i (length a1))
+      (setf (aref e1 i) (expt (- (aref a1 i) (aref c1 i)) 2)))
+    e))
+
+(defparameter *fit*
+  (gauss::create-default 200 :x 82s0 :y 102s0 :sxx (expt 12s0 2)))
 
 (let* ((w 200)
        (h 200)
@@ -58,8 +87,26 @@
 		      (- (aref *white* j i)
 			 (aref *dark* j i)))
 		   0s0)))
-	(setf (aref a jj ii) v))))
+	(setf (aref a jj ii) (if (< .05 v) v 0s0)))))
  (defparameter *cut* a))
+
+
+(defun camera->lcos (v)
+  (declare (type (array single-float 1) v))
+  (let* ((h (make-array (list 3 3)
+			:element-type 'single-float
+			:initial-contents
+			(list (list .0674 -1.273 1283.8)
+			      (list -.994 -.3048 1120.95)
+			      (list .0001727 -.0004628 1.0741))))
+	 (x (loop for i below 3 sum (* (aref v i) (aref h 0 i))))
+	 (y (loop for i below 3 sum (* (aref v i) (aref h 1 i))))
+	 (z (loop for i below 3 sum (aref h 2 i))))
+    (values (/ x z) (/ y z))))
+
+#+nil
+(camera->lcos (make-array 3 :element-type 'single-float
+			  :initial-contents (list 701s0 551s0 1s0)))
 
 (defparameter *t8*
   (let* ((b (make-array (array-dimensions *blub*)
@@ -73,7 +120,7 @@
        (let ((v (if (< 1000 (aref w1 i)) 
 		    (min 255 
 			 (max 0 
-			      (floor (* 4 255 (- (aref l1 i) 
+			      (floor (* 255 (- (aref l1 i) 
 						 (aref d1 i)))
 				     (- (aref w1 i)
 					(aref d1 i)))))
@@ -91,21 +138,23 @@
 		     (setf (aref b1 i) 80))))))))
     b))
 
+(defparameter *t8* nil)
 (let ((a 3))
  (defun draw-screen ()
-   (gl:clear-color 0 0 0 1)
+   (gl:clear-color 0 .3 0 1)
    (gl:clear :color-buffer-bit)
-   (sleep 2)
+   (sleep .1)
    (gl:line-width 30)
    (gl:color 1 1 1)
-   (let ((tex (make-instance 'gui::texture :data *t8*)))
-	  (destructuring-bind (h w) (array-dimensions *t8*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		      :wt 1s0 :ht 1s0))
-	  (gui:destroy tex))
+   (when *t8*
+    (let ((tex (make-instance 'gui::texture :data *t8*)))
+      (destructuring-bind (h w) (array-dimensions *t8*)
+	(gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		  :wt 1s0 :ht 1s0))
+      (gui:destroy tex)))
    #+nil(gl:color 0 0 0)
    #+nil(gl:rect 0 1024 1280 (+ 1024 1024))
-   (gl:rect 512 (+ 1024 512) 520 (+ 1024 520))
+   (gl:rect (+ 1024 512) 512 (+ 1024 520) 520)
    #+nil
    (gl:with-primitive :lines
      (gl:vertex 100 100)
@@ -115,6 +164,6 @@
 
 (sb-thread:make-thread 
  #'(lambda ()
-     (gui:with-gui (1280 (* 2 1024))
+     (gui:with-gui ((* 2 1280) 1024)
        (draw-screen)))
  :name "display-gui")
