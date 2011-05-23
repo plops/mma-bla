@@ -1,3 +1,5 @@
+(sb-posix:setenv "DISPLAY" ":0" 1)
+
 (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
 (ql:quickload "cl-opengl")
 (require :gui)
@@ -79,9 +81,9 @@
   (let* ((h (make-array (list 3 3)
 			:element-type 'single-float
 			:initial-contents
-			(list (list .0674016 -1.27339 1283.83)
-			      (list -.994177 -.304805 1120.95)
-			      (list .000172749 -.000462831 1.07407))))
+			(list (list .265 -1.09 1094.1)
+			      (list -1.102 -.2891 1204.0)
+			      (list -2.107e-5 2.12e-6 1.00779))))
 	 (x (loop for i below 3 sum (* (aref v i) (aref h 0 i))))
 	 (y (loop for i below 3 sum (* (aref v i) (aref h 1 i))))
 	 (z (loop for i below 3 sum (* (aref v i) (aref h 2 i)))))
@@ -89,7 +91,7 @@
 
 
 #+nil
-(lcos->camera (vec 400s0 400s0 1s0))
+(lcos->camera (vec 701s0 451s0 1s0))
 
 #+nil
 (sb-thread:make-thread 
@@ -125,16 +127,18 @@
 	 (free-internal-memory)))
      img))
  (defparameter *t8*
-   (when (and *dark* *white* *line*)
+   (when (and *line* ;*dark* *white* *line*
+	      )
     (let* ((b (make-array (array-dimensions *line*)
 			  :element-type '(unsigned-byte 8)))
 	   (b1 (sb-ext:array-storage-vector b))
-	   (d1 (sb-ext:array-storage-vector *dark*))
-	   (w1 (sb-ext:array-storage-vector *white*))
-	   (l1 (sb-ext:array-storage-vector *line*)))
+	   ;(d1 (sb-ext:array-storage-vector *dark*))
+	   ;(w1 (sb-ext:array-storage-vector *white*))
+	   (l1 (sb-ext:array-storage-vector *line*))
+	   )
       (destructuring-bind (h w) (array-dimensions *line*)
 	(dotimes (i (length b1))
-	  (let ((v (if (< 800 (aref w1 i)) 
+	  (let ((v (if t ;(< 800 (aref w1 i)) 
 		       (min 255 
 			    (max 0 
 				 (floor (aref l1 i) 10)
@@ -166,7 +170,7 @@
    (gl:clear-color 0 0 0 1)
    (gl:clear :color-buffer-bit)
    (sleep .1)
-   (gl:line-width 1)
+   (gl:line-width 2)
    (gl:color 0 1 1)
    (when *t8*
     (let ((tex (make-instance 'gui::texture :data *t8*)))
@@ -177,29 +181,45 @@
    #+nil (gl:color 0 0 0)
    #+nil (gl:rect (+ 1280 0) 0 (+ 1280 1280) 1024)
    (gl:color 1 1 1)
-   #+nil (let ((d 7))
-     (dotimes (l 17)
-      (dotimes (k 16)
-	(multiple-value-bind (x y)
-	    (lcos->camera (vec (+ 340 (* k 20s0)) (+ (* l 20) 600s0) 1s0))
-	  (gl:rect (+ 1280 x (- d)) (+ y (- d)) (+ 1280 x d) (+ y d))))))
+   #+nil(gl:with-pushed-matrix
+     (gl:translate 0 1024 0)
+    (let ((d 7))
+      (dotimes (l 17)
+	(dotimes (k 16)
+	  (multiple-value-bind (x y)
+	      (lcos->camera (vec (+ 340 (* k 20s0)) (+ (* l 20) 600s0) 1s0))
+	    (gl:rect (+ 1280 x (- d)) (+ y (- d)) (+ 1280 x d) (+ y d)))))))
    (gl:with-pushed-matrix 
-     (gl:translate 1280 100 0)
-     (dotimes (j 9)
-       (gl:translate 0 50 0)
-       (dotimes (i 15)
-	 (gl:with-pushed-matrix 
-	  (gl:translate (* i 50) 0 0)
-	  (let ((x 20))
-	   (gl:with-primitive :line-loop
-	     (gl:vertex (- x) (- x))
-	     (gl:vertex x (- x))
-	     (gl:vertex x x)
-	     (gl:vertex (- x) x)))))))))
+     (gl:translate 0 0 0)
+     (loop for j from 200 below 450 by 50 do
+	  (loop for i from 200 below 700 by 50 do
+	       
+	       (gl:with-pushed-matrix 
+		 (multiple-value-bind (x y)
+		     (lcos->camera (vec (* 1s0 i) (* 1s0 j) 1s0))
+		   (gl:translate x y 0))
+		 (let ((x 1))
+		   (gl:with-primitive :line-loop
+		     (gl:vertex (- x) (- x))
+		     (gl:vertex x (- x))
+		     (gl:vertex x x)
+		     (gl:vertex (- x) x)))))))
+   (gl:with-pushed-matrix 
+     (gl:translate 0 1024 0)
+     (loop for j from 200 below 450 by 50 do
+	  (loop for i from 200 below 700 by 50 do
+	       (gl:with-pushed-matrix 
+		 (gl:translate i j 0)
+		 (let ((x 20))
+		   (gl:with-primitive :line-loop
+		     (gl:vertex (- x) (- x))
+		     (gl:vertex x (- x))
+		     (gl:vertex x x)
+		     (gl:vertex (- x) x)))))))))
 
 #+nil
 (sb-thread:make-thread 
  #'(lambda ()
-     (gui:with-gui ((* 2 1280) 1024)
+     (gui:with-gui (1280 (* 2 1024))
        (draw-screen)))
  :name "display-gui")

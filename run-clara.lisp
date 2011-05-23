@@ -6,23 +6,22 @@
 (in-package :run-clara)
 
 (progn
- (check 
-   (set-current-camera
-    (val2 (get-camera-handle 
-	   (1- (val2 (get-available-cameras)))))))
-
- (check
-   (initialize "/usr/local/etc/andor"))
- (trigger-mode :external)
-(set-exposure-time .0163)
-(read-mode :image)
-(acquisition-mode :single-scan)
-(check
- (set-image 1 1
-	    1 1392
-	    1 1040))
-(set-ad-channel 1)
-)
+  (check 
+    (set-current-camera
+     (val2 (get-camera-handle 
+	    (1- (val2 (get-available-cameras)))))))
+  
+  (check
+    (initialize "/usr/local/etc/andor"))
+  (trigger-mode :external)
+  (set-exposure-time .0163)
+  (read-mode :image)
+  (acquisition-mode :single-scan)
+  (check
+    (set-image 1 1
+	       1 1392
+	       1 1040))
+  (set-ad-channel 1))
 
 (get-temperature-range)
 
