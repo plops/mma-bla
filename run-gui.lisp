@@ -142,7 +142,7 @@
 	  (let ((v (if t ;(< 800 (aref w1 i)) 
 		       (min 255 
 			    (max 0 
-				 (floor (aref l1 i) 4)
+				 (floor (aref l1 i) 1)
 				 #+nil (floor (* 255 (- (aref l1 i) 
 						   (aref d1 i)))
 					(- (aref w1 i)
@@ -163,7 +163,51 @@
 #+nil
 (capture)
 
+(defmacro with-lcos-to-cam (&body body)
+  `(let* ((s 1.129781s0)
+	  (sx  s)
+	  (sy  (- s))
+	  (phi 1.3154879)
+	  (cp (cos phi))
+	  (sp (sqrt (- 1s0 (* cp cp))))
+	  (tx 1086.606s0)
+	  (ty 1198.154s0)
+	  (a (make-array (list 4 4) :element-type 'single-float
+			 :initial-contents
+			 (list (list (* sx cp)    (* sy sp)  .0  tx)
+			       (list (* -1 sx sp) (* sy cp)  .0  ty)
+			       (list .0     .0   1.0  .0)
+			       (list .0     .0    .0 1.0)))))
+     (gl:with-pushed-matrix
+       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
+       ,@body)))
 
+(defmacro with-cam-to-lcos ((&optional (x 0s0) (y 0s0)) &body body)
+  `(let* ((s .885090144449)
+	  (sx  s)
+	  (sy  (- s))
+	  (phi 1.3154879)
+	  (cp (cos phi))
+	  (sp (sqrt (- 1s0 (* cp cp))))
+	  (tx 783.23854s0)
+	  (ty 1198.40181879s0)
+	  (a (make-array (list 4 4) :element-type 'single-float
+			 :initial-contents
+			 (list (list (* sx cp)    (* sy sp)  .0  (+ ,x tx))
+			       (list (* -1 sx sp) (* sy cp)  .0  (+ ,y ty))
+			       (list .0     .0   1.0  .0)
+			       (list .0     .0    .0 1.0)))))
+     (gl:with-pushed-matrix
+       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
+       ,@body)))
+
+(defun draw-circle (x y r)
+  (declare (type single-float x y r))
+  (gl:with-primitive :line-loop
+   (let ((n 37))
+     (loop for i from 0 below n do
+	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
+	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
 (defparameter *t8* nil)
 (let ((a 3))
@@ -193,7 +237,7 @@
 	  (multiple-value-bind (x y)
 	      (lcos->camera (vec (+ 340 (* k 20s0)) (+ (* l 20) 600s0) 1s0))
 	    (gl:rect (+ 1280 x (- d)) (+ y (- d)) (+ 1280 x d) (+ y d)))))))
-   (gl:with-pushed-matrix 
+   #+nil (gl:with-pushed-matrix 
      (gl:translate 0 0 0)
      (loop for j from 200 below 450 by 50 do
 	  (loop for i from 200 below 700 by 50 do
@@ -208,46 +252,46 @@
 		     (gl:vertex x (- x))
 		     (gl:vertex x x)
 		     (gl:vertex (- x) x)))))))
-   (let ((n 7)
-	 (m 6))
+   (let ((n0 3) (n 21)
+	 (m0 1) (m 29)
+	 (r 250s0)
+	 (radii 4)
+	 (px 622.8s0) (py 594s0) (pr 12s0))
      ;; optimization by hand:
      ;; start with sx=sy=s=1, phi=0, tx=0, ty=0
      ;; shift big spot ontop of another by changing tx, ty
      ;; flip sign of sy=-s if it needs flipping
      ;; find rotation phi
      ;; adjust scale s
+     (gl:color 1 0 0)
+     (draw-circle px py pr)
+     (with-lcos-to-cam
+       
+       (gl:line-width 1)
+       #+nil (loop for i from n0 below n do
+	 (loop for j from m0 below m do
+	   (gl:point-size (if (and (= i 0) (= j 0))
+			      6 6))
+	   (gl:with-primitive :points
+	     (gl:vertex (* 50 i) (* 50 j)))))
+       #+nil(dotimes (i radii)
+	 (draw-circle 440s0 350s0 (* (/ radii) (+ 1 i) r))))
+     (gl:line-width 3)
      (gl:with-pushed-matrix
-       (let* ((s 1.13s0)
-	      (sx  s)
-	      (sy  (- s))
-	      (phi (* (coerce pi 'single-float) (/ 180s0) 75.4s0))
-	     (cp (cos phi))
-	     (sp (sqrt (- 1s0 (* cp cp))))
-	     (tx 930s0)
-	     (ty 920s0)
-	     (a (make-array (list 4 4) :element-type 'single-float
-			    :initial-contents
-			    (list (list (* sx cp)    (* sy sp)  .0  tx)
-				  (list (* -1 sx sp) (* sy cp)  .0  ty)
-				  (list .0     .0   1.0  .0)
-				  (list .0     .0    .0 1.0)))))
-	(gl:load-transpose-matrix (sb-ext:array-storage-vector a)))
-      
-      (dotimes (i n)
-	(dotimes (j m)
+       (gl:color 1 1 1)
+       (gl:translate 0 1024 0)
+       (with-cam-to-lcos (0 1024)
+
+	 (draw-circle px py pr))
+       #+nil(dotimes (i radii)
+	 (draw-circle 440s0 350s0 (* (/ radii) (+ 1 i) r)))
+       #+nil (loop for i from n0 below n do
+	(loop for j from m0 below m do
 	  (gl:point-size (if (and (= i 0) (= j 0))
-			     20 6))
-	  (gl:with-primitive :points
-	    (gl:vertex (* 50 i) (* 50 j))))))
-    (gl:with-pushed-matrix
-      (gl:translate 0 1024 0)
-      (dotimes (i n)
-	(dotimes (j m)
-	  (gl:point-size (if (and (= i 0) (= j 0))
-			     20 6))
+			     4 4))
 	  (gl:with-primitives :points
-	    (gl:vertex (* 50 (+ 4 i)) (* 50 (+ 4 j))))))))
-   (gl:with-pushed-matrix 
+	    (gl:vertex (* 50 i) (* 50 j)))))))
+  #+nil (gl:with-pushed-matrix 
      (gl:translate 0 1024 0)
      
      (loop for j from 200 below 450 by 50 do
