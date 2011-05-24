@@ -98,6 +98,7 @@
  #'(lambda () 
      (loop
       (capture)
+	#+nil
       (sleep .01)))
  :name "capture")
 
@@ -141,13 +142,13 @@
 	  (let ((v (if t ;(< 800 (aref w1 i)) 
 		       (min 255 
 			    (max 0 
-				 (floor (aref l1 i) 10)
+				 (floor (aref l1 i) 4)
 				 #+nil (floor (* 255 (- (aref l1 i) 
 						   (aref d1 i)))
 					(- (aref w1 i)
 					   (aref d1 i)))))
 		       0)))
-	    (if (< 6 v)
+	     (if (< 12 v)
 		(setf (aref b1 i) 
 		      v)
 		(let ((y (floor i w))
@@ -161,6 +162,9 @@
       b))))
 #+nil
 (capture)
+
+
+
 (defparameter *t8* nil)
 (let ((a 3))
   #+nil(defun draw-screen ()
@@ -198,14 +202,48 @@
 		 (multiple-value-bind (x y)
 		     (lcos->camera (vec (* 1s0 i) (* 1s0 j) 1s0))
 		   (gl:translate x y 0))
-		 (let ((x 1))
+		 (let ((x 10))
 		   (gl:with-primitive :line-loop
 		     (gl:vertex (- x) (- x))
 		     (gl:vertex x (- x))
 		     (gl:vertex x x)
 		     (gl:vertex (- x) x)))))))
+   (let ((n 7)
+	 (m 9))
+    (gl:with-pushed-matrix
+      (let* ((s  1s0)
+	     (phi (* (coerce pi 'single-float) (/ 180s0) 20s0))
+	     (cp (cos phi))
+	     (sp (sqrt (- 1s0 (* cp cp))))
+	     (scp (* s cp))
+	     (ssp (* s sp))
+	     (tx 500s0)
+	     (ty 0s0)
+	     (a (make-array (list 4 4) :element-type 'single-float
+			    :initial-contents
+			    (list (list scp     ssp  .0  tx)
+				  (list (- ssp) scp  .0  ty)
+				  (list .0     .0   1.0  .0)
+				  (list .0     .0    .0 1.0)))))
+	(gl:load-transpose-matrix (sb-ext:array-storage-vector a)))
+      
+      (dotimes (i n)
+	(dotimes (j m)
+	  (gl:point-size (if (and (= i 0) (= j 0))
+			     20 6))
+	  (gl:with-primitive :points
+	    (gl:vertex (* 50 (+ 4 i)) (* 50 (+ 4 j)))))))
+    (gl:with-pushed-matrix
+      (gl:translate 0 1024 0)
+      (dotimes (i n)
+	(dotimes (j m)
+	  (gl:point-size (if (and (= i 0) (= j 0))
+			     20 6))
+	  (gl:with-primitives :points
+	    (gl:vertex (* 50 (+ 4 i)) (* 50 (+ 4 j))))))))
    (gl:with-pushed-matrix 
      (gl:translate 0 1024 0)
+     
      (loop for j from 200 below 450 by 50 do
 	  (loop for i from 200 below 700 by 50 do
 	       (gl:with-pushed-matrix 
@@ -217,9 +255,12 @@
 		     (gl:vertex x x)
 		     (gl:vertex (- x) x)))))))))
 
+
+
 #+nil
 (sb-thread:make-thread 
  #'(lambda ()
      (gui:with-gui (1280 (* 2 1024))
        (draw-screen)))
  :name "display-gui")
+
