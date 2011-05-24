@@ -174,7 +174,7 @@
    (gl:clear-color 0 0 0 1)
    (gl:clear :color-buffer-bit)
    (sleep .1)
-   (gl:line-width 2)
+   (gl:line-width 1)
    (gl:color 0 1 1)
    (when *t8*
     (let ((tex (make-instance 'gui::texture :data *t8*)))
@@ -209,20 +209,26 @@
 		     (gl:vertex x x)
 		     (gl:vertex (- x) x)))))))
    (let ((n 7)
-	 (m 9))
-    (gl:with-pushed-matrix
-      (let* ((s  1s0)
-	     (phi (* (coerce pi 'single-float) (/ 180s0) 20s0))
+	 (m 6))
+     ;; optimization by hand:
+     ;; start with sx=sy=s=1, phi=0, tx=0, ty=0
+     ;; shift big spot ontop of another by changing tx, ty
+     ;; flip sign of sy=-s if it needs flipping
+     ;; find rotation phi
+     ;; adjust scale s
+     (gl:with-pushed-matrix
+       (let* ((s 1.13s0)
+	      (sx  s)
+	      (sy  (- s))
+	      (phi (* (coerce pi 'single-float) (/ 180s0) 75.4s0))
 	     (cp (cos phi))
 	     (sp (sqrt (- 1s0 (* cp cp))))
-	     (scp (* s cp))
-	     (ssp (* s sp))
-	     (tx 500s0)
-	     (ty 0s0)
+	     (tx 930s0)
+	     (ty 920s0)
 	     (a (make-array (list 4 4) :element-type 'single-float
 			    :initial-contents
-			    (list (list scp     ssp  .0  tx)
-				  (list (- ssp) scp  .0  ty)
+			    (list (list (* sx cp)    (* sy sp)  .0  tx)
+				  (list (* -1 sx sp) (* sy cp)  .0  ty)
 				  (list .0     .0   1.0  .0)
 				  (list .0     .0    .0 1.0)))))
 	(gl:load-transpose-matrix (sb-ext:array-storage-vector a)))
@@ -232,7 +238,7 @@
 	  (gl:point-size (if (and (= i 0) (= j 0))
 			     20 6))
 	  (gl:with-primitive :points
-	    (gl:vertex (* 50 (+ 4 i)) (* 50 (+ 4 j)))))))
+	    (gl:vertex (* 50 i) (* 50 j))))))
     (gl:with-pushed-matrix
       (gl:translate 0 1024 0)
       (dotimes (i n)
