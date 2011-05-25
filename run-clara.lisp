@@ -31,6 +31,11 @@
 (check (set-temperature (val2 (get-temperature-range))))
 (get-temperature-f)
 
+(check
+ (set-exposure-time .0163))
+#+nil
+(set-shutter 1 1 0 0)
+
 
 
 (trigger-mode :internal)

@@ -2,9 +2,9 @@
   (require :mma))
 
 (in-package :mma)
-
+;; ifconfig eth1 192.168.0.1
 #+nil
-(register-board #x0036344B00800809
+(register-board #x0036344B00800803
 		"192.168.0.2"
 		"255.255.255.0"
 		"0.0.0.0" 
@@ -21,7 +21,7 @@
 (plain-status)
 
 #+nil
-(load-configuration "/home/martin/9ini")
+(load-configuration "/home/martin/3ini")
 
 
 #+nil

@@ -101,6 +101,7 @@
   (response->pos-um (talk-zeiss *fd* *stream* "FPZp")))
  
 (defun set-position (position-um)
+  "Decreasing the position moves away from sample."
   (declare (single-float position-um))
   (write-zeiss *stream*
 	       (format nil "FPZT~a" (pos-um->request position-um))))

@@ -1,5 +1,6 @@
 (defpackage :serial
-  (:shadowing-import-from :cl close open ftruncate truncate time)
+  (:shadowing-import-from :cl close open ftruncate truncate time
+			  read write)
   (:use :cl :sb-posix)
   (:export #:open-serial
 	   #:close-serial
