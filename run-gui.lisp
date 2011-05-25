@@ -71,27 +71,7 @@
 	(setf (aref a jj ii) (if (< .05 v) v 0s0)))))
  (defparameter *cut* a))
 
-(defun vec (&optional (x 0s0) (y 0s0) (z 0s0))
-  (make-array 3 :element-type 'single-float
-			  :initial-contents
-			  (list x y z)))
 
-(defun lcos->camera (v)
-  (declare (type (array single-float 1) v))
-  (let* ((h (make-array (list 3 3)
-			:element-type 'single-float
-			:initial-contents
-			(list (list .265 -1.09 1094.1)
-			      (list -1.102 -.2891 1204.0)
-			      (list -2.107e-5 2.12e-6 1.00779))))
-	 (x (loop for i below 3 sum (* (aref v i) (aref h 0 i))))
-	 (y (loop for i below 3 sum (* (aref v i) (aref h 1 i))))
-	 (z (loop for i below 3 sum (* (aref v i) (aref h 2 i)))))
-    (values (/ x z) (/ y z))))
-
-
-#+nil
-(lcos->camera (vec 701s0 451s0 1s0))
 
 #+nil
 (sb-thread:make-thread 
@@ -102,10 +82,7 @@
       (sleep .01)))
  :name "capture")
 
-#+nil
-(defparameter *dark* *line*)
-#+nil
-(defparameter *white* *line*)
+
 (defparameter *dark* nil)
 (defparameter *white* nil)
 (defun capture ()
@@ -142,7 +119,7 @@
 	  (let ((v (if t ;(< 800 (aref w1 i)) 
 		       (min 255 
 			    (max 0 
-				 (floor (aref l1 i) 1)
+				 (floor (aref l1 i) 1.5)
 				 #+nil (floor (* 255 (- (aref l1 i) 
 						   (aref d1 i)))
 					(- (aref w1 i)
@@ -209,6 +186,15 @@
 	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
+(defun draw-disk (x y r)
+  (declare (type single-float x y r))
+  (gl:with-primitive :triangle-fan
+   (let ((n 37))
+     (gl:vertex x y)
+     (loop for i from 0 below n do
+	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
+	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
+
 (defparameter *t8* nil)
 (let ((a 3))
   #+nil(defun draw-screen ()
@@ -256,7 +242,7 @@
 	 (m0 1) (m 29)
 	 (r 250s0)
 	 (radii 4)
-	 (px 622.8s0) (py 594s0) (pr 12s0))
+	 (px 623s0) (py 595s0) (pr 50s0))
      ;; optimization by hand:
      ;; start with sx=sy=s=1, phi=0, tx=0, ty=0
      ;; shift big spot ontop of another by changing tx, ty
@@ -264,10 +250,11 @@
      ;; find rotation phi
      ;; adjust scale s
      (gl:color 1 0 0)
+     (gl:line-width 3)
      (draw-circle px py pr)
      (with-lcos-to-cam
        
-       (gl:line-width 1)
+
        #+nil (loop for i from n0 below n do
 	 (loop for j from m0 below m do
 	   (gl:point-size (if (and (= i 0) (= j 0))
@@ -276,13 +263,13 @@
 	     (gl:vertex (* 50 i) (* 50 j)))))
        #+nil(dotimes (i radii)
 	 (draw-circle 440s0 350s0 (* (/ radii) (+ 1 i) r))))
-     (gl:line-width 3)
+     (gl:line-width 5)
      (gl:with-pushed-matrix
        (gl:color 1 1 1)
        (gl:translate 0 1024 0)
        (with-cam-to-lcos (0 1024)
 
-	 (draw-circle px py pr))
+	 (draw-disk px py pr))
        #+nil(dotimes (i radii)
 	 (draw-circle 440s0 350s0 (* (/ radii) (+ 1 i) r)))
        #+nil (loop for i from n0 below n do
