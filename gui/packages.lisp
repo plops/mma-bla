@@ -1,6 +1,6 @@
 (defpackage :gui
   (:shadowing-import-from :cl close get special)
-  (:use :cl :gl :glut)
+  (:use :cl :gl :glut :vector)
   (:export #:fenster
 	   #:with-gui
 	   #:grating
@@ -11,4 +11,13 @@
 	   #:draw-wire-box
 	   #:texture
 	   #:grating-stack
-	   #:grating->texture))
+	   #:grating->texture
+	   
+	   #:VERTEX-V
+	   #:TEX-COORD-V
+	   #:TRANSLATE-V
+	   #:NORMAL-V
+	   #:SCALE-V
+	   #:texture-luminance-ub8
+	   #:draw-xz
+	   ))
