@@ -63,6 +63,7 @@
 (defmethod bind ((tex grating))
   (bind-texture :texture-2d (object tex)))
 
+#+nil
 (defmethod draw ((self grating) &key
 		 (x 0f0) (y 0f0) 
 		 (w 1920f0) (h 1080f0)

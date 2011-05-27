@@ -30,7 +30,7 @@
 (cooler-off)
 (check (set-temperature (val2 (get-temperature-range))))
 (get-temperature-f)
-
+(uninit)
 (check
  (set-exposure-time .0163))
 #+nil
@@ -138,4 +138,5 @@
       sum)))
 (sum *q* *bla*)
 
+#+nil
 (uninit)

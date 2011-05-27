@@ -91,6 +91,7 @@
     (vertex-v (aref circle-points i)))
   nil)
 
+#+nil
 (defmethod draw ((disk lens:disk))
   (declare (values null &optional))
   (with-slots ((c lens::center) (r lens::radius)) disk
@@ -141,7 +142,7 @@
   positions of the quad. In case of a 3d texture ty choses the y
   texture coordinate with value from 0 .. 1."
   (with-slots (target dimensions) tex
-    (bind-tex tex)
+    (bind tex)
     (gl:enable target)
     (let* ((texcoords 
 	    (ecase target

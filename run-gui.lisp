@@ -11,10 +11,12 @@
   (:use :cl :clara :gl))
 (in-package :run-gui)
 
+#+nil
 (focus:connect)
 (focus:get-position)
+#+nil
 (focus:set-position
- (+ (focus:get-position) 8.))
+ (+ (focus:get-position) 1.))
 
 #+nil
 (let* ((a1 (sb-ext:array-storage-vector *t8*))
@@ -90,10 +92,14 @@
  :name "capture")
 
 
+(defparameter *t8* nil)
 (defparameter *dark* nil)
 (defparameter *white* nil)
+(defparameter *line* nil)
+#+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
-(change-target 925 610 12)
+#+nil
+(change-target 925 610 32)
 (let ((px 925s0) (py 610s0) (pr 300s0)
       (w 1392)
       (h 1040)
@@ -134,10 +140,10 @@
     (gl:line-width 4)
     (draw-circle px py pr)
     (gl:with-pushed-matrix
-      (gl:color 1 1 1)
+      (%gl:color-3ub #b00111111 255 #b11111111)
       (gl:translate 0 1024 0)
       (with-cam-to-lcos (0 1024)
-	(draw-disk px py pr))))
+	(draw-disk px py 1000s0))))
 
   (defun capture ()
     (when new-size
@@ -175,13 +181,13 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (aref l1 i) 9.3)
+				    (floor (- (aref l1 i) 12) 1.3)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)
 						    (aref d1 i)))))
 			  0)))
-	       (if (< 12 v)
+	       (if (< 1 v)
 		   (setf (aref b1 i) 
 			 v)
 		   (let ((yy (floor i w))
@@ -248,8 +254,6 @@
      (loop for i from 0 below n do
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
-
-(defparameter *t8* nil)
 
 
 
