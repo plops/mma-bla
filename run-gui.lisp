@@ -13,6 +13,7 @@
 
 #+nil
 (focus:connect)
+#+nil
 (focus:get-position)
 #+nil
 (focus:set-position
@@ -80,6 +81,59 @@
 	(setf (aref a jj ii) (if (< .05 v) v 0s0)))))
  (defparameter *cut* a))
 
+(defmacro with-lcos-to-cam (&body body)
+  `(let* ((s 1.129781s0)
+	  (sx  s)
+	  (sy  (- s))
+	  (phi 1.3154879)
+	  (cp (cos phi))
+	  (sp (sqrt (- 1s0 (* cp cp))))
+	  (tx 1086.606s0)
+	  (ty 1198.154s0)
+	  (a (make-array (list 4 4) :element-type 'single-float
+			 :initial-contents
+			 (list (list (* sx cp)    (* sy sp)  .0  tx)
+			       (list (* -1 sx sp) (* sy cp)  .0  ty)
+			       (list .0     .0   1.0  .0)
+			       (list .0     .0    .0 1.0)))))
+     (gl:with-pushed-matrix
+       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
+       ,@body)))
+
+(defmacro with-cam-to-lcos ((&optional (x 0s0) (y 0s0)) &body body)
+  `(let* ((s .885090144449)
+	  (sx  s)
+	  (sy  (- s))
+	  (phi 1.3154879)
+	  (cp (cos phi))
+	  (sp (sqrt (- 1s0 (* cp cp))))
+	  (tx 783.23854s0)
+	  (ty 1198.40181879s0)
+	  (a (make-array (list 4 4) :element-type 'single-float
+			 :initial-contents
+			 (list (list (* sx cp)    (* sy sp)  .0  (+ ,x tx))
+			       (list (* -1 sx sp) (* sy cp)  .0  (+ ,y ty))
+			       (list .0     .0   1.0  .0)
+			       (list .0     .0    .0 1.0)))))
+     (gl:with-pushed-matrix
+       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
+       ,@body)))
+
+(defun draw-circle (x y r)
+  (gl:with-primitive :line-loop
+   (let ((n 37))
+     (loop for i from 0 below n do
+	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
+	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
+
+(defun draw-disk (x y r)
+  (gl:with-primitive :triangle-fan
+   (let ((n 37))
+     (gl:vertex x y)
+     (loop for i from 0 below n do
+	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
+	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
+
 
 
 #+nil
@@ -140,10 +194,10 @@
     (gl:line-width 4)
     (draw-circle px py pr)
     (gl:with-pushed-matrix
-      (%gl:color-3ub #b00111111 255 #b11111111)
+      (%gl:color-3ub #b00111111 255 255)
       (gl:translate 0 1024 0)
       (with-cam-to-lcos (0 1024)
-	(draw-disk px py 1000s0))))
+	(draw-disk px py 400s0))))
 
   (defun capture ()
     (when new-size
@@ -201,59 +255,6 @@
 	 b)))))
 #+nil
 (capture)
-
-(defmacro with-lcos-to-cam (&body body)
-  `(let* ((s 1.129781s0)
-	  (sx  s)
-	  (sy  (- s))
-	  (phi 1.3154879)
-	  (cp (cos phi))
-	  (sp (sqrt (- 1s0 (* cp cp))))
-	  (tx 1086.606s0)
-	  (ty 1198.154s0)
-	  (a (make-array (list 4 4) :element-type 'single-float
-			 :initial-contents
-			 (list (list (* sx cp)    (* sy sp)  .0  tx)
-			       (list (* -1 sx sp) (* sy cp)  .0  ty)
-			       (list .0     .0   1.0  .0)
-			       (list .0     .0    .0 1.0)))))
-     (gl:with-pushed-matrix
-       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
-       ,@body)))
-
-(defmacro with-cam-to-lcos ((&optional (x 0s0) (y 0s0)) &body body)
-  `(let* ((s .885090144449)
-	  (sx  s)
-	  (sy  (- s))
-	  (phi 1.3154879)
-	  (cp (cos phi))
-	  (sp (sqrt (- 1s0 (* cp cp))))
-	  (tx 783.23854s0)
-	  (ty 1198.40181879s0)
-	  (a (make-array (list 4 4) :element-type 'single-float
-			 :initial-contents
-			 (list (list (* sx cp)    (* sy sp)  .0  (+ ,x tx))
-			       (list (* -1 sx sp) (* sy cp)  .0  (+ ,y ty))
-			       (list .0     .0   1.0  .0)
-			       (list .0     .0    .0 1.0)))))
-     (gl:with-pushed-matrix
-       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
-       ,@body)))
-
-(defun draw-circle (x y r)
-  (gl:with-primitive :line-loop
-   (let ((n 37))
-     (loop for i from 0 below n do
-	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
-	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
-
-(defun draw-disk (x y r)
-  (gl:with-primitive :triangle-fan
-   (let ((n 37))
-     (gl:vertex x y)
-     (loop for i from 0 below n do
-	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
-	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
 
 
