@@ -94,7 +94,8 @@
 	   (values null &optional))
   (let ((buf1 (sb-ext:array-storage-vector buf)))
     (sb-sys:with-pinned-objects (buf)
-      (write-matrix-data pic-number 3 (sb-sys:vector-sap buf1) (length buf1))))
+      (write-matrix-data pic-number 3 (sb-sys:vector-sap buf1) 
+			 (* 2 (length buf1)))))
   nil)
 
 (defun write-data-cal (buf &key (pic-number 1))
@@ -276,7 +277,7 @@
 (defun status ()
   (multiple-value-bind (retval status error) (read-status)
     (unless (= 0 retval)
-      (format t "read-status didn't return 0 but ~d.~%" retval))
+      (error "read-status didn't return 0 but ~d.~%" retval))
     (if (/= 0 error)
 	(format t "error: ~a~%error-bits:~%~a~% status-bits:~%~a~%retval: ~a~%"
 		error (parse-error-bits error)
