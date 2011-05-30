@@ -55,6 +55,9 @@
   (check (load-configuration config))
   (check (load-calibration-data calibration))
   (check (set-deflection-phase .0 (* 1000 width-ms)))
+  (set-voltage +volt-frame-f+ 20.0s0)
+  (set-voltage +volt-frame-l+ 20.0s0)
+
   (let ((delay 20s0))
    (check (set-extern-ready delay (- (* 1000 width-ms)
 				     delay))))

@@ -1,19 +1,20 @@
 (defpackage :mma
   (:use :cl :ipms-ffi)
   (:export
-   #:init
-   #:begin
-   #:select-pictures
+   #:init 
    #:uninit
-   #:load-black
-   #:load-white
-   #:load-disks
-   #:load-disks2
+   #:standby
+   #:wake-up
+   #:write-data
+   #:select-pictures
+   #:load-disk-raster
    #:load-concentric-circles
+   #:draw-disk
    #:status
    #:set-nominal-deflection-nm
    #:get-nominal-deflection-nm
-   #:draw-array-cal))
+   #:wait-until-network-is-available
+   ))
 
 (in-package :mma)
  
@@ -35,58 +36,14 @@
 #+nil
 (equal "" (check-network))
 
-(defun init ()
+(defun wait-until-network-is-available ()
   (loop
      for i below 30 
      until (equal "" (check-network))
      do
        (format t "control board already connected, waiting ~d/30~%" i)
-       (sleep 2))
-  (register-board #x0036344B00800803
-		  "192.168.0.2"
-		  "255.255.255.0"
-		  "0.0.0.0" 
-		  4001)
-  (set-local-interface "192.168.0.1"
-		       4001)
-  (unless (= 0 (connect))
-    (error "Library couldn't connect to board."))
-  (format t "connected to board~%")
-  (status)
-  
-  #+nil (load-configuration "/home/martin/cyberpower-mit/mma-essentials-0209/800803_dmdl6_20110215.ini")
-  (load-configuration "3ini")
-  (format t "loaded configureation~%")
-  (status)
-  (load-calibration-data "/home/martin/cyberpower-mit/mma-essentials-0209/VC2610_13_61_2010-12-02_Rand-5_0-250nm_Typ1.cal")
-  (format t "loaded calibration data~%")
-  (status)
-  ;; ;; (set-voltage +volt-pixel+ 17.5s0)
-  ;; ;; (set-voltage +volt-frame-f+ 20.0s0)
-  ;; ;; (set-voltage +volt-frame-l+ 20.0s0)
-  ;; ;; (set-voltage +volt-dmd-l+ 6.0s0)
-  ;; (set-extern-ready 16s0 16300s0)
-  ;; (format t "set-extern-ready status:~%")
-  ;; (status)
-  ;; (set-deflection-phase 16s0 16300s0)
-  ;; (format t "set-deflection-phase status:~%")
-  ;; (status)
+       (sleep 2)))
 
-  ;; (mma::set-cycle-time 90s0)
-  ;; (format t "set-cycle-time status:~%")
-  ;; (status)
-
-  ;; (set-power-on)
-  ;; (format t "set-power-on status:~%")
-  ;; (status)
-  
-  ;; (load-white)
-  ;; (format t "load-white status:~%")
-  ;; (status)
-
-
-  ;; (begin)
-  )
 
 (defun write-data (buf &key (pic-number 1))
   "Write a 256x256 unsigned-short buffer to the device."
@@ -96,17 +53,6 @@
     (sb-sys:with-pinned-objects (buf)
       (write-matrix-data pic-number 3 (sb-sys:vector-sap buf1) 
 			 (* 2 (length buf1)))))
-  nil)
-
-(defun write-data-cal (buf &key (pic-number 1))
-  "Write a 256x256x3 unsigned-byte buffer to the device."
-  (declare ((simple-array (unsigned-byte 8) (256 256 3)) buf)
-	   (values null &optional))
-  (let ((buf1 (sb-ext:array-storage-vector buf)))
-    (sb-sys:with-pinned-objects (buf)
-      (write-matrix-data pic-number 1
-			   (sb-sys:vector-sap buf1)
-			   (array-total-size buf))))
   nil)
 
 (defun draw-ring (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
@@ -128,98 +74,6 @@
 		(if (< r-small r r-big) 0 #xffff)))))
     (write-data buf :pic-number pic-number)
     nil))
-
-(defun draw-ring-cal (&key (r-small 0.0) (r-big 1.0) (pic-number 1))
-  "Store 12bit in 24bit chunks. Zero is dark."
-  (declare (single-float r-small r-big)
-	   (fixnum pic-number)
-	   (values null &optional))
-  (let* ((n 256)
-	 (nh (floor n 2))
-	 (1/n (/ 1.0 n))
-	 (buf (make-array (list n n 3) 
-			  :element-type '(unsigned-byte 8))))
-    (dotimes (j n)
-      (dotimes (i n)
-	(let* ((x (* 2.0 1/n (- i nh)) )
-	       (y (* 2.0 1/n (- j nh)))
-	       (r (sqrt (+ (* x x) (* y y))))
-	       (v (if (< r-small r r-big) 
-		      (if (<  (* r 4095) 4095)
-			  (floor (* 4095 r))
-			  4095)
-		      4094)))
-	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
-		(aref buf i j 1) (ldb (byte 8 8) v)))))
-    (write-data-cal buf :pic-number pic-number)))
-
-#+nil
-(draw-ring8 :r-small .2s0 :r-big 1s0)
-
-(defun draw-random-cal (&key (pic-number 1))
-  "Store 12bit in 24bit chunks."
-  (declare (fixnum pic-number)
-	   (values null &optional))
-  (let* ((n 256)
-	 (buf (make-array (list n n 3) 
-			  :element-type '(unsigned-byte 8))))
-    (dotimes (j n)
-      (dotimes (i n)
-	(let ((v (random 4095)))
-	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
-		(aref buf i j 1) (ldb (byte 8 8) v)))))
-    (write-data-cal buf :pic-number pic-number)))
-#+nil
-(draw-random-cal)
-
-(defun draw-disk-cal (&key (cx 0) (cy 0) 
-		      (r-small 0.0) (r-big 1.0)
-		      (pic-number 1)
-		      (value 4095))
-  "Store 12bit in 24bit chunks. Zero is dark."
-  (declare (single-float r-small r-big)
-	   (fixnum pic-number)
-	   (values (simple-array (unsigned-byte 8) 3) &optional))
-  (let* ((n 256)
-	 (nh (floor n 2))
-	 (1/n (/ 1.0 n))
-	 (buf (make-array (list n n 3) 
-			  :element-type '(unsigned-byte 8))))
-    (dotimes (j n)
-      (dotimes (i n)
-	(let* ((x (* 2.0 1/n (- i nh cx)) )
-	       (y (* 2.0 1/n (- j nh cy)))
-	       (r (sqrt (+ (* x x) (* y y))))
-	       (v (if (<= r-small r r-big) 
-		      value
-		      0)))
-	  (setf (aref buf i j 0) (ldb (byte 8 0) v) 
-		(aref buf i j 1) (ldb (byte 8 8) v)))))
-    (write-data-cal buf :pic-number pic-number)
-    buf))
-
-(defun draw-array-cal (img &key (pic-number 1))
-  "Store 12bit image in 24bit chunks. Zero is dark."
-  (declare (type (simple-array (unsigned-byte 12) (256 256)) img)
-	   (type fixnum pic-number)
-	   (values ))
-  (destructuring-bind (h w) (array-dimensions img)
-    (assert (= 256 h w))
-    (let* ((n 256)
-	   (buf (make-array (list n n 3) 
-			    :element-type '(unsigned-byte 8))))
-     (dotimes (j h)
-       (dotimes (i w)
-	 (let ((v (aref img j i)))
-	   (setf (aref buf j i 0) (ldb (byte 8 0) v) 
-		 (aref buf j i 1) (ldb (byte 8 8) v)))))
-     (write-data-cal buf :pic-number pic-number)
-     (the (simple-array (unsigned-byte 8) (256 256 3)) buf))))
-
-#+nil
-(progn
- (draw-disk-cal :r-big .2s0)
- nil)
 
 (defun draw-disk (&key (cx 0) (cy 0) (radius .1) (pic-number 1) (value 0))
   (declare (single-float radius)
@@ -254,7 +108,6 @@
     (write-data buf :pic-number pic-number)
     buf))
 
-
 (defun parse-bits (value bits)
   (declare (fixnum value))
   (let ((result nil))
@@ -286,40 +139,11 @@
 	(format t "status-bits ~a~%" (parse-status-bits status)))
     (parse-status-bits status)))
 
-(defun plain-status ()
-  (multiple-value-bind (retval status error) (read-status)
-    (format t "read-status returned (retval,status,error)=~a~%" (list retval status error))))
-#+nil 
-(status)
-(defun begin ()
-  (set-start-mma)
-  (sleep 1)
-  (format t "set-start-mma status ~%")
-  (status))
-(defun end ()
-  (set-stop-mma))
-
 (defun select-pictures (start &key (n 1) (ready-out-needed nil))
   (dotimes (i n)
     (set-picture-sequence (+ 1 start i)
 			  (if (< i (- n 1)) 0 1)
 			  (if ready-out-needed 1 0))))
-
-(defun load-white (&key (radius 1.0) (pic-number 0))
-  (draw-disk-cal :cx 0 :cy 0 :r-big radius :pic-number pic-number))
-
-(defun load-black (&key (radius 1.0) (pic-number 0))
-  (draw-disk :cx 0 :cy 0 :radius radius :pic-number pic-number
-	     :value #xffff))
-
-(defun load-concentric-circles (&key (n 12) (dr .02) (ready-out-needed t))
-  (dotimes (i n)
-    (let ((r (/ (* 1.0 (1+ i)) n)))
-      (format t "~a~%" `(picture ,i / ,n))
-      (draw-ring :pic-number (1+ i)
-		 :r-small (- r dr)
-		 :r-big (+ r dr))))
-  (select-pictures 0 :n n :ready-out-needed ready-out-needed))
 
 (defun load-concentric-disks (&key (n 12) (ready-out-needed t))
   (let ((result nil))
@@ -333,13 +157,7 @@
     (select-pictures 0 :n n :ready-out-needed ready-out-needed)
     (reverse result)))
 
-(defun load-disks (&key (n 12))
-  (dotimes (i n)
-    (let ((x (floor (* 256 (- i (floor n 2)) (/ 1.0 n)))))
-      (draw-disk :cx x :cy 0 :pic-number (1+ i))))
-  (select-pictures 0 :n n))
-
-(defun load-disks2 (&key (n 12))
+(defun load-disk-raster (&key (n 12))
   (declare (values cons &optional))
   (let ((shift (if (evenp n) 
 		   (floor 256 (* 2 n))
@@ -357,18 +175,6 @@
    (select-pictures 0 :n (* n n))
    (reverse result)))
 
-#+nil
-(progn
- (load-disks2 :n 4)
- nil)
-
-(defun uninit ()
-  (end)
-  (set-power-off)
-  (disconnect)
-
-#+nil  (sb-alien:unload-shared-object ipms-ffi::*library*))
-
 (defun set-nominal-deflection-nm (&optional (value 118.25s0))
   (declare (single-float value))
   (ipms-ffi:set-parameter 1001 value 4))
@@ -382,52 +188,3 @@
 #+nil
 (get-nominal-deflection-nm)
 
-#+nil 
-(time
- (init))
-
-#+nil
-(time (progn
-	(set-stop-mma)
-	;;(set-extern-trigger t)
-	(select-pictures 2 :n 1 :ready-out-needed t)
-	(begin)))
-
-#+nil
-(progn
-  (select-pictures 1 :n 1 :ready-out-needed t))
-#+nil
-(dotimes (j 2)
- (dotimes (i 10)
-   (sleep .3)
-   (select-pictures (+ 50 i) :n 1 :ready-out-needed t))
- (dotimes (i 10)
-   (sleep .3)
-   (select-pictures (+ 50 (- 9 i)) :n 1 :ready-out-needed t)))
-
-#+nil
-(dotimes (i 100)
-  (sleep .3) 
-  (select-pictures (random (* 10 10)) :ready-out-needed t))
-
-#+nil
-(let ((width 530s0))
- (set-extern-ready 16s0 width)
- (set-deflection-phase 16s0 width))
-
-#+nil 
-(time
- (progn
-   (set-stop-mma)
-   (set-extern-ready 16s0 530s0)
-   (set-deflection-phase 16s0 530s0)
-   (set-extern-trigger t)
-   (load-concentric-circles :n 12)
-   #+nil (load-disks :n 120)
-   #+nil (load-disks2 :n 10)
-   (load-white :pic-number 101)
-   (load-black :pic-number 102)
-   (begin)))
-
-#+nil
-(uninit)
