@@ -1,15 +1,16 @@
-(sb-posix:setenv "DISPLAY" ":0" 1)
-(sb-ext:run-program "/usr/bin/xset" '("s" "off"))
-(sb-ext:run-program "/usr/bin/xset" '("-dpms"))
+#.(progn
+    (sb-posix:setenv "DISPLAY" ":0" 1)
+    (sb-ext:run-program "/usr/bin/xset" '("s" "off"))
+    (sb-ext:run-program "/usr/bin/xset" '("-dpms"))
 
-(setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
-(ql:quickload "cl-opengl")
-(require :gui)
-(require :clara)
-(require :mma)
-(require :focus)
+    (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
+    (ql:quickload "cl-opengl")
+    (require :gui)
+    (require :clara)
+    (require :mma)
+    (require :focus)) 
 (defpackage :run-gui
-  (:use :cl :clara :gl))
+	(:use :cl :clara :gl))
 (in-package :run-gui)
 
 #+nil
@@ -22,8 +23,9 @@
 
 #+nil
 (mma:init)
-#+nil
-(mma:init :config "3ini")
+#+nil 
+(mma:init :config "/home/martin/3ini"
+	  :calibration "/home/martin/24811567.cal")
 #+nil
 (mma:uninit)
 #+nil
@@ -31,11 +33,19 @@
 #+nil
 (mma::fill-constant 0)
 #+nil
-(progn 
-  (mma::set-stop-mma)
-  (mma::set-nominal-deflection-nm  (/ 473s0 4))
-  (mma::set-extern-trigger t)
-  (mma::set-start-mma))
+(let* ((width-ms 16s0)
+       (delay-us 20s0))
+  (check (mma::set-stop-mma))
+  (check (mma::set-nominal-deflection-nm  (/ 473s0 4)))
+  (check (mma::enable-extern-start))
+  (check (mma::set-deflection-phase .0 (* 1000 width-ms)))
+  (check (mma::set-extern-ready delay (- (* 1000 width-ms)
+				    delay-us)))
+  (check (mma::set-cycle-time 140s0))
+  (check (mma::set-start-mma)))
+#+nil
+(mma::set-cycle-time 300s0)
+
 #+nil
 (mma::status)
 
@@ -113,7 +123,7 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 100 :ril 12s0)
+(change-target 865 630 300 :ril 100s0)
 (let* ((px 900s0) (py 600s0) (pr 300s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)

@@ -22,7 +22,7 @@
 	       1 1392
 	       1 1040))
   (set-ad-channel 1))
-
+(set-ad-channel 1)
 (get-temperature-range)
 
 (get-detector)

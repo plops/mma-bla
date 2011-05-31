@@ -35,7 +35,7 @@
 
 #+nil
 (load-calibration-data 
- "/home/martin/24811567.cal")
+ "/home/martin/cyberpower-mit/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")
 
 
 #+nil
