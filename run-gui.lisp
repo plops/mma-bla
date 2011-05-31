@@ -6,6 +6,7 @@
 (ql:quickload "cl-opengl")
 (require :gui)
 (require :clara)
+(require :mma)
 (require :focus)
 (defpackage :run-gui
   (:use :cl :clara :gl))
@@ -17,69 +18,28 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) 1.))
+ (+ (focus:get-position) -10.))
 
 #+nil
-(let* ((a1 (sb-ext:array-storage-vector *t8*))
-       (mi (reduce #'min a1))
-       (ma (reduce #'max a1)))
-  (list mi ma))
+(mma:init)
+#+nil
+(mma:init :config "3ini")
+#+nil
+(mma:uninit)
+#+nil
+(mma::disconnect)
+#+nil
+(mma::fill-constant 0)
+#+nil
+(progn 
+  (mma::set-stop-mma)
+  (mma::set-nominal-deflection-nm  (/ 473s0 4))
+  (mma::set-extern-trigger t)
+  (mma::set-start-mma))
+#+nil
+(mma::status)
 
-#+nil
-(defparameter *t8*
-  (let* ((dat *diff*)
-	 (b (make-array (array-dimensions dat)
-			:element-type '(unsigned-byte 8)))
-	(b1 (sb-ext:array-storage-vector b))
-	(a1 (sb-ext:array-storage-vector dat))
-	(mi 0s0)
-	(ma .0009s0))
-   (dotimes (i (length b1))
-     (setf (aref b1 i) (min 255 (max 0 (floor (* 255 (- (aref a1 i) mi))
-					      (- ma mi) )))))
-   b))
-#+nil
-(defparameter *fit*
-  (let* ((a (multiple-value-call #'gauss::create 200 200
-				 (gauss::do-fit *cut*)))
-	 (s (gauss::estimate-amplitude *cut*))
-	 (a1 (sb-ext:array-storage-vector a)))
-    (dotimes (i (length a1))
-      (setf (aref a1 i) (* s (aref a1 i))))
-    a))
-#+nil
-(gauss::do-fit *cut*)
-#+nil
-(defparameter *diff*
-  (let* ((e (make-array (array-dimensions *cut*) :element-type 'single-float))
-	 (e1 (sb-ext:array-storage-vector e))
-	 (a1 (sb-ext:array-storage-vector *fit*))
-	 (c1 (sb-ext:array-storage-vector *cut*)))
-    (dotimes (i (length a1))
-      (setf (aref e1 i) (expt (- (aref a1 i) (aref c1 i)) 2)))
-    e))
-#+nil
-(defparameter *fit*
-  (gauss::create-default 200 :x 82s0 :y 102s0 :sxx (expt 12s0 2)))
-#+nil
-(let* ((w 200)
-       (h 200)
-       (x 600)
-       (y 400)
-       (a (make-array (list h w)
-		      :element-type 'single-float)))
-  (dotimes (jj h)
-    (dotimes (ii w)
-      (let* ((i (+ ii x))
-	     (j (+ jj y))
-	     (v (if (< 1000 (aref *white* j i)) 
-		   (/ (* 1s0 (- (aref *line* j i) 
-				(aref *dark* j i)))
-		      (- (aref *white* j i)
-			 (aref *dark* j i)))
-		   0s0)))
-	(setf (aref a jj ii) (if (< .05 v) v 0s0)))))
- (defparameter *cut* a))
+
 
 (defmacro with-lcos-to-cam (&body body)
   `(let* ((s 1.129781s0)
@@ -145,25 +105,29 @@
       (sleep .01)))
  :name "capture")
 
-
-(defparameter *t8* nil)
-(defparameter *dark* nil)
-(defparameter *white* nil)
-(defparameter *line* nil)
+(progn
+ (defparameter *t8* nil)
+ (defparameter *dark* nil)
+ (defparameter *white* nil)
+ (defparameter *line* nil))
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 925 610 32)
-(let ((px 925s0) (py 610s0) (pr 300s0)
-      (w 1392)
-      (h 1040)
-      (x 1)
-      (y 1)
-      (new-size nil))
-  (defun change-target (x y r)
+(change-target 865 630 100 :ril 12s0)
+(let* ((px 900s0) (py 600s0) (pr 300s0)
+       (px-ill px) (py-ill py) (pr-ill pr)
+       (w 1392)
+       (h 1040)
+       (x 1)
+       (y 1)
+       (new-size nil))
+  (defun change-target (x y r &key (xil x) (yil y) (ril r))
     (setf px x
 	  py y
-	  pr r)
+	  pr r
+	  px-ill xil
+	  py-ill yil
+	  pr-ill ril)
     (change-capture-size (max 1 (+ 1 px (- r))) 
 			 (max 1 (+ 1 py (- r)))
 			 (min 1392 (+ px r))
@@ -194,10 +158,10 @@
     (gl:line-width 4)
     (draw-circle px py pr)
     (gl:with-pushed-matrix
-      (%gl:color-3ub #b00111111 255 255)
+      (%gl:color-3ub #+nil #b00111111 255 255 255)
       (gl:translate 0 1024 0)
       (with-cam-to-lcos (0 1024)
-	(draw-disk px py 400s0))))
+	(draw-disk px-ill py-ill pr-ill))))
 
   (defun capture ()
     (when new-size
@@ -235,7 +199,7 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (- (aref l1 i) 12) 1.3)
+				    (floor (aref l1 i) 50)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)

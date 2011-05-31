@@ -65,15 +65,15 @@ The port is used onboard for the UDP first setup communication and
 [PORT+1] is the port number where the board starts its TCP Server
 listing for incoming connections."
   (board-id unsigned-long-long)
-  (ip4-addr c-string)
-  (netmask c-string)
-  (gateway c-string)
+  (ip4-addr (c-string))
+  (netmask (c-string))
+  (gateway (c-string))
   (port unsigned-short))
  
 (define-alien-routine ("SLM_SetLocalIf" set-local-interface)
     int
   "Outgoing network card where board is connected."
-  (ip4-addr c-string)
+  (ip4-addr (c-string))
   (port unsigned-short))
  
 (define-alien-routine ("SLM_Connect" connect)
@@ -87,14 +87,14 @@ to the onboard TCP Server.")
 
 (define-alien-routine ("SLM_ServiceCommand" service-command)
     int
-  (command c-string)
-  (data c-string)
+  (command (c-string))
+  (data (c-string))
   (length unsigned-long))
  
 (define-alien-routine ("SLM_LoadConfiguration" load-configuration)
     int
   "Load a board configuration and setup board with values."
-  (filepath c-string))
+  (filepath (c-string)))
 
 (defconstant +volt-frame-f+ 0)
 (defconstant +volt-frame-l+ 1)
@@ -136,7 +136,7 @@ For indizes see docstring of SET-VOLTAGE."
   "Load a 24Bit bitmap (256x256) into PIC-NUMBER position in onboard
 RAM, bitmap will be scaled by VPIX (Pixel voltage), PIC-NUMBER is in
 range 1 to 1023, PIC-NUMBER 0 is reserved and should not be used."
-  (file-path c-string)
+  (file-path (c-string))
   (pic-number unsigned-short))
 
 (define-alien-routine ("SLM_WriteMatrixData" write-matrix-data)
@@ -278,7 +278,7 @@ celsius."
 (define-alien-routine ("SLM_LoadCalibrationData" load-calibration-data)
     int
   "Load *.cal file to calculate calibrated images."
-  (path c-string))
+  (path (c-string)))
 
 (define-alien-routine ("SLM_SetParameter" set-parameter)
     int
