@@ -40,15 +40,15 @@
 
 
 #+nil
-(set-extern-ready (+ 20s0 16s0)
-		  (- 16300s0 20s0)) ;; should start 20us later than deflection
+(set-extern-ready (+ 20s0 0s0)
+		  (- 16000s0 20s0)) ;; should start 20us later than deflection
 
 
 #+nil
-(set-deflection-phase 16s0 16300s0)
+(set-deflection-phase 0s0 16000s0)
 
 #+nil
-(mma::set-cycle-time 90s0)
+(mma::set-cycle-time 150s0)
 
 #+nil
 (mma:set-nominal-deflection-nm 118.25)
@@ -61,9 +61,7 @@
 (set-power-on)
 
 #+nil
-(progn
- (load-white :pic-number 1)
- nil)
+(fill-constant 90)
 
 #+nil
 (mma::set-stop-mma)

@@ -21,70 +21,33 @@
 (focus:set-position
  (+ (focus:get-position) -10.))
 
-#+nil
-(mma:init)
-#+nil 
-(mma:init :config "/home/martin/3ini"
-	  :calibration "/home/martin/24811567.cal")
-#+nil
-(mma:uninit)
-#+nil
-(mma::disconnect)
-#+nil
-(mma::fill-constant 90)
-#+nil
-(sb-alien:load-shared-object ipms-ffi::*library*)
-#+nil
-(sb-alien:unload-shared-object ipms-ffi::*library*)
-#+nil
-(mma::set-voltage mma::+volt-frame-f+ 18s0)
-#+nil
-(mma::set-voltage mma::+volt-frame-l+ 18s0)
-#+nil
-(mma::get-voltage mma::+volt-frame-f+)
+
 #+nil
 (mma::set-stop-mma)
 #+nil
 (mma::set-start-mma)
 #+nil
-(mma::status)
+(mma:write-data (mma-spot 0 0 :kernel 30))
+#+nil
+(mma:write-data (mma-white))
+#+nil
+(mma:status)
 #+nil
 (mma::set-power-off)
+#+nil
+(mma::disconnect)
 (defun mma-spot (i j &key (kernel 3))
   (let ((b (make-array (list 256 256)
 		       :element-type '(unsigned-byte 16)
 		       :initial-element 90)))
     (loop for y from (- kernel) upto kernel do
 	 (loop for x from (- kernel) upto kernel do
-	      (let ((q (+ j y))
-		    (p (+ i x)))
-		(when (and (< -1 p x)
-			   (< -1 q y))
-		  (setf (aref b q p) 4095)))))
+	      (let ((yy (+ j y))
+		    (xx (+ i x)))
+		(when (and (<= 0 xx 255)
+			   (<= 0 yy 255))
+		  (setf (aref b yy xx) 4095)))))
     b))
-
-#+nil
-(mma::write-data (mma-spot 128 128 :kernel 64))
-#+nil
-(let* ((width-ms 16s0)
-       (delay-us 20s0))
-  (check (mma::set-stop-mma))
-  (check (mma::set-nominal-deflection-nm  (/ 473s0 4)))
-  (check (mma::enable-extern-start))
-  (check (mma::set-deflection-phase .0 (* 1000 width-ms)))
-  (check (mma::set-extern-ready delay (- (* 1000 width-ms)
-				    delay-us)))
-  (check (mma::set-cycle-time 140s0))
-  (check (mma::set-start-mma)))
-#+nil
-(mma::set-cycle-time 150s0)
-
-#+nil
-(mma::status)
-#+nil
-(mma::uninit)
-#+nil
-(mma::disconnect)
 
 
 (defmacro with-lcos-to-cam (&body body)
@@ -204,7 +167,7 @@
     (gl:line-width 4)
     (draw-circle px py pr)
     (gl:with-pushed-matrix
-      (%gl:color-3ub #+nil #b00111111 255 255 255)
+      (%gl:color-3ub #b01111111 255 255)
       (gl:translate 0 1024 0)
       (with-cam-to-lcos (0 1024)
 	(draw-disk px-ill py-ill pr-ill))))

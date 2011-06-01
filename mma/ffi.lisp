@@ -55,7 +55,8 @@
 (in-package :ipms-ffi)
 (defparameter *library* "/home/martin/cyberpower-mit/mma-essentials-0209/libIPMS_SLM.so.1.0.0") 
 (load-shared-object *library*)
- 
+#+nil
+(unload-shared-object *library*) 
 ;; all functions return 0 on success and <0 if there was an error
  
 (define-alien-routine ("SLM_RegisterBoard" register-board)
