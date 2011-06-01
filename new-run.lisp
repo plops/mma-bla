@@ -23,8 +23,13 @@
 (set-local-interface "192.168.0.1"
 		     4001)
 
+
 #+nil
 (connect)
+
+#+nil
+(reset)
+
 
 #+nil
 (status)
@@ -48,7 +53,7 @@
 (set-deflection-phase 0s0 16000s0)
 
 #+nil
-(mma::set-cycle-time 150s0)
+(mma::set-cycle-time 160s0)
 
 #+nil
 (mma:set-nominal-deflection-nm 118.25)

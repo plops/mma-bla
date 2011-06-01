@@ -27,7 +27,7 @@
 #+nil
 (mma::set-start-mma)
 #+nil
-(mma:write-data (mma-spot 0 0 :kernel 30))
+(mma:write-data (mma-spot 128 128 :kernel 7))
 #+nil
 (mma:write-data (mma-white))
 #+nil
@@ -36,6 +36,40 @@
 (mma::set-power-off)
 #+nil
 (mma::disconnect)
+#+nil
+(capture)
+
+(defun sum (img)
+  (destructuring-bind (h w) (array-dimensions img)
+    (let ((sum 0))
+      (dotimes (j h)
+	(dotimes (i w)
+	  (incf sum (aref img j i))))
+      sum)))
+
+(defparameter *scan5*
+ (let ((res ()))
+   (loop for j below 256 by 4 do
+	(loop for i below 256 by 4 do
+	     (mma:write-data (mma-spot i j :kernel 7))
+	     (capture)
+	     (let ((s (list i j (sum *line*))))
+	       (format t "~a~%" s)
+	       (push s  res))))
+   res))
+
+(vol:write-pgm "/dev/shm/o.pgm"
+ (let ((ma (* .1 (reduce #'max *scan* :key #'third)))
+       (mi (reduce #'min *scan* :key #'third))
+       (b (make-array (list (/ 128 8) (/ 128 8))
+		      :element-type '(unsigned-byte 8))))
+   (dolist (e *scan*)
+     (destructuring-bind (i j val) e
+       (setf (aref b (floor j 8) (floor i 8))
+	     (max 0 (min 255 (floor (* 255 (/ (- val mi)
+					(- ma mi)))))))))
+   b))
+
 (defun mma-spot (i j &key (kernel 3))
   (let ((b (make-array (list 256 256)
 		       :element-type '(unsigned-byte 16)
@@ -46,7 +80,7 @@
 		    (xx (+ i x)))
 		(when (and (<= 0 xx 255)
 			   (<= 0 yy 255))
-		  (setf (aref b yy xx) 4095)))))
+		  (setf (aref b yy xx) 2000)))))
     b))
 
 
@@ -103,15 +137,15 @@
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
-
+(defparameter *do-capture* t)
 
 #+nil
 (sb-thread:make-thread 
  #'(lambda () 
-     (loop
-      (capture)
+     (loop while *do-capture* do
+	(capture)
 	#+nil
-      (sleep .01)))
+	(sleep .01)))
  :name "capture")
 
 (progn
@@ -122,7 +156,7 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 200 :ril 180s0)
+(change-target 865 630 200 :ril 200s0)
 (let* ((px 900s0) (py 600s0) (pr 300s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
@@ -152,7 +186,7 @@
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
     (gl:clear :color-buffer-bit)
-    ;;(sleep .1)
+    (sleep (/ 60))
     (gl:line-width 1)
     (gl:color 0 1 1)
     (when *t8*
@@ -208,7 +242,7 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (aref l1 i) 50)
+				    (floor (aref l1 i) 5)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)

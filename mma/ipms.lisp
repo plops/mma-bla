@@ -22,7 +22,8 @@
   `(progn
      (format t "running ~a~%" ',cmd)
      (unless (= 0 ,cmd)
-      (error "Error while running ~a." ',cmd))))
+       (break "Error while running ~a." ',cmd)
+       (format t "error in ~a, status: ~a~%" ',cmd (status)))))
  
 (defun set-extern-trigger (&optional (on t))
   (if on
