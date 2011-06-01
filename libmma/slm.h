@@ -27,3 +27,4 @@ int SLM_SetExternReady(float delay_us,float width_us);
 int SLM_EnableExternStart();
 int SLM_DisableExternStart();
 int SLM_SetCycleTime(float cycletime_ms);
+int SLM_Reset();

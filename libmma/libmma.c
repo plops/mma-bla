@@ -72,6 +72,8 @@ int set_cycle_time(float time_ms)
   return 0;
 }
 
+int reset(){ return SLM_Reset(); }
+
 int
 status(unsigned int*stat,unsigned int*error)
 {
@@ -80,6 +82,26 @@ status(unsigned int*stat,unsigned int*error)
     return -1;
   }
   printf("status %d error %d\n",*stat,*error);
+  return 0;
+}
+
+int
+connect()
+{
+ if(0!=SLM_RegisterBoard(0x0036344B00800803LL,
+			  "192.168.0.2","255.255.255.0",
+			  "0.0.0.0",4001)){
+    e("register board");
+    return -4;
+  }
+  if(0!=SLM_SetLocalIf("192.168.0.1",4001)){
+    e("set local interface");
+    return -3;
+  }
+  if(0!=SLM_Connect()){
+    e("connect");
+    return -2;
+  }
   return 0;
 }
 
@@ -175,6 +197,12 @@ init()
   if(0!=SLM_Disconnect())
     e("disconnect");
   return -1;
+}
+
+int
+disconnect()
+{
+  return SLM_Disconnect();
 }
 
 int

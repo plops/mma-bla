@@ -47,6 +47,7 @@
 	  (incf sum (aref img j i))))
       sum)))
 
+#+nil
 (defparameter *scan5*
  (let ((res ()))
    (loop for j below 256 by 4 do
@@ -57,13 +58,14 @@
 	       (format t "~a~%" s)
 	       (push s  res))))
    res))
-
+#+nil
 (vol:write-pgm "/dev/shm/o.pgm"
- (let ((ma (* .1 (reduce #'max *scan* :key #'third)))
-       (mi (reduce #'min *scan* :key #'third))
+ (let* ((d *scan5*)
+	(ma (* .1 (reduce #'max d :key #'third)))
+       (mi (reduce #'min d :key #'third))
        (b (make-array (list (/ 128 8) (/ 128 8))
 		      :element-type '(unsigned-byte 8))))
-   (dolist (e *scan*)
+   (dolist (e d)
      (destructuring-bind (i j val) e
        (setf (aref b (floor j 8) (floor i 8))
 	     (max 0 (min 255 (floor (* 255 (/ (- val mi)
@@ -73,7 +75,7 @@
 (defun mma-spot (i j &key (kernel 3))
   (let ((b (make-array (list 256 256)
 		       :element-type '(unsigned-byte 16)
-		       :initial-element 90)))
+		       :initial-element 120)))
     (loop for y from (- kernel) upto kernel do
 	 (loop for x from (- kernel) upto kernel do
 	      (let ((yy (+ j y))
