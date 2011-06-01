@@ -1,4 +1,3 @@
-# this is the simplest possible makefile
 CFLAGS=-g -O2 -Wall -Wextra
 IPMSLIB=/home/martin/mma-essentials-0209/
 # note that the option -Wl,-rpath forces the linker to store the
@@ -14,4 +13,4 @@ mma: mma.c libmma.so
 libmma.so: libmma.c
 	gcc -fPIC -c libmma.c && gcc -shared -Wl,-soname,libmma.so $(LDFLAGS) -o libmma.so libmma.o
 clean:
-	rm mma libmma.so
+	rm mma libmma.so reset

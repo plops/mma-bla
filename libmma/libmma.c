@@ -72,7 +72,10 @@ int set_cycle_time(float time_ms)
   return 0;
 }
 
-int reset(){ return SLM_Reset(); }
+int reset()
+{
+  return SLM_Reset();
+}
 
 int
 status(unsigned int*stat,unsigned int*error)
@@ -86,7 +89,7 @@ status(unsigned int*stat,unsigned int*error)
 }
 
 int
-connect()
+conn()
 {
  if(0!=SLM_RegisterBoard(0x0036344B00800803LL,
 			  "192.168.0.2","255.255.255.0",

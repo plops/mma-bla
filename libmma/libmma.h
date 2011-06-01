@@ -4,5 +4,5 @@ int init();
 int uninit();
 int status(unsigned int*status,unsigned int*error);
 int reset();
-int connect();
+int conn();
 int disconnect();
