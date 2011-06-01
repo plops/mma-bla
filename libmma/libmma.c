@@ -1,7 +1,6 @@
 // very simplified mma control with quite elaborate error checking
 // xpdf /home/martin/ftp.ipms.fraunhofer.de/mma-documentation/linux/UNIX-library_lxIPMS_SLM_v0.93.pdf
 
-#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -88,10 +87,16 @@ int
 init()
 {
   unsigned int stat,error;
-  assert(0==SLM_RegisterBoard(0x0036344B00800803LL,
-			      "192.168.0.2","255.255.255.0",
-			      "0.0.0.0",4001));
-  assert(0==SLM_SetLocalIf("192.168.0.1",4001));
+  if(0!=SLM_RegisterBoard(0x0036344B00800803LL,
+			  "192.168.0.2","255.255.255.0",
+			  "0.0.0.0",4001)){
+    e("register board");
+    return -4;
+  }
+  if(0!=SLM_SetLocalIf("192.168.0.1",4001)){
+    e("set local interface");
+    return -3;
+  }
   if(0!=SLM_Connect()){
     e("connect");
     return -2;
@@ -164,17 +169,22 @@ init()
     goto poweroff;
   return 0;
  poweroff:
-  assert(0==SLM_SetPowerOff());
+  if(0!=SLM_SetPowerOff())
+    e("set power off");
  disconnect: 
-  assert(0==SLM_Disconnect());  
+  if(0!=SLM_Disconnect())
+    e("disconnect");
   return -1;
 }
 
 int
 uninit()
 {
-  assert(0==SLM_SetStopMMA());
-  assert(0==SLM_SetPowerOff());
-  assert(0==SLM_Disconnect());
+  if(0!=SLM_SetStopMMA())
+    e("stop mma");
+  if(0!=SLM_SetPowerOff())
+    e("set power off");
+  if(0!=SLM_Disconnect())
+    e("disconnect");
   return 0;
 }

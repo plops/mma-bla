@@ -1,8 +1,16 @@
 (defpackage :libmma
-  (:use :cl :sb-alien :sb-c-call))
+  (:use :cl :sb-alien :sb-c-call)
+  (:export #:init
+	   #:uninit
+	   #:upload-image
+	   #:status
+	   #:set-cycle-time))
 (in-package :libmma)
 (defparameter *library* "/home/martin/0505/mma-c/libmma.so") 
 (load-shared-object *library*)
+
+#+nil
+(unload-shared-object *library*)
 
 (define-alien-routine "upload_image" 
     int
