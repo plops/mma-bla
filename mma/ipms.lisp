@@ -115,8 +115,8 @@
 	     (netmask "255.255.255.0")
 	     (gateway "0.0.0.0")
 	     (port 4001)
-	     (config "/home/martin/cyberpower-mit/mma-essentials-0209/800803_dmdl6_20110215.ini")
-	     (calibration "/home/martin/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")
+	     (config "/home/martin/3ini")
+	     (calibration "/home/martin/24811567.cal")
 	     (width-ms (- 16s0 .522)))
   (check (register-board id
 			 board-ip
@@ -142,7 +142,7 @@
   (set-nominal-deflection-nm (/ 473.0 4))
   (unless (= 0 (set-start-mma))
     (error "set-start-mma failed."))
-  (sleep .1) ;; It takes a while until the board can tell if there is
+  (sleep .12) ;; It takes a while until the board can tell if there is
 	     ;; a matrix or not. Wait duration should be .1 .. 1s,
 	     ;; increase the delay with the matrix detached until
 	     ;; read-status returns the appropriate error.
@@ -150,7 +150,10 @@
 
 #+nil
 (init)
-
+#+nil
+(mma::disconnect)
+#+nil
+(mma::status)
 (defun standby ()
   (check (set-stop-mma))
   (check (set-power-off)))
@@ -238,14 +241,15 @@
 (defun status ()
   (multiple-value-bind (retval status error) (read-status)
     (unless (= 0 retval)
-      (error "read-status didn't return 0 but ~d.~%" retval))
+      (break "read-status didn't return 0 but ~d.~%" retval))
     (if (/= 0 error)
 	(format t "error: ~a~%error-bits:~%~a~% status-bits:~%~a~%retval: ~a~%"
 		error (parse-error-bits error)
 		(parse-status-bits status)
 		retval)
 	(format t "status-bits ~a~%" (parse-status-bits status)))
-    (parse-status-bits status)))
+    (list :error (parse-error-bits error) 
+	  :status (parse-status-bits status))))
 
 (defun select-pictures (start &key (n 1) (ready-out-needed nil))
   (dotimes (i n)

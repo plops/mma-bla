@@ -35,7 +35,8 @@
 
 #+nil
 (load-calibration-data 
- "/home/martin/cyberpower-mit/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")
+ "/home/martin/24811567.cal"
+ #+nil "/home/martin/cyberpower-mit/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")
 
 
 #+nil
@@ -63,15 +64,6 @@
 (progn
  (load-white :pic-number 1)
  nil)
-
-#+nil
-(begin)
-
-
-#+nil
-(mma::plain-status)
-#+nil
-(mma:status)
 
 #+nil
 (mma::set-stop-mma)

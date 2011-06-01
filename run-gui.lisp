@@ -31,7 +31,40 @@
 #+nil
 (mma::disconnect)
 #+nil
-(mma::fill-constant 0)
+(mma::fill-constant 90)
+#+nil
+(sb-alien:load-shared-object ipms-ffi::*library*)
+#+nil
+(sb-alien:unload-shared-object ipms-ffi::*library*)
+#+nil
+(mma::set-voltage mma::+volt-frame-f+ 18s0)
+#+nil
+(mma::set-voltage mma::+volt-frame-l+ 18s0)
+#+nil
+(mma::get-voltage mma::+volt-frame-f+)
+#+nil
+(mma::set-stop-mma)
+#+nil
+(mma::set-start-mma)
+#+nil
+(mma::status)
+#+nil
+(mma::set-power-off)
+(defun mma-spot (i j &key (kernel 3))
+  (let ((b (make-array (list 256 256)
+		       :element-type '(unsigned-byte 16)
+		       :initial-element 90)))
+    (loop for y from (- kernel) upto kernel do
+	 (loop for x from (- kernel) upto kernel do
+	      (let ((q (+ j y))
+		    (p (+ i x)))
+		(when (and (< -1 p x)
+			   (< -1 q y))
+		  (setf (aref b q p) 4095)))))
+    b))
+
+#+nil
+(mma::write-data (mma-spot 128 128 :kernel 64))
 #+nil
 (let* ((width-ms 16s0)
        (delay-us 20s0))
@@ -44,11 +77,14 @@
   (check (mma::set-cycle-time 140s0))
   (check (mma::set-start-mma)))
 #+nil
-(mma::set-cycle-time 300s0)
+(mma::set-cycle-time 150s0)
 
 #+nil
 (mma::status)
-
+#+nil
+(mma::uninit)
+#+nil
+(mma::disconnect)
 
 
 (defmacro with-lcos-to-cam (&body body)
@@ -123,7 +159,7 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 300 :ril 100s0)
+(change-target 865 630 200 :ril 180s0)
 (let* ((px 900s0) (py 600s0) (pr 300s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
