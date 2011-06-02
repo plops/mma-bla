@@ -53,7 +53,7 @@ splat(double*args)
 }
 
 double
-write_data(double*ignore)
+img(double*ignore)
 {
   (void)ignore;
   if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
@@ -63,14 +63,74 @@ write_data(double*ignore)
   return 0.0;
 }
 
+double
+set_cycle_time(double*args)
+{
+  double time_ms=args[0];
+  if(0!=SLM_SetCycleTime(time_ms)){
+    e("cycle time");
+    return NAN;
+  }
+  return 0.0;
+}
+
+double
+start(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_SetStartMMA()){
+    e("start");
+    return NAN;
+  }
+  return 0.0;
+}
+
+double
+stop(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_SetStopMMA()){
+    e("stop");
+    return NAN;
+  }
+  return 0.0;
+}
+
+double
+off(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_SetPowerOff()){
+    e("power off");
+    return NAN;
+  }
+  return 0.0;
+}
+
+double
+on(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_SetPowerOn()){
+    e("power on");
+    return NAN;
+  }
+  return 0.0;
+}
 
 // array that contains all functions that can be called from text interface
 struct{ 
   char name[CMDLEN];
   int args;
   double (*fptr)(double*);
-}cmd[]={{"write_data",0,write_data},
-	{"splat",3,splat}};
+}cmd[]={{"img",0,img},
+	{"splat",3,splat},
+	{"status",0,status},
+	{"start",0,start},
+	{"stop",0,stop},
+	{"on",0,on},
+	{"off",0,off},
+	{"set_cycle_time",1,set_cycle_time},};
 
 
 
