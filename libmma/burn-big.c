@@ -1,31 +1,46 @@
+// the parsing code isn't thread safe. I use strtok
+
 #include <assert.h>
+#include <ctype.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <math.h>
 #include "slm.h"
 
-enum{N=256,NN=N*N};
-
+#define len(x) (sizeof(x)/sizeof(x[0]))
 #define e(q) do{fprintf(stderr,"error in file %s:%d in function %s, while calling %s\n",__FILE__,__LINE__,__FUNCTION__,q);}while(0)
+#define NAN __builtin_nan("")
+enum{
+  CMDLEN=100, // maximum length of command strings
+  MAXARGS=3,  // maximum number of arguments for a function
+  N=256, // size of MMA
+  NN=N*N
+};
 
+unsigned short*buf;
 
-int
-status()
+// functions that can be called from text interface
+
+double
+status(double*ignore)
 {
+  (void)ignore;
   unsigned int stat,error;
   if(0!=SLM_ReadStatus(&stat,&error)){
     e("read-status");
-    return -1;
+    return NAN;
   }
   printf("status %d error %d\n",stat,error);
-  return 0;
+  return 0.0;
 }
 
 
-unsigned short*
-splat(int i,int j, int d,unsigned short*buf)
+double
+splat(double*args)
 {
-  int x,y;
+  int i=(int)args[0],j=(int)args[1],d=(int)args[2],x,y;
   for(x=0;x<NN;x++)
     buf[x]=90;
   for(y=-d;y<=d;y++)
@@ -34,14 +49,115 @@ splat(int i,int j, int d,unsigned short*buf)
       if((0<=xx) && (xx<N) && (0<=yy) && (yy<N))
 	buf[xx+N*yy]=4095;
     }
-  return buf;
+  return 0.;
 }
+
+double
+write_data(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
+    printf("error upload-image\n");
+    return NAN;
+  }
+  return 0.0;
+}
+
+
+// array that contains all functions that can be called from text interface
+struct{ 
+  char name[CMDLEN];
+  int args;
+  double (*fptr)(double*);
+}cmd[]={{"write_data",0,write_data},
+	{"splat",3,splat}};
+
+
+
+// code for parsing text interface
+int
+lookup(char*s)
+{
+  unsigned int i;
+  for(i=0;i<len(cmd);i++)
+    if(0==strncmp(s,cmd[i].name,CMDLEN))
+      return i;
+  return -1;
+}
+
+int isfloatchar(int c)
+{
+  if(c=='+'||c=='-'||c=='.'||isdigit(c))
+    return 1;
+  return 0;
+}
+
+int
+parse_name(char*tok)
+{
+  int fun_index=-1;
+  if(tok){
+    if(isalpha(tok[0])){
+      fun_index=lookup(tok);
+      printf("+%s=%d+\n",tok,fun_index);
+    }else{
+      printf("error, expected function name\n");
+      return -1;
+    }
+  }else{
+    printf("error, expected some function name but got nothing");
+    return -1;
+  }
+  return fun_index;
+}
+
+double
+parse_line(char*line)
+{
+  char *search=" ",*tok;
+  if(!line)
+    return NAN;
+  tok=strtok(line,search);
+
+  int fun_index=parse_name(tok);
+  if(fun_index<0)
+    return NAN;
+
+  int arg_num=cmd[fun_index].args;
+  int i;
+  double args[MAXARGS];
+  for(i=0;i<arg_num;i++){
+    tok=strtok(0,search);
+    if(!tok){
+      printf("error, expected an argument");
+      return NAN;
+    }
+    if(isfloatchar(tok[0])){
+	char*endptr;
+	double d=strtod(tok,&endptr);
+	if(endptr==tok){
+	  printf("error, couldn't parse double\n");
+	  return NAN;
+	}else
+	  args[i]=d;
+	  printf("%g\n",d);
+    }else{
+      printf("error, expected digit or .+- but found %c\n",tok[0]);
+      return NAN;
+    }   
+  }
+  return cmd[fun_index].fptr(args);
+}
+
+
 
 int
 main()
 {
-  unsigned short*buf=malloc(N*N*2);
-  splat(0,0,10,buf);
+  buf=malloc(N*N*2);
+  int i;
+  for(i=0;i<NN;i++)
+    buf[i]=90;
   if(0!=SLM_RegisterBoard(0x0036344B00800803LL,
 			  "192.168.0.2","255.255.255.0",
 			  "0.0.0.0",4001)){
@@ -57,7 +173,7 @@ main()
     return -2;
   }
   
-  if(0!=status())
+  if(isnan(status(0)))
     goto disconnect;
   
   if(0!=SLM_LoadConfiguration("/home/martin/cyberpower-mit/mma-essentials-0209/800803_dmdl6_20110215.ini"
@@ -93,7 +209,7 @@ main()
     goto disconnect;
   } 
 
-  if(0!=status())
+  if(isnan(status(0)))
     goto disconnect;
 
   if(0!=SLM_SetPowerOn()){
@@ -125,19 +241,16 @@ main()
   // errors. if errors aren't cleared certain functions (like
   // start-mma) will never succeed.
 
-  if(0!=status())
+  if(isnan(status(0)))
     goto stop_mma;
 
-  int i,j;
-  for(i=0;i<N;i+=1)
-    for(j=0;j<N;j+=1){
-      printf("%d %d\n",i,j);
-      splat(i,j,3,buf);
-      if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
-	printf("error upload-image\n");
-      }
-    }
- 
+  char s[CMDLEN],*line;
+  // this loop reads text commands and runs them until C-d is pressed
+  do{
+    line=fgets(s,sizeof(s),stdin);
+    printf("retval: %g\n", parse_line(line));
+  }while(line);
+
  stop_mma:
   if(0!=SLM_SetStopMMA())
     e("stop mma");
@@ -148,5 +261,4 @@ main()
   if(0!=SLM_Disconnect())
     e("disconnect");
   return -1;
-
 }
