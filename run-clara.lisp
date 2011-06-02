@@ -37,6 +37,7 @@
 #+nil
 (set-shutter 1 1 0 0)
 
+(clara:status)
 
 
 (trigger-mode :internal)

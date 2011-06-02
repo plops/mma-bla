@@ -7,6 +7,7 @@
 
 enum{N=256,NN=N*N};
 
+// echo "echo 4 > /proc/sys/net/ipv4/tcp_fin_timeout"  | sudo sh
 
 unsigned short*
 splat(int i,int j, int d,unsigned short*buf)
@@ -18,7 +19,7 @@ splat(int i,int j, int d,unsigned short*buf)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
       if((0<=xx) && (xx<N) && (0<=yy) && (yy<N))
-	buf[xx+N*yy]=4095;
+      	buf[xx+N*yy]=4095;
     }
   return buf;
 }
@@ -37,7 +38,7 @@ main()
     for(j=0;j<6;j+=4){
       printf("%d %d\n",i,j);
       splat(i,j,7,buf);
-      if(0!=mma_upload_image(buf)){
+      if(0)if(0!=mma_upload_image(buf)){
 	printf("error upload-image\n");
       }
     }
