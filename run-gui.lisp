@@ -7,7 +7,7 @@
     (ql:quickload "cl-opengl")
     (require :gui)
     (require :clara)
-    (require :mma)
+;   (require :mma)
     (require :focus)) 
 (defpackage :run-gui
 	(:use :cl :clara :gl))

@@ -18,7 +18,7 @@ splat(int i,int j, int d,unsigned short*buf)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
       if((0<=xx) && (xx<N) && (0<=yy) && (yy<N))
-	buf[i+N*j]=4095;
+	buf[xx+N*yy]=4095;
     }
   return buf;
 }
@@ -28,8 +28,9 @@ main()
 {
 
   int i,j;
-  unsigned short*buf=malloc(N*N*2);
-  splat(0,0,12,buf);
+  unsigned short*buf=malloc(NN*sizeof(*buf));
+  splat(5,0,12,buf);
+  
   assert(0==mma_init());
 
   for(i=0;i<6;i+=4)

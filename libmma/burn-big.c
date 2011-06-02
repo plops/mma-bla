@@ -31,8 +31,8 @@ splat(int i,int j, int d,unsigned short*buf)
   for(y=-d;y<=d;y++)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
-      if((0<=xx) && (xx<N) && (0<=yy) && (y<N))
-	buf[i+N*j]=4095;
+      if((0<=xx) && (xx<N) && (0<=yy) && (yy<N))
+	buf[xx+N*yy]=4095;
     }
   return buf;
 }
@@ -86,7 +86,9 @@ main()
     goto disconnect;
   }
 
-  if(0!=SLM_SetCycleTime(2.*width+.01)){
+  if(0!=SLM_SetCycleTime(180.
+			 //2.*width+.01
+			 )){
     e("cycle time");
     goto disconnect;
   } 
@@ -103,6 +105,13 @@ main()
     e("fill");
     goto poweroff;
   }
+
+  if(0!=SLM_SetPictureSequence(1,1,1)){
+    e("set-picture-sequence");
+    goto poweroff;
+  }
+
+
   printf("infront of start\n");
   if(0!=SLM_SetStartMMA()){
     e("start");
@@ -120,10 +129,10 @@ main()
     goto stop_mma;
 
   int i,j;
-  for(i=0;i<N;i+=128)
-    for(j=0;j<N;j+=128){
+  for(i=0;i<N;i+=1)
+    for(j=0;j<N;j+=1){
       printf("%d %d\n",i,j);
-      splat(i,j,7,buf);
+      splat(i,j,3,buf);
       if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
 	printf("error upload-image\n");
       }
