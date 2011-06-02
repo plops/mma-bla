@@ -4,9 +4,9 @@
 int
 main()
 {
-  assert(0==conn());
-  assert(0==reset());
-  assert(0==disconnect());
+  assert(0==mma_connect());
+  assert(0==mma_reset());
+  assert(0==mma_disconnect());
 
   return 0;
 }

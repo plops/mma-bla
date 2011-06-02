@@ -18,7 +18,7 @@ enum { N=256, // size of MMA array
 
 
 int
-upload_image(unsigned short*buf)
+mma_upload_image(unsigned short*buf)
 {
   if(!buf){
     e("buf is null");
@@ -28,7 +28,7 @@ upload_image(unsigned short*buf)
   // 16bit data
   int pic=1;
   // images can be uploaded without first calling stop-matrix
-  if(0!=SLM_WriteMatrixData(pic,3,buf,2*N*N)){
+  if(0!=SLM_WriteMatrixData(pic,3,buf,N*N)){
     e("write-matrix-data");
     return -1;
   }
@@ -41,7 +41,7 @@ upload_image(unsigned short*buf)
 }
 
 int
-fill_constant(unsigned short value)
+mma_fill_constant(unsigned short value)
 {
   unsigned short*buf=malloc(N*N*2);
   if(!buf){
@@ -59,10 +59,11 @@ fill_constant(unsigned short value)
 	buf[i+N*j]=value;
     }
   
-  return upload_image(buf);
+  return mma_upload_image(buf);
 }
 
-int set_cycle_time(float time_ms)
+int 
+mma_set_cycle_time(float time_ms)
 {
   
   if(0!=SLM_SetCycleTime(time_ms)){
@@ -72,13 +73,14 @@ int set_cycle_time(float time_ms)
   return 0;
 }
 
-int reset()
+int 
+mma_reset()
 {
   return SLM_Reset();
 }
 
 int
-status(unsigned int*stat,unsigned int*error)
+mma_status(unsigned int*stat,unsigned int*error)
 {
   if(0!=SLM_ReadStatus(stat,error)){
     e("read-status");
@@ -89,7 +91,7 @@ status(unsigned int*stat,unsigned int*error)
 }
 
 int
-conn()
+mma_connect()
 {
  if(0!=SLM_RegisterBoard(0x0036344B00800803LL,
 			  "192.168.0.2","255.255.255.0",
@@ -109,7 +111,7 @@ conn()
 }
 
 int
-init()
+mma_init()
 {
   unsigned int stat,error;
   if(0!=SLM_RegisterBoard(0x0036344B00800803LL,
@@ -127,7 +129,7 @@ init()
     return -2;
   }
   
-  if(0!=status(&stat,&error))
+  if(0!=mma_status(&stat,&error))
     goto disconnect;
   
   // the ini file must contain the right board id
@@ -162,10 +164,10 @@ init()
     e("enable extern start");
     goto disconnect;
   }
-  if(0!=set_cycle_time(2*width+.01))
+  if(0!=mma_set_cycle_time(2*width+.01))
     goto disconnect;
 
-  if(0!=status(&stat,&error))
+  if(0!=mma_status(&stat,&error))
     goto disconnect;
 
   if(0!=SLM_SetPowerOn()){
@@ -173,7 +175,7 @@ init()
     goto disconnect;
   }
   // you have to make sure to upload at least one image
-  if(0!=fill_constant(4095)){
+  if(0!=mma_fill_constant(4095)){
     e("fill");
     goto poweroff;
   }
@@ -190,9 +192,12 @@ init()
   // errors. if errors aren't cleared certain functions (like
   // start-mma) will never succeed.
 
-  if(0!=status(&stat,&error))
-    goto poweroff;
+  if(0!=mma_status(&stat,&error))
+    goto stop_mma;
   return 0;
+ stop_mma:
+  if(0!=SLM_SetStopMMA())
+    e("stop mma");
  poweroff:
   if(0!=SLM_SetPowerOff())
     e("set power off");
@@ -203,13 +208,13 @@ init()
 }
 
 int
-disconnect()
+mma_disconnect()
 {
   return SLM_Disconnect();
 }
 
 int
-uninit()
+mma_uninit()
 {
   if(0!=SLM_SetStopMMA())
     e("stop mma");

@@ -27,7 +27,7 @@ splat(int i,int j, int d,unsigned short*buf)
 {
   int x,y;
   for(x=0;x<NN;x++)
-    buf[i]=90;
+    buf[x]=90;
   for(y=-d;y<=d;y++)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
@@ -120,8 +120,8 @@ main()
     goto stop_mma;
 
   int i,j;
-  for(i=0;i<N;i+=4)
-    for(j=0;j<N;j+=4){
+  for(i=0;i<N;i+=128)
+    for(j=0;j<N;j+=128){
       printf("%d %d\n",i,j);
       splat(i,j,7,buf);
       if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
