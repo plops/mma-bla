@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "slm.h"
 
 enum{N=256,NN=N*N};
 
@@ -33,7 +34,7 @@ main()
   unsigned short*buf=malloc(N*N*2);
   printf("before\n");
   //SLM_SetStopMMA();
-  SLM_WriteMatrixData(1,3,0,NN);
+  SLM_WriteMatrixData(1,3,buf,NN);
   //if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
   //printf("error upload-image\n");
   //}
