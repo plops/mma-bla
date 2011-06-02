@@ -12,8 +12,8 @@ unsigned short*
 splat(int i,int j, int d,unsigned short*buf)
 {
   int x,y;
-  for(x=0;x<NN;x++)
-    buf[x]=90;
+  //for(x=0;x<NN;x++)
+  //  buf[x]=90;
   for(y=-d;y<=d;y++)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
@@ -37,9 +37,11 @@ main()
     for(j=0;j<6;j+=4){
       printf("%d %d\n",i,j);
       splat(i,j,7,buf);
+      printf("bla\n");
       if(0!=mma_upload_image(buf)){
 	printf("error upload-image\n");
       }
+      printf("blub\n");
     }
   assert(0==mma_uninit());
   return 0;
