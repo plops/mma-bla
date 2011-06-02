@@ -79,8 +79,11 @@ int
 lookup(char*s)
 {
   unsigned int i;
+  int n=strlen(s);
+  if(s[n-1]=='\n') // ignore trailing return
+    n--;
   for(i=0;i<len(cmd);i++)
-    if(0==strncmp(s,cmd[i].name,CMDLEN))
+    if(0==strncmp(s,cmd[i].name,n))
       return i;
   return -1;
 }
@@ -244,6 +247,7 @@ main()
   if(isnan(status(0)))
     goto stop_mma;
 
+  printf("initialized, enter your command:\n");
   char s[CMDLEN],*line;
   // this loop reads text commands and runs them until C-d is pressed
   do{
@@ -260,5 +264,5 @@ main()
  disconnect: 
   if(0!=SLM_Disconnect())
     e("disconnect");
-  return -1;
+  return 0;
 }
