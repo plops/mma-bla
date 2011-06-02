@@ -28,3 +28,4 @@ int SLM_EnableExternStart();
 int SLM_DisableExternStart();
 int SLM_SetCycleTime(float cycletime_ms);
 int SLM_Reset();
+int SLM_SetParameter(unsigned int paramnumber,void*value,unsigned int bytes);

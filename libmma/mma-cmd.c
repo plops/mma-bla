@@ -97,6 +97,17 @@ stop(double*ignore)
 }
 
 double
+deflection(double*args)
+{
+  // args contains one value (target wavelength/4)
+  if(0!=SLM_SetParameter(1001,args,4)){
+    e("set parameter 1001");
+    return NAN;
+  }
+  return 0.0;
+}
+
+double
 off(double*ignore)
 {
   (void)ignore;
@@ -130,6 +141,7 @@ struct{
 	{"stop",0,stop},
 	{"on",0,on},
 	{"off",0,off},
+	{"deflection",1,deflection},
 	{"set_cycle_time",1,set_cycle_time},};
 
 
@@ -262,6 +274,12 @@ main()
   }
   if(0!=SLM_EnableExternStart()){
     e("enable extern start");
+    goto disconnect;
+  }
+
+  double deflection=473.0/4;
+  if(0!=SLM_SetParameter(1001,&deflection,4)){
+    e("set parameter 1001");
     goto disconnect;
   }
 
