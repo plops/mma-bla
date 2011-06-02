@@ -36,22 +36,6 @@ status(double*ignore)
   return 0.0;
 }
 
-
-double
-splat(double*args)
-{
-  int i=(int)args[0],j=(int)args[1],d=(int)args[2],x,y;
-  for(x=0;x<NN;x++)
-    buf[x]=90;
-  for(y=-d;y<=d;y++)
-    for(x=-d;x<=d;x++){
-      int xx=x+i,yy=y+j;
-      if((0<=xx) && (xx<N) && (0<=yy) && (yy<N))
-	buf[xx+N*yy]=4095;
-    }
-  return 0.;
-}
-
 double
 img(double*ignore)
 {
@@ -62,6 +46,24 @@ img(double*ignore)
   }
   return 0.0;
 }
+
+
+double
+splat(double*args) 
+// turn a rectangle at position (i j) on, this can be used for scanning
+{
+  int i=(int)args[0],j=(int)args[1],d=(int)args[2],x,y;
+  for(x=0;x<NN;x++)
+    buf[x]=90;
+  for(y=-d;y<=d;y++)
+    for(x=-d;x<=d;x++){
+      int xx=x+i,yy=y+j;
+      if((0<=xx) && (xx<N) && (0<=yy) && (yy<N))
+	buf[xx+N*yy]=4095;
+    }
+  return img(0);
+}
+
 
 double
 set_cycle_time(double*args)
@@ -174,7 +176,7 @@ parse_name(char*tok)
   if(tok){
     if(isalpha(tok[0])){
       fun_index=lookup(tok);
-      printf("+%s=%d+\n",tok,fun_index);
+      // printf("+%s=%d+\n",tok,fun_index);
     }else{
       printf("error, expected function name\n");
       return -1;
@@ -215,7 +217,7 @@ parse_line(char*line)
 	  return NAN;
 	}else
 	  args[i]=d;
-	  printf("%g\n",d);
+	//printf("%g\n",d);
     }else{
       printf("error, expected digit or .+- but found %c\n",tok[0]);
       return NAN;
@@ -342,5 +344,6 @@ main()
  disconnect: 
   if(0!=SLM_Disconnect())
     e("disconnect");
+  printf("bye!\n");
   return 0;
 }
