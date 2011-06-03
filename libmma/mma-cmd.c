@@ -32,7 +32,7 @@ status(double*ignore)
     e("read-status");
     return NAN;
   }
-  printf("status %d error %d\n",stat,error);
+  printf("status 0x%x error 0x%x\n",stat,error);
   return 0.0;
 }
 
@@ -47,6 +47,8 @@ img(double*ignore)
   return 0.0;
 }
 
+double help(double*);
+
 
 double
 splat(double*args) 
@@ -55,6 +57,7 @@ splat(double*args)
   int i=(int)args[0],j=(int)args[1],d=(int)args[2],x,y;
   for(x=0;x<NN;x++)
     buf[x]=90;
+  printf("splat x=%d y=%d d=%d\n",i,j,d);
   for(y=-d;y<=d;y++)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
@@ -64,6 +67,27 @@ splat(double*args)
   return img(0);
 }
 
+double
+extern_trigger(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_EnableExternStart()){
+    e("enable extern start");
+    return NAN;
+  }
+  return 0.0;
+}
+
+double
+intern_trigger(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_DisableExternStart()){
+    e("disable extern start");
+    return NAN;
+  }
+  return 0.0;
+}
 
 double
 set_cycle_time(double*args)
@@ -96,6 +120,32 @@ stop(double*ignore)
     return NAN;
   }
   return 0.0;
+}
+
+double
+value(double*args)
+{
+  unsigned short d=(unsigned short)args[0];
+  int i;
+  for(i=0;i<NN;i++)
+    buf[i]=d;
+  return img(0);
+}
+
+double
+black(double*ignore)
+{
+  (void)ignore;
+  double b=90.0;
+  return value(&b);
+}
+
+double
+white(double*ignore)
+{
+  (void)ignore;
+  double b=4095.0;
+  return value(&b);
 }
 
 double
@@ -136,16 +186,33 @@ struct{
   char name[CMDLEN];
   int args;
   double (*fptr)(double*);
-}cmd[]={{"img",0,img},
+}cmd[]={{"help",0,help},
+	{"img",0,img},
 	{"splat",3,splat},
 	{"status",0,status},
 	{"start",0,start},
 	{"stop",0,stop},
 	{"on",0,on},
 	{"off",0,off},
+	{"value",1,value},
+	{"black",0,black},
+	{"white",0,white},
 	{"deflection",1,deflection},
-	{"set_cycle_time",1,set_cycle_time},};
+	{"intern-trigger",0,intern_trigger},
+	{"extern-trigger",0,extern_trigger},
+	{"set-cycle-time",1,set_cycle_time},};
 
+
+
+double
+help(double*ignore)
+{
+  (void)ignore;
+  unsigned int i;
+  for(i=0;i<len(cmd);i++)
+    printf("%s %d\n",cmd[i].name,cmd[i].args);
+  return 0.0;
+}
 
 
 // code for parsing text interface
