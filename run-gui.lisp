@@ -7,11 +7,14 @@
     (ql:quickload "cl-opengl")
     (require :gui)
     (require :clara)
-;   (require :mma)
+   ; (require :mma)
     (require :focus)) 
 (defpackage :run-gui
 	(:use :cl :clara :gl))
 (in-package :run-gui)
+
+#+nil
+(mma::parse-status-bits #x4c000)
 
 #+nil
 (focus:connect)
@@ -46,6 +49,7 @@
 	(dotimes (i w)
 	  (incf sum (aref img j i))))
       sum)))
+
 
 #+nil
 (defparameter *scan5*
@@ -203,7 +207,8 @@
     (gl:line-width 4)
     (draw-circle px py pr)
     (gl:with-pushed-matrix
-      (%gl:color-3ub #b01111111 255 255)
+      (%gl:color-3ub #b00111100 #+nil #b01111111 0 0 ;255 255
+		     )
       (gl:translate 0 1024 0)
       (with-cam-to-lcos (0 1024)
 	(draw-disk px-ill py-ill pr-ill))))
@@ -244,7 +249,7 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (aref l1 i) 5)
+				    (floor (aref l1 i) 50)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)

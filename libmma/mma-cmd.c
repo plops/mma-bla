@@ -299,6 +299,7 @@ int
 main()
 {
   buf=malloc(N*N*2);
+  assert(buf);
   int i;
   for(i=0;i<NN;i++)
     buf[i]=90;
@@ -346,7 +347,7 @@ main()
     goto disconnect;
   }
 
-  double deflection=473.0/4;
+  float deflection=473.0/4;
   if(0!=SLM_SetParameter(1001,&deflection,4)){
     e("set parameter 1001");
     goto disconnect;
