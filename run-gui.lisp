@@ -25,6 +25,7 @@
  (+ (focus:get-position) -10.))
 
 
+#+nil
 (defparameter *mma-chan*
   (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
                       :output :stream
@@ -37,11 +38,18 @@
     (format s "~a~%" cmd)
     (finish-output s)))
 
+#+nil
 (mma "white")
+#+nil
 (mma "black")
-(dotimes (i 100)
- (mma "black"))
-
+#+nil
+(mma "splat 128 128 7")
+#+nil
+(mma "set-cycle-time 300")
+#+nil
+(mma "stop")
+#+nil
+(mma "quit")
 (defun sum (img)
   (destructuring-bind (h w) (array-dimensions img)
     (let ((sum 0))
@@ -52,28 +60,34 @@
 
 
 #+nil
-(defparameter *scan5*
- (let ((res ()))
-   (loop for j below 256 by 4 do
-	(loop for i below 256 by 4 do
-	     (mma:write-data (mma-spot i j :kernel 7))
-	     (capture)
-	     (let ((s (list i j (sum *line*))))
-	       (format t "~a~%" s)
-	       (push s  res))))
-   res))
+(progn
+  (defparameter *scan* nil)
+  (loop for j below 256 by 8 do
+       (loop for i below 256 by 8 do
+	    (mma (format nil "splat ~a ~a 7" i j))
+	    (capture)
+	    (let ((s (list i j (sum *line*))))
+	      (format t "~a~%" s)
+	      (push s *scan*)))))
+
 #+nil
 (vol:write-pgm "/dev/shm/o.pgm"
- (let* ((d *scan5*)
-	(ma (* .1 (reduce #'max d :key #'third)))
-       (mi (reduce #'min d :key #'third))
-       (b (make-array (list (/ 128 8) (/ 128 8))
-		      :element-type '(unsigned-byte 8))))
+ (let* ((d *scan*)
+	(fac 8)
+	(ma (reduce #'max d :key #'third))
+	(mi (reduce #'min d :key #'third))
+	(b (make-array (list (/ 256 fac) (/ 256 fac))
+		       :element-type '(unsigned-byte 8)))
+	(k 0))
+   (format t "~a ~a~%" ma mi)
    (dolist (e d)
      (destructuring-bind (i j val) e
-       (setf (aref b (floor j 8) (floor i 8))
-	     (max 0 (min 255 (floor (* 255 (/ (- val mi)
-					(- ma mi)))))))))
+       (let ((ii (mod k (/ 256 fac)))
+	     (jj (floor k (/ 256 fac))))
+	 (incf k)
+	 (setf (aref b ii jj)
+	       (max 0 (min 255 (floor (* 255 (/ (- val mi)
+					       (- ma mi))))))))))
    b))
 
 (defun mma-spot (i j &key (kernel 3))
@@ -162,7 +176,7 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 12 :ril 200s0)
+(change-target 865 630 200 :ril 200s0)
 (let* ((px 900s0) (py 600s0) (pr 300s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
