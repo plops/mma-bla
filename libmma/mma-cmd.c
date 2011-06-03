@@ -19,6 +19,8 @@ enum{
   NN=N*N
 };
 
+FILE*logfile;
+
 unsigned short*buf;
 
 // functions that can be called from text interface
@@ -44,6 +46,20 @@ img(double*ignore)
     printf("error upload-image\n");
     return NAN;
   }
+  return 0.0;
+}
+
+double
+quit(double*ignore)
+{
+  (void)ignore;
+  if(0!=SLM_SetStopMMA())
+    e("stop mma");
+  if(0!=SLM_SetPowerOff())
+    e("set power off");
+  if(0!=SLM_Disconnect())
+    e("disconnect");
+  exit(0);
   return 0.0;
 }
 
@@ -200,7 +216,8 @@ struct{
 	{"deflection",1,deflection},
 	{"intern-trigger",0,intern_trigger},
 	{"extern-trigger",0,extern_trigger},
-	{"set-cycle-time",1,set_cycle_time},};
+	{"set-cycle-time",1,set_cycle_time},
+	{"quit",0,quit},};
 
 
 
@@ -290,6 +307,8 @@ parse_line(char*line)
       return NAN;
     }   
   }
+  fprintf(logfile,"running %s\n",cmd[fun_index].name);
+  fflush(logfile);
   return cmd[fun_index].fptr(args);
 }
 
@@ -299,6 +318,7 @@ int
 main()
 {
   buf=malloc(N*N*2);
+  logfile=fopen("/dev/shm/mma.log","w");
   assert(buf);
   int i;
   for(i=0;i<NN;i++)
@@ -413,5 +433,6 @@ main()
   if(0!=SLM_Disconnect())
     e("disconnect");
   printf("bye!\n");
+  fclose(logfile);
   return 0;
 }

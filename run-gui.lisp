@@ -25,22 +25,22 @@
  (+ (focus:get-position) -10.))
 
 
-#+nil
-(mma::set-stop-mma)
-#+nil
-(mma::set-start-mma)
-#+nil
-(mma:write-data (mma-spot 128 128 :kernel 7))
-#+nil
-(mma:write-data (mma-white))
-#+nil
-(mma:status)
-#+nil
-(mma::set-power-off)
-#+nil
-(mma::disconnect)
-#+nil
-(capture)
+(defparameter *mma-chan*
+  (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
+                      :output :stream
+                      :input :stream
+                      :wait nil))
+
+
+(defun mma (cmd)
+  (let ((s (sb-ext:process-input *mma-chan*)))
+    (format s "~a~%" cmd)
+    (finish-output s)))
+
+(mma "white")
+(mma "black")
+(dotimes (i 100)
+ (mma "black"))
 
 (defun sum (img)
   (destructuring-bind (h w) (array-dimensions img)
