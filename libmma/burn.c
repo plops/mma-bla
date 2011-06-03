@@ -38,7 +38,7 @@ main()
     for(j=0;j<6;j+=4){
       printf("%d %d\n",i,j);
       splat(i,j,7,buf);
-      if(0)if(0!=mma_upload_image(buf)){
+      if(0!=mma_upload_image(buf)){
 	printf("error upload-image\n");
       }
     }
