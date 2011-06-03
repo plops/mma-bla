@@ -1,0 +1,58 @@
+This directory contains different programs to control the micro mirror array.
+
+
+*mma-cmd:
+
+This program is directly linked to libIPMS_SLM.so and the most
+important functions can be called from a text based interface. One can
+use this to control the MMA over network or from scripting languages.
+
+It is the only program that allows stable operation.
+
+
+The following programs are not necessarily stable.  The reasons are
+not know.
+
+
+
+*libmma.h, libmma.so:
+
+This library provides mma_init and mma_uninit for easy connection to
+the MMA system in Kings College London. Change libmma.c if one uses a
+different board.
+
+
+
+
+*reset:
+
+Issues reset command to the board. This seems to have the same effect
+as power cycling the control board. You will have to wait for at least
+10s for the board to boot up again. You will also have to wait until
+TIME_WAIT disappears from 'netstat -ant|grep 192.168.0' before 
+
+
+*mma:
+
+Displays a bright disc on the MMA for 3 seconds.
+
+
+
+*libmma.lisp:
+
+Example how to call libmma from SBCL.  Beware: There are bugs and
+ideally this approach shouldn't be used as the direct libIPMS_SLM.so
+binding in mma/ffi.lisp and mma/ipms.lisp is much more flexible.
+
+
+*burn:
+
+Code to scan a rectangular window over the MMA. Unfortunately this
+code crashes.
+
+
+
+*dl/mma.c:
+
+Dynamic linking approach to open libIPMS_SLM. This was doesn't help
+with the bugs.
