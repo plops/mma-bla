@@ -9,8 +9,11 @@
 #include <math.h>
 #include "slm.h"
 
+FILE*logfile;
+
+
 #define len(x) (sizeof(x)/sizeof(x[0]))
-#define e(q) do{fprintf(stderr,"error in file %s:%d in function %s, while calling %s\n",__FILE__,__LINE__,__FUNCTION__,q);}while(0)
+#define e(q) do{fprintf(logfile,"error in file %s:%d in function %s, while calling %s\n",__FILE__,__LINE__,__FUNCTION__,q);fflush(logfile);}while(0)
 #define NAN __builtin_nan("")
 enum{
   CMDLEN=100, // maximum length of command strings
@@ -19,7 +22,6 @@ enum{
   NN=N*N
 };
 
-FILE*logfile;
 
 unsigned short*buf;
 
@@ -74,6 +76,7 @@ splat(double*args)
   for(x=0;x<NN;x++)
     buf[x]=90;
   printf("splat x=%d y=%d d=%d\n",i,j,d);
+  fflush(stdout);
   for(y=-d;y<=d;y++)
     for(x=-d;x<=d;x++){
       int xx=x+i,yy=y+j;
@@ -272,6 +275,8 @@ parse_name(char*tok)
   return fun_index;
 }
 
+unsigned long long cmd_number=0;
+
 double
 parse_line(char*line)
 {
@@ -307,7 +312,7 @@ parse_line(char*line)
       return NAN;
     }   
   }
-  fprintf(logfile,"running %s\n",cmd[fun_index].name);
+  fprintf(logfile,"%llu running %s\n",cmd_number++,cmd[fun_index].name);
   fflush(logfile);
   return cmd[fun_index].fptr(args);
 }
@@ -421,6 +426,7 @@ main()
   do{
     line=fgets(s,sizeof(s),stdin);
     printf("retval: %g\n", parse_line(line));
+    fflush(stdout);
   }while(line);
 
  stop_mma:

@@ -32,7 +32,7 @@
 (get-temperature-f)
 (uninit)
 (check
- (set-exposure-time .016))
+ (set-exposure-time 1.016))
 
 #+nil
 (set-shutter 1 1 0 0)

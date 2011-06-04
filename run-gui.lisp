@@ -22,32 +22,54 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) -10.))
+ (+ (focus:get-position) 1.))
 
 
 #+nil
-(defparameter *mma-chan*
-  (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
-                      :output :stream
-                      :input :stream
-                      :wait nil))
+(progn
+ (defparameter *mma-chan*
+   (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
+		       :output :stream
+		       :input :stream
+		       :wait nil))
 
-
-(defun mma (cmd)
-  (let ((s (sb-ext:process-input *mma-chan*)))
-    (format s "~a~%" cmd)
-    (finish-output s)))
+ (sb-thread:make-thread 
+  #'(lambda ()
+      (unwind-protect
+	   (with-open-stream (s (sb-ext:process-output *mma-chan*))
+	     (loop for line = (read-line s nil nil)
+		while line do
+		  (format t "read: ~a~%" line)
+		  (finish-output)))
+	(sb-ext:process-close *mma-chan*)))
+  :name "mma-cmd-reader")
+ 
+ (defun mma (cmd)
+   (let ((s (sb-ext:process-input *mma-chan*)))
+     (format s "~a~%" cmd)
+     (finish-output s))))
 
 #+nil
 (mma "white")
 #+nil
 (mma "black")
 #+nil
-(mma "splat 128 128 7")
+(mma "splat 118 138 40")
+
+(defun mma-polar (r phi d)
+  (mma (format nil "splat ~a ~a ~a" 
+	       (+ 128 (* r (cos phi)))
+	       (+ 128 (* r (sin phi)))
+	       d)))
+
+(mma-polar 128. 45. 20)
+
 #+nil
 (mma "set-cycle-time 300")
 #+nil
 (mma "stop")
+#+nil
+(mma "start")
 #+nil
 (mma "quit")
 (defun sum (img)
@@ -62,18 +84,21 @@
 #+nil
 (progn
   (defparameter *scan* nil)
-  (loop for j below 256 by 8 do
-       (loop for i below 256 by 8 do
+  (loop for j below 256 by 2 do
+       (loop for i below 256 by 2 do
 	    (mma (format nil "splat ~a ~a 7" i j))
 	    (capture)
 	    (let ((s (list i j (sum *line*))))
 	      (format t "~a~%" s)
 	      (push s *scan*)))))
-
+#+nil
+(capture)
+#+nil
+(require :vol)
 #+nil
 (vol:write-pgm "/dev/shm/o.pgm"
  (let* ((d *scan*)
-	(fac 8)
+	(fac 2)
 	(ma (reduce #'max d :key #'third))
 	(mi (reduce #'min d :key #'third))
 	(b (make-array (list (/ 256 fac) (/ 256 fac))
@@ -157,6 +182,7 @@
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
+(defparameter *do-capture* nil)
 (defparameter *do-capture* t)
 
 #+nil
@@ -176,7 +202,7 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 200 :ril 200s0)
+(change-target 865 630 500 :ril 80s0)
 (let* ((px 900s0) (py 600s0) (pr 300s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
@@ -221,8 +247,7 @@
     (gl:line-width 4)
     (draw-circle px py pr)
     (gl:with-pushed-matrix
-      (%gl:color-3ub #b00111100 #+nil #b01111111 0 0 ;255 255
-		     )
+      (%gl:color-3ub  #b01111111 255 255)
       (gl:translate 0 1024 0)
       (with-cam-to-lcos (0 1024)
 	(draw-disk px-ill py-ill pr-ill))))
@@ -263,7 +288,7 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (aref l1 i) 50)
+				    (floor (aref l1 i) .3)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)
