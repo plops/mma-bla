@@ -167,7 +167,7 @@ argument is handle and second argument is wchar_t string."
 				     (string (* at_wc))
 				     (length int)))
 
-(x at_command)
+(x command)
 
 (x set-string :params ((string (* at_wc))))
 (x get-string :params ((string (* at_wc))

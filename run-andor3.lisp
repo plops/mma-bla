@@ -1,6 +1,9 @@
 (require :asdf)
-#.(push "/home/martin/0505/mma/" asdf:*central-registry*)
-(require :andor3)
+#.(progn
+    (setf asdf:*central-registry* 
+	  (union '("/home/martin/0505/mma/") asdf:*central-registry*))
+    (require :andor3))
+
 
 
 (defconstant +handle-system+ 1)
@@ -24,7 +27,7 @@
 (get-device-count)
 
 (defun camera-open (&optional (index 0))
- (multiple-value-bind (a b)
+  (multiple-value-bind (a b)
      (andor3::%open index)
    (assert (= a +success+))
    b))
@@ -71,7 +74,7 @@
 (get-int "AOIWidth")
 
 
-
+#+nil
 (defparameter *buf*
  (let* ((w (get-int "AOIWidth")) 
 	(h (get-int "AOIHeight"))
@@ -93,14 +96,22 @@
     (assert (= +success+ (andor3::%command *c* s)))))
 #+nil
 (command "AcquisitionStart")
-
+#+nil
+(command "AcquisitionStop")
+#+nil
+(andor3::%flush *c*)
+#+nil
+(assert (= +success+
+	 (andor3::%close *c*)))
+#+nil
 (defparameter *blba*
  (multiple-value-list
   (andor3::%wait-buffer *c* 10000)))
-
+#+nil
 (= *buf* (second *blba*))
 
 #+nil
 (andor3::%initialise-library)
 #+nil
-(andor3::%finalise-library)
+(assert (= +success+
+	 (andor3::%finalise-library)))
