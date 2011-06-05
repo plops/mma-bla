@@ -68,6 +68,7 @@
 (mma "set-cycle-time 300")
 #+nil
 (mma "stop")
+(mma "off")
 #+nil
 (mma "start")
 #+nil

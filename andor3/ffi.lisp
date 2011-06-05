@@ -9,35 +9,36 @@
 (define-alien-type wchar_t unsigned-int) ;; 32bit first byte contains ascii
 (define-alien-type at_wc wchar_t)
 
-(defun split-by-one-hyphen (string)
-    "Returns a list of substrings of string divided by ONE hyphen
+(eval-when (:compile-toplevel)
+ (defun split-by-one-hyphen (string)
+   "Returns a list of substrings of string divided by ONE hyphen
 each.  Note: Two consecutive hyphens will be seen as if there were an
 empty string between them."
-    (loop for i = 0 then (1+ j)
-          as j = (position #\- string :start i)
-          collect (subseq string i j)
-          while j))
+   (loop for i = 0 then (1+ j)
+      as j = (position #\- string :start i)
+      collect (subseq string i j)
+      while j))
+
+ (defun lisp-to-camel-case (name)
+   "Convert initialise-library into AT_InitialiseLibrary."
+   (declare (type simple-string name))
+   (let* ((words (split-by-one-hyphen name))
+	  (cwords (mapcar #'string-capitalize words)))
+     (push "AT_" cwords)
+     (format nil "~{~a~}" cwords)))
+
+ (defun string->wchar_t (s)
+   "Convert lisp string into zero terminated uint32 array."
+   (let ((a (make-array (1+ (length s))
+			:element-type '(unsigned-byte 32))))
+     (dotimes (i (length s))
+       (setf (aref a i) (char-code (char s i))))
+     a)))
+
 #+nil
 (split-by-one-hyphen "initialise-library")
-
-(defun lisp-to-camel-case (name)
-  "Convert initialise-library into AT_InitialiseLibrary."
-  (declare (type simple-string name))
-  (let* ((words (split-by-one-hyphen name))
-	 (cwords (mapcar #'string-capitalize words)))
-    (push "AT_" cwords)
-    (format nil "~{~a~}" cwords)))
 #+nil
 (lisp-to-camel-case "initialise-library")
-
-(defun string->wchar_t (s)
-  "Convert lisp string into zero terminated uint32 array."
-  (let ((a (make-array (1+ (length s))
-		       :element-type '(unsigned-byte 32))))
-    (dotimes (i (length s))
-      (setf (aref a i) (char-code (char s i))))
-    a))
-
 #+nil
 (string->wchar_t "test")
 
@@ -55,7 +56,7 @@ argument is handle and second argument is wchar_t string."
 
 ;; wchar_t is 32bit on my x86_64
 
-(x initilise-library :default nil)
+(x initialise-library :default nil)
 (x finalise-library :default nil)
 (x open 
    :default nil
@@ -76,7 +77,7 @@ argument is handle and second argument is wchar_t string."
 	    (context (* int))))
 (x unregister-feature-callback
    :params ((callback (* int))
-	    (context (* int)))))
+	    (context (* int))))
 
 (x is-implemented :params ((implemented at_bool :out)))
 (x is-readable :params ((readable at_bool :out)))
@@ -124,7 +125,7 @@ argument is handle and second argument is wchar_t string."
 (x set-string :params ((string (* at_wc))))
 (x get-string :params ((string (* at_wc))
 		       (length int)))
-(x get-string-max-length :params ((max-string-length :out)))
+(x get-string-max-length :params ((max-string-length int :out)))
 
 (x queue-buffer :params ((ptr (* unsigned-char))
 			 (bytes int)))
@@ -136,14 +137,9 @@ argument is handle and second argument is wchar_t string."
 
 (x flush :default nil :params ((handle handle)))
  
-;; cat /usr/local/include/atcore.h |grep define|grep -v "^#if"|grep -v AT_EXP |grep -v ATCORE|awk '{print "("$3+1-1 " '\''" $2")"}'
+;; cat /usr/local/include/atcore.h |grep define|grep -v "^#if"|grep -v AT_EXP |grep -v ATCORE|grep AT_ERR|awk '{print "("$3+1-1 " '\''" $2")"}'
 (defun lookup-error (err)
   (ecase err
-    (0 'AT_INFINITE)
-    (0 'AT_CALLBACK_SUCCESS)
-    (1 'AT_TRUE)
-    (0 'AT_FALSE)
-    (0 'AT_SUCCESS)
     (1 'AT_ERR_NOTINITIALISED)
     (2 'AT_ERR_NOTIMPLEMENTED)
     (3 'AT_ERR_READONLY)
@@ -181,9 +177,7 @@ argument is handle and second argument is wchar_t string."
     (35 'AT_ERR_NULL_WAIT_PTR)
     (36 'AT_ERR_NULL_PTRSIZE)
     (37 'AT_ERR_NOMEMORY)
-    (100 'AT_ERR_HARDWARE_OVERFLOW)
-    (-1 'AT_HANDLE_UNINITIALISED)
-    (1 'AT_HANDLE_SYSTEM)))
+    (100 'AT_ERR_HARDWARE_OVERFLOW)))
  
 #+nil
 (lookup-error 34)

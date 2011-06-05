@@ -5,4 +5,8 @@
 *.pgm
 *.png
 *.txt
-
+*.o
+*.s
+*.so
+*.dump
+*.strace
