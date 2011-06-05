@@ -9,6 +9,58 @@
 (define-alien-type wchar_t unsigned-int) ;; 32bit first byte contains ascii
 (define-alien-type at_wc wchar_t)
 
+
+(define-alien-type size_t unsigned-long)
+(define-alien-routine mbstowcs
+    size_t
+  (dest (* wchar_t))
+  (src (* char))
+  (n size_t))
+(define-alien-routine wcstombs
+    size_t
+  (dest (* char))
+  (src (* wchar_t))
+  (n size_t))
+(defun char->wide-char (str)
+  (declare (type string str))
+  (let* ((n (1+ (length str))) ;; includes terminating zero
+	 (char-src (make-array n
+			       :element-type '(unsigned-byte 8)
+			       :initial-element 0))
+	 (wide-dst (make-array n
+			       :element-type '(unsigned-byte 32))))
+    (dotimes (i (length str))
+      (setf (aref char-src i) (char-code (char str i))))
+    (sb-sys:with-pinned-objects (char-src wide-dst)
+      (mbstowcs (sb-sys:vector-sap wide-dst)
+		(sb-sys:vector-sap char-src)
+		(length char-src)))
+    wide-dst))
+#+nil
+(char->wide-char "test")
+
+(defun wide-char->char (wide)
+  (declare (type (simple-array (unsigned-byte 32) 1) wide))
+  (sb-sys:with-pinned-objects (wide)
+    (let* ((n (1+ ;; include terminating zero 
+	       (let ((chars (wcstombs (sb-sys:int-sap 0)
+				      (sb-sys:vector-sap wide)
+				      0)))
+		 (when (= chars #xffffffff)
+		   (error "Wide char can't be represented as multi-byte."))
+		 chars))) 
+	   (char-dst (make-array n :element-type '(unsigned-byte 8)))
+	   (result (make-string (1- n))))
+      (sb-sys:with-pinned-objects (char-dst)
+	(wcstombs (sb-sys:vector-sap char-dst)
+		  (sb-sys:vector-sap wide)
+		  n))
+      (dotimes (i (1- n))
+	(setf (char result i) (code-char (aref char-dst i))))
+      result)))
+#+nil
+(wide-char->char (char->wide-char "test"))
+
 (eval-when (:compile-toplevel)
  (defun split-by-one-hyphen (string)
    "Returns a list of substrings of string divided by ONE hyphen

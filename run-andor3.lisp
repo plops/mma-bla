@@ -6,16 +6,6 @@
 (defconstant +handle-system+ 1)
 (defconstant +success+ 0)
 
-(defun string->wchar_t (s)
-   "Convert lisp string into zero terminated uint32 array."
-   (let ((a (make-array (1+ (length s))
-			:element-type '(unsigned-byte 32))))
-     (dotimes (i (length s))
-       (setf (aref a i) (char-code (char s i))))
-     a))
-#+nil
-(string->wchar_t "test")
-
 
 (defmacro with-wide-string ((s string) &body body)
   (let ((s32 (gensym)))
