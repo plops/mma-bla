@@ -21,7 +21,9 @@
   (dest (* char))
   (src (* wchar_t))
   (n size_t))
+
 (defun char->wide-char (str)
+  "Convert a lisp string into a multi-byte representation."
   (declare (type string str))
   (let* ((n (1+ (length str))) ;; includes terminating zero
 	 (char-src (make-array n
@@ -40,6 +42,7 @@
 (char->wide-char "test")
 
 (defun wide-char->char (wide)
+  "Convert a mult-byte string into a lisp string."
   (declare (type (simple-array (unsigned-byte 32) 1) wide))
   (sb-sys:with-pinned-objects (wide)
     (let* ((n (1+ ;; include terminating zero 
