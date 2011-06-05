@@ -148,7 +148,8 @@ argument is handle and second argument is wchar_t string."
 (x get-enumerated :params ((value int :out)))
 (x get-enumerated-count :params ((count int :out)))
 (x set-enumerated-string :params ((string (* at_wc))))
-(x get-enumerated-string :params ((string (* at_wc))
+(x get-enumerated-string :params ((index int)
+				  (string (* at_wc))
 				  (length int)))
 (x is-enumerated-index-available :params ((index int)
 					  (available at_bool :out)))
@@ -184,7 +185,7 @@ argument is handle and second argument is wchar_t string."
 	    ;; pointer to an
 	    ;; address
 	    (bytes int :out)
-	    (timeout unsigned-int)))
+	    (timeout-ms unsigned-int)))
 
 (x flush :default nil :params ((handle handle)))
  
