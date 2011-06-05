@@ -174,13 +174,17 @@ argument is handle and second argument is wchar_t string."
 		       (length int)))
 (x get-string-max-length :params ((max-string-length int :out)))
 
-(x queue-buffer :params ((ptr (* unsigned-char))
-			 (bytes int)))
-(x wait-buffer :params ((ptr unsigned-long :out) ;; it returns a
-						 ;; pointer to an
-						 ;; address
-			(bytes int :out)
-			(timeout unsigned-int)))
+(x queue-buffer :default nil 
+   :params ((handle handle)
+	    (ptr (* unsigned-char))
+	    (bytes int)))
+(x wait-buffer :default nil
+   :params ((handle handle) 
+	    (ptr unsigned-long :out) ;; it returns a
+	    ;; pointer to an
+	    ;; address
+	    (bytes int :out)
+	    (timeout unsigned-int)))
 
 (x flush :default nil :params ((handle handle)))
  

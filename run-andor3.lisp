@@ -1,8 +1,8 @@
 (require :asdf)
-(push "/home/martin/0505/mma/" asdf:*central-registry*)
+#.(push "/home/martin/0505/mma/" asdf:*central-registry*)
 (require :andor3)
 
-(andor3::%initialise-library)
+
 (defconstant +handle-system+ 1)
 (defconstant +success+ 0)
 
@@ -29,6 +29,8 @@
    (assert (= a +success+))
    b))
 
+(defparameter *c* nil)
+#+nil
 (defparameter *c* (camera-open))
 
 (defun get-serial-number ()
@@ -55,12 +57,50 @@
 #+nil
 (set-exposure .0163d0)
 
-(defun get-image-size-bytes ()
-  (with-wide-string (s "Image Size Bytes")
+(defun get-int (feature)
+  (with-wide-string (s feature)
     (multiple-value-bind (a b)
 	(andor3::%get-int *c* s)
       (assert (= +success+ a))
       b)))
 #+nil
-(/ (get-image-size-bytes) (* 1024s0 1024))
+(get-int "ImageSizeBytes")
+#+nil
+(get-int "AOIHeight")
+#+nil
+(get-int "AOIWidth")
+
+
+
+(defparameter *buf*
+ (let* ((w (get-int "AOIWidth")) 
+	(h (get-int "AOIHeight"))
+	(img (make-array (list h w)
+			 :element-type '(unsigned-byte 16)))
+	(img1 (sb-ext:array-storage-vector img))
+	(sap (sb-sys:vector-sap img1))
+	(int (sb-sys:sap-int sap)))
+   (unless (= 0 (mod int 8))
+     (break "Buffer must be aligned on am 8 byte boundary."))
+   (sb-sys:with-pinned-objects (img)
+    (let ((ret (andor3::%queue-buffer *c* sap (* 2 (length img1)))))
+      (unless (= +success+ ret)
+	(break "Error queue-buffer: ~a." (andor3::lookup-error ret)))))
+   (list int img)))
+
+(defun command (cmd)
+  (with-wide-string (s cmd)
+    (assert (= +success+ (andor3::%command *c* s)))))
+#+nil
+(command "AcquisitionStart")
+
+(defparameter *blba*
+ (multiple-value-list
+  (andor3::%wait-buffer *c* 10000)))
+
+(= *buf* (second *blba*))
+
+#+nil
+(andor3::%initialise-library)
+#+nil
 (andor3::%finalise-library)
