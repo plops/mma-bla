@@ -48,7 +48,25 @@ binding in mma/ffi.lisp and mma/ipms.lisp is much more flexible.
 *burn:
 
 Code to scan a rectangular window over the MMA. Unfortunately this
-code crashes.
+code crashes. To run this code on another setup edit the following
+lines:
+
+	makefile -> replace IPMSLIB=/home/martin/mma-essentials-0209/
+		    with the path where libIPMS_SLM.so is installed
+
+        	    replace CC=gcc-4.3 with the compiler that should
+		    be used
+
+        libmma.c -> replace the line SLM_RegisterBoard(0x0036344B00800803LL,
+						"192.168.0.2","255.255.255.0",
+                          			"0.0.0.0",4001))
+                   with the corresponding board parameters. This line
+		   occurs in mma_init() and in mma_connect().
+		   Note that only mma_init() is used in burn.c.
+		   Replace also the filenames in the calls
+		   SLM_LoadConfiguration("/home/martin/cyberpower-mit/mma-essentials-0209/800803_dmdl6_20110215.ini")
+		   and
+		   SLM_LoadCalibrationData("/home/martin/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")
 
 
 

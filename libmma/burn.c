@@ -29,7 +29,8 @@ main()
 {
 
   int i,j;
-  unsigned short*buf=malloc(NN*sizeof(*buf));
+  unsigned short*buf=(unsigned short*)malloc(NN*sizeof(*buf));
+  assert(buf);
   splat(5,0,12,buf);
   
   assert(0==mma_init());
