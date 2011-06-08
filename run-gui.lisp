@@ -207,14 +207,14 @@
 
 (defun draw-circle (x y r)
   (gl:with-primitive :line-loop
-   (let ((n 3))
+   (let ((n 37))
      (loop for i from 0 below n do
 	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
 (defun draw-disk (x y r)
   (gl:with-primitive :triangle-fan
-   (let ((n 4))
+   (let ((n 38))
      (gl:vertex x y)
      (loop for i from 0 below n do
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
@@ -286,7 +286,8 @@
     (draw-circle px py pr)
     (draw-circle (+ 130 px) py (* .4 pr))
     (gl:with-pushed-matrix
-      (%gl:color-3ub  #b01111111 255 255)
+      (%gl:color-3ub  #b10 0 0 ;255 255
+		      )
       (gl:translate 0 1024 0)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
@@ -339,7 +340,7 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (aref l1 i) 10)
+				    (floor (aref l1 i) 50)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)
