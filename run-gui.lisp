@@ -16,17 +16,13 @@
 (in-package :run-gui)
 
 #+nil
-(mma::parse-status-bits #x4c000)
-
-#+nil
 (focus:connect)
 #+nil
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) 1.))
+ (+ (focus:get-position) -.5))
 
-#+nil
 (defvar *mma-chan* nil)
 
 #+nil
@@ -37,36 +33,35 @@
 			:input :stream
 			:wait nil))
   
-  
-  
   (sb-thread:make-thread 
    #'(lambda ()
-      (unwind-protect
+       (unwind-protect
 	   (with-open-stream (s (sb-ext:process-output *mma-chan*))
 	     (loop for line = (read-line s nil nil)
 		while line do
 		  (format t "read: ~a~%" line)
 		  (finish-output)))
 	(sb-ext:process-close *mma-chan*)))
-   :name "mma-cmd-reader"))
-#+nil
-(defun send-binary ()
+   :name "mma-cmd-reader")
   (with-open-file (e "/home/martin/0505/mma/binary_fifo" 
-		     :direction :output
-		     :if-exists :append
-		     :if-does-not-exist :error
-		     :element-type '(unsigned-byte 8))
-    (let* ((s (sb-ext:process-input *mma-chan*))
-	   (n 4)
-	   (buf (make-array n :element-type '(unsigned-byte 8))))
-      (setf (aref buf 0) 3)
-      (write-line (format nil "get ~a" n) s)
+		   :direction :output
+		   :if-exists :append
+		   :if-does-not-exist :error
+		   :element-type '(unsigned-byte 8))
+    (defun send-binary ()
+      (let* ((s (sb-ext:process-input *mma-chan*))
+	     (n 4)
+	     (buf (make-array n :element-type '(unsigned-byte 8))))
+	(setf (aref buf 0) 3)
+	(write-line (format nil "get ~a" n) s)
       (finish-output s)
       (write-sequence buf e)
-      (finish-output e))))
+      (finish-output e)))))
+
+
 #+nil
 (send-binary)
-#+nil
+
 (defun mma (cmd)
   (let ((s (sb-ext:process-input *mma-chan*)))
     (format s "~a~%" cmd)
@@ -79,7 +74,7 @@
 (mma "splat 118 138 40")
 #+nil
 (mma "quit")
-#+nil
+
 (defun mma-polar (r phi d)
   (mma (format nil "splat ~a ~a ~a" 
 	       (+ 128 (* r (cos phi)))
@@ -89,7 +84,7 @@
 (mma-polar 128. 45. 20)
 
 #+nil
-(mma "set-cycle-time 35")
+(mma "set-cycle-time 350")
 #+nil
 (mma "stop")
 #+nil
@@ -159,10 +154,10 @@
   `(let* ((s 1.129781s0)
 	  (sx  s)
 	  (sy  (- s))
-	  (phi 1.3154879)
+	  (phi 0.0 #+nil 1.3154879)
 	  (cp (cos phi))
 	  (sp (sqrt (- 1s0 (* cp cp))))
-	  (tx 1086.606s0)
+	  (tx 800.0)
 	  (ty 1198.154s0)
 	  (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
@@ -178,7 +173,7 @@
   `(let* ((s .885090144449)
 	  (sx  s)
 	  (sy  (- s))
-	  (phi 1.3154879)
+	  (phi 1.0)
 	  (cp (cos phi))
 	  (sp (sqrt (- 1s0 (* cp cp))))
 	  (tx 783.23854s0)
@@ -193,16 +188,33 @@
        (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
        ,@body)))
 
+(defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
+  (let* ((s .885090144449)
+	  (sx  s)
+	  (sy  (- s))
+	  (phi 1.3)
+	  (cp (cos phi))
+	  (sp (sqrt (- 1s0 (* cp cp))))
+	  (tx 783.23854s0)
+	  (ty 1198.40181879s0)
+	  (a (make-array (list 4 4) :element-type 'single-float
+			 :initial-contents
+			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
+			       (list (* -1 sx sp) (* sy cp)  .0  (+ y ty))
+			       (list .0     .0   1.0  .0)
+			       (list .0     .0    .0 1.0)))))
+    (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
+
 (defun draw-circle (x y r)
   (gl:with-primitive :line-loop
-   (let ((n 37))
+   (let ((n 3))
      (loop for i from 0 below n do
 	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
 (defun draw-disk (x y r)
   (gl:with-primitive :triangle-fan
-   (let ((n 37))
+   (let ((n 4))
      (gl:vertex x y)
      (loop for i from 0 below n do
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
@@ -229,7 +241,7 @@
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
 (change-target 865 630 500 :ril 80s0)
-(let* ((px 900s0) (py 600s0) (pr 300s0)
+(let* ((px 900s0) (py 600s0) (pr 100s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
        (h 1040)
@@ -272,11 +284,13 @@
     (gl:color 1 .4 0)
     (gl:line-width 4)
     (draw-circle px py pr)
+    (draw-circle (+ 130 px) py (* .4 pr))
     (gl:with-pushed-matrix
       (%gl:color-3ub  #b01111111 255 255)
       (gl:translate 0 1024 0)
-      (with-cam-to-lcos (0 1024)
-	(draw-disk px-ill py-ill pr-ill))))
+      (load-cam-to-lcos-matrix 0s0 1024s0)
+      (draw-disk px-ill py-ill pr-ill)
+      (draw-disk (+ 130 px-ill) py-ill (* .4 pr-ill))))
 
   (defun capture ()
     #-clara (when new-size
@@ -325,7 +339,7 @@
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 
 			       (max 0 
-				    (floor (aref l1 i) .3)
+				    (floor (aref l1 i) 10)
 				    #+nil (floor (* 255 (- (aref l1 i) 
 							   (aref d1 i)))
 						 (- (aref w1 i)
