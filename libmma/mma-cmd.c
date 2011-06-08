@@ -25,6 +25,23 @@ enum{
 
 unsigned short*buf;
 
+int
+max(int a, int b)
+{
+  if(a>b)
+    return a;
+  return b;
+}
+
+int
+min(int a,int b)
+{
+  if(a<b)
+    return a;
+  return b;
+}
+
+
 // functions that can be called from text interface
 
 double
@@ -200,7 +217,7 @@ double
 load(double*args)
 { // read bytes from binary input fifo
   int bytes=(int)args[0];
-  int n=fread(buf,bytes,1,fifofile);
+  int n=fread(buf,min(len(buf),bytes),1,fifofile);
   printf("read %d bytes\n",n);
   fflush(stdout);
   return 1.0*n;
