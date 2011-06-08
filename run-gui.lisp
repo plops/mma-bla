@@ -6,12 +6,12 @@
     (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
     (ql:quickload "cl-opengl")
     (require :gui)
-    (require :andor3)
-   ; (require :clara)
+   ; (require :andor3)
+    (require :clara)
    ; (require :mma)
     (require :focus)) 
 (defpackage :run-gui
-	(:use :cl :gl #+nil :clara
+	(:use :cl :gl #-clara :clara
 	      ))
 (in-package :run-gui)
 
@@ -26,6 +26,7 @@
 (focus:set-position
  (+ (focus:get-position) 1.))
 
+#+nil
 (defvar *mma-chan* nil)
 
 #+nil
@@ -48,9 +49,9 @@
 		  (finish-output)))
 	(sb-ext:process-close *mma-chan*)))
    :name "mma-cmd-reader"))
-
+#+nil
 (defun send-binary ()
-  (with-open-file (e "/home/martin/0505/mma/binary-fifo" 
+  (with-open-file (e "/home/martin/0505/mma/binary_fifo" 
 		     :direction :output
 		     :if-exists :append
 		     :if-does-not-exist :error
@@ -63,7 +64,9 @@
       (finish-output s)
       (write-sequence buf e)
       (finish-output e))))
-
+#+nil
+(send-binary)
+#+nil
 (defun mma (cmd)
   (let ((s (sb-ext:process-input *mma-chan*)))
     (format s "~a~%" cmd)
@@ -76,7 +79,7 @@
 (mma "splat 118 138 40")
 #+nil
 (mma "quit")
-
+#+nil
 (defun mma-polar (r phi d)
   (mma (format nil "splat ~a ~a ~a" 
 	       (+ 128 (* r (cos phi)))
@@ -276,11 +279,11 @@
 	(draw-disk px-ill py-ill pr-ill))))
 
   (defun capture ()
-    #+nil (when new-size
+    #-clara (when new-size
       (check
 	(set-image 1 1 x w y h))
       (setf new-size nil))
-    (defparameter *line*
+    #+andor3 (defparameter *line*
       (multiple-value-bind (ptr img) (andor3::wait-buffer)
 	(let* ((cpy (make-array (array-dimensions img)
 				:element-type '(unsigned-byte 16)))
@@ -290,7 +293,7 @@
 	    (setf (aref cpy1 i) (aref img1 i)))
 	  (andor3::requeue-buffer ptr)
 	  cpy)))
-   #+nil (defparameter *line*
+    #-clara (defparameter *line*
      (let* ((img (make-array (list (- h (1- y)) (- w (1- x)))
 			     :element-type '(unsigned-byte 16)))
 	    (img1 (sb-ext:array-storage-vector img))
