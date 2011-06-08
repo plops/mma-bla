@@ -51,17 +51,13 @@ img(double*ignore)
   return 0.0;
 }
 
+int keep_running=1;
+
 double
 quit(double*ignore)
 {
   (void)ignore;
-  if(0!=SLM_SetStopMMA())
-    e("stop mma");
-  if(0!=SLM_SetPowerOff())
-    e("set power off");
-  if(0!=SLM_Disconnect())
-    e("disconnect");
-  exit(0);
+  keep_running=0;
   return 0.0;
 }
 
@@ -439,7 +435,7 @@ main()
     line=fgets(s,sizeof(s),stdin);
     printf("retval: %g\n", parse_line(line));
     fflush(stdout);
-  }while(line);
+  }while(line && keep_running);
 
  stop_mma:
   if(0!=SLM_SetStopMMA())
