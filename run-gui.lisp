@@ -6,11 +6,13 @@
     (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
     (ql:quickload "cl-opengl")
     (require :gui)
-    (require :clara)
+    (require :andor3)
+   ; (require :clara)
    ; (require :mma)
     (require :focus)) 
 (defpackage :run-gui
-	(:use :cl :clara :gl))
+	(:use :cl :gl #+nil :clara
+	      ))
 (in-package :run-gui)
 
 #+nil
@@ -24,17 +26,20 @@
 (focus:set-position
  (+ (focus:get-position) 1.))
 
+(defvar *mma-chan* nil)
 
 #+nil
 (progn
- (defparameter *mma-chan*
-   (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
-		       :output :stream
-		       :input :stream
-		       :wait nil))
-
- (sb-thread:make-thread 
-  #'(lambda ()
+  (defparameter *mma-chan*
+    (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
+			:output :stream
+			:input :stream
+			:wait nil))
+  
+  
+  
+  (sb-thread:make-thread 
+   #'(lambda ()
       (unwind-protect
 	   (with-open-stream (s (sb-ext:process-output *mma-chan*))
 	     (loop for line = (read-line s nil nil)
@@ -42,32 +47,49 @@
 		  (format t "read: ~a~%" line)
 		  (finish-output)))
 	(sb-ext:process-close *mma-chan*)))
-  :name "mma-cmd-reader")
- 
- (defun mma (cmd)
-   (let ((s (sb-ext:process-input *mma-chan*)))
-     (format s "~a~%" cmd)
-     (finish-output s))))
+   :name "mma-cmd-reader"))
 
+(defun send-binary ()
+  (with-open-file (e "/home/martin/0505/mma/binary-fifo" 
+		     :direction :output
+		     :if-exists :append
+		     :if-does-not-exist :error
+		     :element-type '(unsigned-byte 8))
+    (let* ((s (sb-ext:process-input *mma-chan*))
+	   (n 4)
+	   (buf (make-array n :element-type '(unsigned-byte 8))))
+      (setf (aref buf 0) 3)
+      (write-line (format nil "get ~a" n) s)
+      (finish-output s)
+      (write-sequence buf e)
+      (finish-output e))))
+
+(defun mma (cmd)
+  (let ((s (sb-ext:process-input *mma-chan*)))
+    (format s "~a~%" cmd)
+    (finish-output s)))
 #+nil
 (mma "white")
 #+nil
 (mma "black")
 #+nil
 (mma "splat 118 138 40")
+#+nil
+(mma "quit")
 
 (defun mma-polar (r phi d)
   (mma (format nil "splat ~a ~a ~a" 
 	       (+ 128 (* r (cos phi)))
 	       (+ 128 (* r (sin phi)))
 	       d)))
-
+#+nil
 (mma-polar 128. 45. 20)
 
 #+nil
-(mma "set-cycle-time 300")
+(mma "set-cycle-time 35")
 #+nil
 (mma "stop")
+#+nil
 (mma "off")
 #+nil
 (mma "start")
@@ -228,7 +250,7 @@
 	  x xx
 	  y yy
 	  new-size t))
-  (change-capture-size 1 1 1392 1040)
+  #+nil(change-capture-size 1 1 1392 1040)
   
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
@@ -254,11 +276,21 @@
 	(draw-disk px-ill py-ill pr-ill))))
 
   (defun capture ()
-    (when new-size
+    #+nil (when new-size
       (check
 	(set-image 1 1 x w y h))
       (setf new-size nil))
-   (defparameter *line*
+    (defparameter *line*
+      (multiple-value-bind (ptr img) (andor3::wait-buffer)
+	(let* ((cpy (make-array (array-dimensions img)
+				:element-type '(unsigned-byte 16)))
+	       (img1 (sb-ext:array-storage-vector img))
+	       (cpy1 (sb-ext:array-storage-vector cpy)))
+	  (dotimes (i (length cpy1))
+	    (setf (aref cpy1 i) (aref img1 i)))
+	  (andor3::requeue-buffer ptr)
+	  cpy)))
+   #+nil (defparameter *line*
      (let* ((img (make-array (list (- h (1- y)) (- w (1- x)))
 			     :element-type '(unsigned-byte 16)))
 	    (img1 (sb-ext:array-storage-vector img))
@@ -285,6 +317,7 @@
 	      (l1 (sb-ext:array-storage-vector *line*))
 	      )
 	 (destructuring-bind (h w) (array-dimensions *line*)
+	   (declare (ignorable h))
 	   (dotimes (i (length b1))
 	     (let ((v (if t		;(< 800 (aref w1 i)) 
 			  (min 255 

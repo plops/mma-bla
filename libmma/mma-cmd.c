@@ -10,7 +10,7 @@
 #include "slm.h"
 
 FILE*logfile;
-
+FILE*fifofile;
 
 #define len(x) (sizeof(x)/sizeof(x[0]))
 #define e(q) do{fprintf(logfile,"error in file %s:%d in function %s, while calling %s\n",__FILE__,__LINE__,__FUNCTION__,q);fflush(logfile);}while(0)
@@ -200,6 +200,16 @@ on(double*ignore)
   return 0.0;
 }
 
+double
+load(double*args)
+{ // read bytes from binary input fifo
+  int bytes=(int)args[0];
+  int n=fread(buf,bytes,1,fifofile);
+  printf("read %d bytes\n",n);
+  fflush(stdout);
+  return 1.0*n;
+}
+
 // array that contains all functions that can be called from text interface
 struct{ 
   char name[CMDLEN];
@@ -220,6 +230,7 @@ struct{
 	{"intern-trigger",0,intern_trigger},
 	{"extern-trigger",0,extern_trigger},
 	{"set-cycle-time",1,set_cycle_time},
+	{"load",1,load},
 	{"quit",0,quit},};
 
 
@@ -324,6 +335,7 @@ main()
 {
   buf=malloc(N*N*2);
   logfile=fopen("/dev/shm/mma.log","w");
+  fifofile=fopen("/home/martin/0505/mma/binary_fifo","r");
   assert(buf);
   int i;
   for(i=0;i<NN;i++)
@@ -358,12 +370,12 @@ main()
   
   // user ready should start 20us after deflection phase and go low at
   // the same time 
-  float d=20.,width=16.;
-  if(0!=SLM_SetDeflectionPhase(0.,width*1000.)){
+  float d0=101.,d=20.,width=15.24;
+  if(0!=SLM_SetDeflectionPhase(d0,width*1000.)){
     e("deflection");
     goto disconnect;
   }
-  if(0!=SLM_SetExternReady(0.+d,width*1000.-d)){
+  if(0!=SLM_SetExternReady(d0+d,width*1000.-d)){
     e("extern ready");
     goto disconnect;
   }
@@ -440,5 +452,6 @@ main()
     e("disconnect");
   printf("bye!\n");
   fclose(logfile);
+  fclose(fifofile);
   return 0;
 }

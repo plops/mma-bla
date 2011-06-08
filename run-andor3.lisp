@@ -4,7 +4,7 @@
 	  (union '("/home/martin/0505/mma/") asdf:*central-registry*))
     (require :andor3))
 
-
+(in-package :andor3)
 (defparameter *pic-buffer-hash* (make-hash-table))
 
 
@@ -12,35 +12,43 @@
 (defconstant +success+ 0)
 
 
+(defmacro check (&body body)
+  `(let ((ret ,@body))
+    (unless (= +success+ ret)
+      (break "Error ~a: ~a." ',body (andor3::lookup-error ret)))))
+
+(defmacro check2 (&body body)
+  `(multiple-value-bind (ret val) ,@body
+     (unless (= +success+ ret)
+       (break "Error ~a: ~a." ',body (andor3::lookup-error ret)))
+     val))
+
+
 (defmacro with-wide-strings (decls &body body)
   (let* ((n (length decls))
 	 (s32 (loop for i below n collect (gensym))))
     `(let* (,@(loop for i below n collect
 		   (destructuring-bind (s string) (elt decls i)
+		     (declare (ignore s))
 		       `(,(elt s32 i) 
 			  (andor3::char->wide-char ,string))))
 	    ,@(loop for i below n collect
 		   (destructuring-bind (s string) (elt decls i)
+		     (declare (ignore string))
 		       `(,s (sb-sys:vector-sap ,(elt s32 i))))))
        (sb-sys:with-pinned-objects ,s32
 	 ,@body))))
 
 (defun get-device-count ()
   (with-wide-strings ((s "DeviceCount"))
-      (multiple-value-bind (a b)
-	  (andor3::%get-int +handle-system+ s)
-	(assert (= a +success+))
-	b)))
+    (check2 (andor3::%get-int +handle-system+ s))))
 #+nil
 (get-device-count)
 
 (defun camera-open (&optional (index 0))
-  (multiple-value-bind (a b)
-     (andor3::%open index)
-   (assert (= a +success+))
-   b))
+  (check2 (andor3::%open index)))
 
-(defparameter *c* nil)
+(defvar *c* nil)
 
 
 (defun get-serial-number ()
@@ -49,7 +57,7 @@
 	 (sret (sb-sys:vector-sap ret)))
     (sb-sys:with-pinned-objects (ret)
      (with-wide-strings ((s "SerialNumber"))
-       (assert (= +success+ (andor3::%get-string *c* s sret n)))))
+       (check (andor3::%get-string *c* s sret n))))
     (andor3::wide-char->char ret)))
 
 #+nil
@@ -59,20 +67,14 @@
   (declare (type double-float exp_ms)
 	   (values double-float &optional))
   (with-wide-strings ((s "ExposureTime"))
-    (assert (= +success+
-	       (andor3::%set-float *c* s exp_ms)))
-    (multiple-value-bind (a b) (andor3::%get-float *c* s)
-      (assert (= +success+ a))
-      b)))
+    (check (andor3::%set-float *c* s exp_ms))
+    (check2 (andor3::%get-float *c* s))))
 #+nil
 (set-exposure .0163d0)
 
 (defun get-int (feature)
   (with-wide-strings ((s feature))
-    (multiple-value-bind (a b)
-	(andor3::%get-int *c* s)
-      (assert (= +success+ a))
-      b)))
+    (check2 (andor3::%get-int *c* s))))
 #+nil
 (get-int "ImageSizeBytes")
 #+nil
@@ -89,7 +91,7 @@
 (defun set-int (feature value)
   (declare (type (unsigned-byte 64) value))
   (with-wide-strings ((s feature))
-    (assert (= +success+ (andor3::%set-int *c* s value)))
+    (check (andor3::%set-int *c* s value))
     value))
 
 
@@ -106,10 +108,18 @@
     (unless (= 0 (mod ptr 8))
       (break "Buffer must be aligned on am 8 byte boundary."))
     (sb-sys:with-pinned-objects (img)
-      (let ((ret (andor3::%queue-buffer *c* sap (* 2 (length img1)))))
-	(unless (= +success+ ret)
-	  (break "Error queue-buffer: ~a." (andor3::lookup-error ret)))))
+      (check (andor3::%queue-buffer *c* sap (* 2 (length img1)))))
     (values ptr img)))
+
+(defun requeue-buffer (ptr)
+  (declare (type (unsigned-byte 64) ptr))
+  (let ((img (gethash ptr *pic-buffer-hash*)))
+    (unless (= ptr (sb-sys:sap-int (sb-sys:vector-sap img)))
+      (break "requeue-buffer error: address of image changed."))
+    (check (andor3::%queue-buffer 
+	    *c*
+	    (sb-sys:int-sap ptr)
+	    (* 2 (array-total-size img))))))
 
 (defun queue-buffer-into-hash ()
   (multiple-value-bind (ptr img) (queue-buffer) 
@@ -121,30 +131,30 @@
   "Wait for a buffer to be available in the capture queue and return
 the corresponding image from the hash table."
   (multiple-value-bind (ret ptr bytes) (andor3::%wait-buffer *c* 10000)
+    (declare (ignore bytes))
     (unless (= +success+ ret)
       (break "Error in wait-buffer: ~a." (andor3::lookup-error ret)))
-    (gethash ptr *pic-buffer-hash*)))
+    (values ptr (gethash ptr *pic-buffer-hash*))))
 
 (defun flush ()
   "Remove buffers from the two queues. This needs to be called when
   the region of interest changes."
-  (assert (= +success+ (andor3::%flush *c*)))
+  (check (andor3::%flush *c*))
   (setf *pic-buffer-hash* (make-hash-table)))
 
 
 (defun command (cmd)
   (with-wide-strings ((s cmd))
-    (assert (= +success+ (andor3::%command *c* s)))))
+    (check (andor3::%command *c* s))))
 
-#+nil
-(assert (= +success+
-	 (andor3::%close *c*)))
+(defun cam-close ()
+  (when *c*
+    (check (andor3::%close *c*))
+    (setf *c* nil)))
 
 (defun get-enum-index (feature)
   (with-wide-strings ((s feature))
-    (multiple-value-bind (a b) (andor3::%get-enum-index *c* s)
-      (assert (= +success+ a))
-      b)))
+    (check2 (andor3::%get-enum-index *c* s))))
 #+nil
 (get-enum-index "TriggerMode")
 
@@ -152,9 +162,8 @@ the corresponding image from the hash table."
   (with-wide-strings ((s feature))
    (let* ((n 512)
 	  (a (make-array (1+ n) :element-type '(unsigned-byte 32))))
-     (assert (= +success+
-		(andor3::%get-enum-string-by-index
-		 *c* s index (sb-sys:vector-sap a) n)))
+     (check (andor3::%get-enum-string-by-index
+	     *c* s index (sb-sys:vector-sap a) n))
      (andor3::wide-char->char a))))
 
 #+nil
@@ -170,8 +179,7 @@ the corresponding image from the hash table."
   (declare (type string feature value))
   (with-wide-strings ((s feature)
 		      (v value))
-    (assert (= +success+
-	       (andor3::%set-enum-string *c* s v))))
+    (check (andor3::%set-enum-string *c* s v)))
   (get-enum-string feature))
 #+nil
 (set-enum-string "TriggerMode" "External")
@@ -192,24 +200,57 @@ the corresponding image from the hash table."
 #+nil
 (defparameter *c* (camera-open))
 #+nil
-(set-recommended-roi528)
+(progn
+  (set-exposure .0152d0)
+  (set-enum-string "TriggerMode" "External")
+  (set-recommended-roi528))
 #+nil
-(progn 
-  (queue-buffer-into-hash)
-  nil)
+(flush)
 #+nil
-(command "AcquisitionStart")
+(dotimes (i 12)
+ (progn 
+   (queue-buffer-into-hash)
+   nil))
 #+nil
-(defparameter *blasd* (wait-buffer))
 
+#+nil
+(progn
+  (command "AcquisitionStart")  
+ (defparameter *blasd* (loop for i below 1 collect
+			    (multiple-value-list (wait-buffer)))))
+#+nil
+(progn
+  (defparameter *c* (camera-open))
+  (progn
+    (set-exposure .0152d0)
+    (set-enum-string "TriggerMode" "External")
+    (set-recommended-roi528))
+  
+  (multiple-value-bind (ptr img) (queue-buffer)
+    (sleep .1)
+    (command "AcquisitionStart")
+    (multiple-value-bind (ret cptr bytes) (andor3::%wait-buffer *c* 10000)
+      (unless (= +success+ ret)
+	(break "Error in wait-buffer: ~a." (andor3::lookup-error ret)))
+      (unless (= ptr cptr)
+	(break "Error returned buffer isn't the same as the input."))
+      (defparameter *cap* img))
+    (command "AcquisitionStop")
+    (cam-close)))
+
+#+nil
+(dotimes (i 10)
+  (defparameter *blasd* (multiple-value-list (wait-buffer)))
+  (requeue-buffer (first *blasd*)))
 
 
 #+nil
 (command "AcquisitionStop")
 
+#+nil
+(cam-close)
 
 #+nil
 (flush)
 #+nil
-(assert (= +success+
-	 (andor3::%finalise-library)))
+(check (andor3::%finalise-library))
