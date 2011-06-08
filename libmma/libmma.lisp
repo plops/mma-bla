@@ -46,6 +46,10 @@
 #+nil
 (set-cycle-time 150s0)
 #+nil
+(let ((a (make-array (list 256 256)
+		     :element-type '(unsigned-byte 16))))
+  (image a))
+#+nil
 (uninit)
 #+nil
 (status)

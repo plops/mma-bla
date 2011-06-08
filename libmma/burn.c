@@ -35,8 +35,8 @@ main()
   
   assert(0==mma_init());
 
-  for(i=0;i<6;i+=4)
-    for(j=0;j<6;j+=4){
+  for(i=0;i<256;i+=8)
+    for(j=0;j<256;j+=8){
       printf("%d %d\n",i,j);
       splat(i,j,7,buf);
       if(0!=mma_upload_image(buf)){
