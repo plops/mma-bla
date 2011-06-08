@@ -232,6 +232,39 @@
 	(sleep .01)))
  :name "capture")
 
+#+nil
+(defparameter *calib-bright* *line*)
+#+nil
+(defparameter *calib-dark* *line*)
+#+nil
+(defparameter *calib-spot* *line*)
+
+(defun replace-zero-with-one (img)
+  (declare (type (simple-array single-float 2) img))
+  (destructuring-bind (y x) (array-dimensions img)
+    (vol:do-region ((j i) (y x))
+      (setf (aref img j i) (if (< (abs (aref img j i)) 1e-4)
+			       1s0
+			       (aref img j i)))))
+  img)
+
+(defun select-bigger (img value)
+  (declare (type (simple-array single-float 2) img))
+  (destructuring-bind (y x) (array-dimensions img)
+    (vol:do-region ((j i) (y x))
+      (setf (aref img j i) (if (< (aref img j i) value)
+			       0s0
+			       (aref img j i)))))
+  img)
+
+#+nil
+(let ((b (vol:convert-2-ub16/sf-mul *calib-bright*))
+      (d (vol:convert-2-ub16/sf-mul *calib-dark*))
+      (s (vol:convert-2-ub16/sf-mul *calib-spot*)))
+  (vol:write-pgm "/dev/shm/o.pgm" (vol:normalize-2-sf/ub8
+				   (vol:./ (select-bigger (vol:.- s d) 12)
+					   (replace-zero-with-one (vol:.- b d))))))
+
 (progn
  (defparameter *t8* nil)
  (defparameter *dark* nil)
@@ -241,7 +274,7 @@
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
 (change-target 865 630 500 :ril 80s0)
-(let* ((px 900s0) (py 600s0) (pr 100s0)
+(let* ((px 900s0) (py 600s0) (pr 2s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
        (h 1040)
@@ -286,12 +319,14 @@
     (draw-circle px py pr)
     (draw-circle (+ 130 px) py (* .4 pr))
     (gl:with-pushed-matrix
-      (%gl:color-3ub  #b10 0 0 ;255 255
+      #+nil(%gl:color-3ub  #b10 #b0 #b0 ;255 255
+		      )
+      (%gl:color-3ub  #b11111110 255 255
 		      )
       (gl:translate 0 1024 0)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
-      (draw-disk (+ 130 px-ill) py-ill (* .4 pr-ill))))
+     #+nil (draw-disk (+ 130 px-ill) py-ill (* .4 pr-ill))))
 
   (defun capture ()
     #-clara (when new-size
