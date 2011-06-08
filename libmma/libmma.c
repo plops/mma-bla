@@ -32,7 +32,6 @@ mma_upload_image(unsigned short*buf)
     e("write-matrix-data");
     return -1;
   }
-  free(buf);
   if(0!=SLM_SetPictureSequence(pic,1,1)){
     e("set-picture-sequence");
     return -2;
