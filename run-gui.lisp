@@ -321,15 +321,32 @@
 	     (incf (aref a1 i) (aref img1 i)))))))
    (vol::s* (/ 1s0 count) a)))
 
+(defparameter *blob*
+  (let ((a (make-array (array-dimensions *bright*)
+		       :element-type '(complex single-float))))
+    (destructuring-bind (y x) (array-dimensions a)
+      (vol:do-region ((j i) (y x))
+	(let* ((ii (* (- i (floor x 2)) (/ 1s0 x)))
+	       (jj (* (- j (floor y 2)) (/ 1s0 x)))
+	       (r2 (+ (* ii ii) (* jj jj))))
+	  (setf (aref a j i) (complex (exp (* -1e4 r2)))))))
+    a))
+#+nil
+(vol:write-pgm "/dev/shm/blob.pgm" (vol:normalize-2-csf/ub8-realpart *blob*))
+
 (let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
       (i 0))
  (dolist (e *scan-result*)
-   (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
-		 (vol:normalize-2-sf/ub8
-		  (vol:./ (select-bigger (vol:.- (vol:convert-2-ub16/sf-mul (second e))
-						 *dark*)
-					 20s0)
-			  diff)))))
+   (destructuring-bind ((ii j radius r g b type) img) e
+     (when (eq type :scan)
+      (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
+		     (vol:normalize-2-csf/ub8-realpart
+		      (vol:convolve-circ-2-csf (vol:convert-2-sf/csf-mul 
+						(vol:./ (select-bigger (vol:.- (vol:convert-2-ub16/sf-mul (second e))
+									       *dark*)
+								       20s0)
+							diff))
+					       *blob*)))))))
 
 (progn
   (defparameter *scan* nil)
