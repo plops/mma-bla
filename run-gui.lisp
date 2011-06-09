@@ -334,19 +334,52 @@
 #+nil
 (vol:write-pgm "/dev/shm/blob.pgm" (vol:normalize-2-csf/ub8-realpart *blob*))
 
-(let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
-      (i 0))
- (dolist (e *scan-result*)
-   (destructuring-bind ((ii j radius r g b type) img) e
-     (when (eq type :scan)
-      (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
-		     (vol:normalize-2-csf/ub8-realpart
-		      (vol:convolve-circ-2-csf (vol:convert-2-sf/csf-mul 
-						(vol:./ (select-bigger (vol:.- (vol:convert-2-ub16/sf-mul (second e))
-									       *dark*)
-								       20s0)
-							diff))
-					       *blob*)))))))
+(defun find-maxima (img)
+  (declare (type (simple-array single-float 2) img))
+  (let ((res nil))
+    (destructuring-bind (y x) (array-dimensions img)
+      (vol:do-region ((j i) ((1- y) (1- x)) (1 1))
+	(let ((v (aref img j i)))
+	  (macrolet ((c (y x)
+		       `(< (aref img (+ ,y j) (+ ,x i)) v)))
+	    (when (and (c 0 1) (c 1 0) 
+		       (c 1 1) (c 0 -1)
+		       (c -1 0) (c -1 -1)
+		       (c -1 1) (c 1 -1))
+	      (push (list i j v) res))))))
+    res))
+
+#+Nil
+(sort 
+ (find-maxima (vol:convert-2-csf/sf-realpart *blob*))
+ #'>
+ :key #'third)
+(defparameter *scan-pos2* *scan-pos*)
+(with-open-file (s "/home/martin/d0609/scan-pos.lisp" :direction :output
+		   :if-does-not-exist :create :if-exists :supersede)
+ (write *scan-pos* :stream s))
+
+(progn
+  (defparameter *scan-pos* nil)
+  (let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
+	(i 0))
+    (dolist (e *scan-result*)
+      (destructuring-bind ((ii j radius r g b type) img) e
+	(when (eq type :scan)
+	  (let* ((blurred-point (vol:convert-2-csf/sf-realpart
+				 (vol:convolve-circ-2-csf 
+				  (vol:convert-2-sf/csf-mul 
+				   (vol:./ (select-bigger (vol:.- (vol:convert-2-ub16/sf-mul (second e))
+								  *dark*)
+							  20s0)
+					   diff))
+				  *blob*)))
+		 (maximum (first (sort (find-maxima blurred-point)
+				       #'<
+				       :key #'third))))
+	    (push (list ii j maximum) *scan-pos*)
+	    (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
+			   (vol:normalize-2-sf/ub8 blurred-point))))))))
 
 (progn
   (defparameter *scan* nil)
