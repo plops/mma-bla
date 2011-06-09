@@ -96,7 +96,7 @@
 (mma-polar 128. 45. 20)
 
 #+nil
-(mma "set-cycle-time 33")
+(mma "set-cycle-time 350")
 #+nil
 (mma "stop")
 #+nil
@@ -262,7 +262,8 @@
   img)
 #+nil
 (defun select-bigger (img value)
-  (declare (type (simple-array single-float 2) img))
+  (declare (type (simple-array single-float 2) img)
+	   (type single-float value))
   (destructuring-bind (y x) (array-dimensions img)
     (vol:do-region ((j i) (y x))
       (setf (aref img j i) (if (< (aref img j i) value)
@@ -277,6 +278,14 @@
   (vol:write-pgm "/dev/shm/o.pgm" (vol:normalize-2-sf/ub8
 				   (vol:./ (select-bigger (vol:.- s d) 12)
 					   (replace-zero-with-one (vol:.- b d))))))
+(defun clamp-ub8 (img)
+  (declare (type (simple-array single-float 2) img))
+  (let ((img1 (sb-ext:array-storage-vector img)))
+    (dotimes (i (length img1))
+      (setf (aref img1 i)
+	    (max 0s0 (min 255s0 (aref img1 i)))))
+    img))
+
 (defun copy-image (img)
   (declare (type (simple-array (unsigned-byte 16) 2) img))
   (let* ((r (make-array (array-dimensions img)
@@ -287,27 +296,64 @@
       (setf (aref r1 i) (aref i1 i)))
     r))
 
-(let ((i 0))
+(let* ((i 0))
+  (dolist (e *scan-result*)
+    (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
+		   (vol:convert-2-sf/ub8-floor
+		    (clamp-ub8 (vol::s* .2 (vol:convert-2-ub16/sf-mul
+				 (second e)))
+		      )))))
+
+(defparameter *dark* (accum-img :dark))
+(defparameter *bright* (accum-img :bright))
+
+(defun accum-img (type)
+  (let* ((a (make-array (array-dimensions (second (first *scan-result*)))
+		       :element-type 'single-float))
+	(a1 (sb-ext:array-storage-vector a))
+	(count 0))
+   (dolist (e *scan-result*)
+     (destructuring-bind ((i j radius r g b img-type) img) e
+       (when (eq img-type type)
+	 (incf count)
+	 (let ((img1 (sb-ext:array-storage-vector img)))
+	   (dotimes (i (length a1))
+	     (incf (aref a1 i) (aref img1 i)))))))
+   (vol::s* (/ 1s0 count) a)))
+
+(let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
+      (i 0))
  (dolist (e *scan-result*)
    (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
-		  (vol:normalize-2-sf/ub8 
-		   (vol:convert-2-ub16/sf-mul 
-		    (second e))))))
+		 (vol:normalize-2-sf/ub8
+		  (vol:./ (select-bigger (vol:.- (vol:convert-2-ub16/sf-mul (second e))
+						 *dark*)
+					 20s0)
+			  diff)))))
 
-(defparameter *scan* nil)
-(defparameter *old-e* nil)
-(defparameter *scan-result* nil)
 (progn
-  (push (list 0s0 0s0 0s0  0 0 0) *scan*)
-  (push (list 500s0 500s0 1000s0 #b10 0 0) *scan*)
-  (dotimes (i 6)
-    (dotimes (j 6)
-      (push (list (* 100 i) (* 100 j) 2s0 #b11111110 255 255) *scan*))))
+  (defparameter *scan* nil)
+  (defparameter *old-e* nil)
+  (defparameter *scan-result* nil)
+  (progn
+    (dotimes (i 10)
+      (push (list 0s0 0s0 0s0  0 0 0 :dark) *scan*))
+    (dotimes (i 10)
+     (push (list 500s0 500s0 1000s0 #b111110 1 1 :bright) *scan*))
+    (dotimes (i 9)
+      (dotimes (j 9)
+	(push (list (* 50 (+ 4 i)) (* 50 (+ 2 j)) 8s0 #b11111110 255 255 :scan) *scan*)))))
 (defun draw-screen ()
-  (gl:clear-color 0 0 0 1)
+  (when *t8*
+      (gl:with-pushed-matrix
+	(let ((tex (make-instance 'gui::texture :data *t8*)))
+	  (destructuring-bind (h w) (array-dimensions *t8*)
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		      :wt 1s0 :ht 1s0))
+	  (gui:destroy tex))))
   (when *scan*  
     (let ((e (pop *scan*)))
-      (destructuring-bind (i j radius r g b) e
+      (destructuring-bind (i j radius r g b type) e
 	(format t "prepare image ~a~%" e)
 	(when *old-e*
 	  (capture)
@@ -333,7 +379,7 @@
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
 (change-target 865 630 500 :ril 80s0)
-(let* ((px 900s0) (py 600s0) (pr 600s0)
+(let* ((px 900s0) (py 600s0) (pr 3s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
        (h 1040)
@@ -378,10 +424,7 @@
     (draw-circle px py pr)
     (draw-circle (+ 130 px) py (* .4 pr))
     (gl:with-pushed-matrix
-      #+nil(%gl:color-3ub  #b10 #b0 #b0 ;255 255
-		      )
-      (%gl:color-3ub  #b11111110 0 255;  255
-		      )
+      (%gl:color-3ub  #b11111110 255  255)
       (gl:translate 0 1024 0)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
@@ -433,7 +476,7 @@
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 20 (aref l1 i))
 			  (min 255 (max 0 (floor (aref l1 i) 
-						 50)))
+						 10)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
