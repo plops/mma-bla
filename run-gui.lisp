@@ -201,15 +201,15 @@
        ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .885090144449)
-	  (sx  s)
-	  (sy  (- s))
-	  (phi 1.3)
-	  (cp (cos phi))
-	  (sp (sqrt (- 1s0 (* cp cp))))
-	  (tx 783.23854s0)
-	  (ty 1198.40181879s0)
-	  (a (make-array (list 4 4) :element-type 'single-float
+  (let* ((s .88)
+	 (sx  s)
+	 (sy  (- s))
+	 (phi -3.1)
+	 (cp (cos phi))
+	 (sp (sqrt (- 1s0 (* cp cp))))
+	 (tx 1198s0)
+	 (ty -20.0)
+	 (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
 			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
 			       (list (* -1 sx sp) (* sy cp)  .0  (+ y ty))
@@ -359,6 +359,21 @@
 		   :if-does-not-exist :create :if-exists :supersede)
  (write *scan-pos* :stream s))
 
+(loop for e in (cdr *scan-pos*) do
+     (destructuring-bind (lx ly (x y intens)) e
+       (format t "s*(cos(p)*~a+q*sin(p)*~a)+tx-~a,s*(-sin(p)*~a+q*cos(p)*~a)+ty-~a,~%"
+	       x y lx x y ly))))
+#||
+load(minpack)$
+q:-1;
+g(s,c,tx,ty):=[   ]$
+minpack_lsquares(
+  g(s,c,x,y),
+  [s,c,x,y],
+  [0.0,.25,1089,1200]);
+
+||#
+
 (progn
   (defparameter *scan-pos* nil)
   (let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
@@ -429,7 +444,7 @@
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
 (change-target 865 630 500 :ril 80s0)
-(let* ((px 900s0) (py 600s0) (pr 3s0)
+(let* ((px 900s0) (py 600s0) (pr 50s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
        (h 1040)
@@ -472,13 +487,21 @@
     (gl:color 1 .4 0)
     (gl:line-width 4)
     (draw-circle px py pr)
-    (draw-circle (+ 130 px) py (* .4 pr))
+      (dotimes (i 6) 
+	(dotimes (j 3)
+	  (draw-disk (+ (* 50 i) px-ill) 
+		     (+ (* 50 j) py-ill) 
+		     (* .2 pr-ill))))
     (gl:with-pushed-matrix
       (%gl:color-3ub  #b11111110 255  255)
       (gl:translate 0 1024 0)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
-     #+nil (draw-disk (+ 130 px-ill) py-ill (* .4 pr-ill))))
+      (dotimes (i 6) 
+	(dotimes (j 3)
+	  (draw-disk (+ (* 50 i) px-ill) 
+		     (+ (* 50 j) py-ill) 
+		     (* .2 pr-ill))))))
 
   (defun capture ()
     #-clara (when new-size
