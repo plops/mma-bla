@@ -14,7 +14,7 @@
   (check
     (initialize "/usr/local/etc/andor"))
   (trigger-mode :external)
-  (set-exposure-time .016)
+  (set-exposure-time .0121)
   (read-mode :image)
   (acquisition-mode :single-scan)
   (check
@@ -32,7 +32,7 @@
 (get-temperature-f)
 (uninit)
 (check
- (set-exposure-time 1.016))
+ (set-exposure-time  .01521))
 
 #+nil
 (set-shutter 1 1 0 0)

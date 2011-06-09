@@ -217,8 +217,9 @@ double
 load(double*args)
 { // read bytes from binary input fifo
   int bytes=(int)args[0];
-  int n=fread(buf,min(len(buf),bytes),1,fifofile);
-  printf("read %d bytes\n",n);
+  int bytes_to_read=min(256*256*2,bytes);
+  int n=fread(buf,bytes_to_read,1,fifofile);
+  printf("read %d of %d bytes\n",n,bytes_to_read);
   fflush(stdout);
   return 1.0*n;
 }
