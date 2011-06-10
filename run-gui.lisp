@@ -201,14 +201,14 @@
        ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .8349911264174253)
+  (let* ((s .82705)
 	 (sx  s)
 	 (sy  (- s))
-	 (phi -3.448754960606491)
+	 (phi -3.17375)
 	 (cp (cos phi))
 	 (sp (sqrt (- 1s0 (* cp cp))))
-	 (tx 1264.757063764796)
-	 (ty 304.7836960672012)
+	 (tx 1140.49)
+	 (ty 7.782)
 	 (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
 			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))

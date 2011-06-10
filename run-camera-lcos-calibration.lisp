@@ -53,14 +53,14 @@
 
 (let* ((i 0))
   (dolist (e *scan-result*)
-    (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
-		   (vol:convert-2-sf/ub8-floor
-		    (clamp-ub8 (vol::s* .2 (vol:convert-2-ub16/sf-mul
-				 (second e)))
-		      )))))
+    (destructuring-bind ((ii j radius r g b img-type) img cap captime pres prestime) e
+      (when (eq img-type :scan)
+	(format t "~a~%" (list img-type ii j))
+	(vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
+		      (vol:convert-2-sf/ub8-floor
+		       (clamp-ub8 (vol::s* .2 (vol:convert-2-ub16/sf-mul
+					       (second e))))))))))
 
-(defparameter *dark* (accum-img :dark))
-(defparameter *bright* (accum-img :bright))
 
 (defun accum-img (type)
   (let* ((a (make-array (array-dimensions (second (first *scan-result*)))
@@ -114,11 +114,22 @@
 		   :if-does-not-exist :create :if-exists :supersede)
  (write *scan-pos* :stream s))
 
-(loop for e in (cdr *scan-pos*) do
-     (destructuring-bind (lx ly (x y intens)) e
-       (format t "s*(cos(p)*~a+q*sin(p)*~a)+tx-~a,s*(-sin(p)*~a+q*cos(p)*~a)+ty-~a,~%"
-	       lx ly x lx ly y)))
+(defun print-maxima (&optional (lcos-to-cam t))
+  (format t "load(minpack)$~%q:-1$~%g(s,p,tx,ty):=[~%")
+  (let ((n (length *scan-pos*)))
+   (dotimes (i n) 
+     (let ((e (elt *scan-pos* i)))
+       (destructuring-bind (lx ly (x y intens)) e
+	 (let ((s "s*(cos(p)*~a+q*sin(p)*~a)+tx-~a,s*(-sin(p)*~a+q*cos(p)*~a)+ty-~a")) 
+	   (if lcos-to-cam
+	       (format t s x y lx x y ly)
+	       (format t s lx ly x lx ly y)))
+	 (format t (if (= i (1- n))
+		       "]$~%minpack_lsquares(g(s,p,x,y),[s,p,x,y],[0.88,-3.1,1200,-20]);~%"
+		       ",~%")))))))
 
+#+nil
+(print-maxima)
 
 #||
 load(minpack)$
@@ -131,6 +142,8 @@ minpack_lsquares(
 
 ||#
 
+(defparameter *dark* (accum-img :dark))
+(defparameter *bright* (accum-img :bright))
 (progn
   (defparameter *scan-pos* nil)
   (let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
@@ -147,28 +160,32 @@ minpack_lsquares(
 					   diff))
 				  *blob*)))
 		 (maximum (first (sort (find-maxima blurred-point)
-				       #'<
+				       #'>
 				       :key #'third))))
 	    (push (list ii j maximum) *scan-pos*)
-	    (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
+	    (vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (1- (incf i)))
 			   (vol:normalize-2-sf/ub8 blurred-point))))))))
 
 (progn
   (defparameter *scan* nil)
   (defparameter *old-e* nil)
   (defparameter *scan-result* nil)
-  (progn
+  
+  (let ((scanr nil))
     (dotimes (i 10)
-      (push (list 0s0 0s0 0s0  0 0 0 :dark) *scan*))
+      (push (list 0s0 0s0 0s0  0 0 0 :dark) scanr))
     (dotimes (i 10)
-     (push (list 500s0 500s0 1000s0 #b111110 1 1 :bright) *scan*))
-    (dotimes (i 9)
-      (dotimes (j 9)
-	(push (list (* 50 (+ 5 i)) (* 50 (+ 3 j)) 8s0 #b11111110 255 255 :scan) *scan*)))))
+     (push (list 500s0 500s0 1000s0 #b111110 1 1 :bright) scanr))
+    (dotimes (i 10)
+      (dotimes (j 10)
+	(push (list (* 50 (+ 5 i)) (* 50 (+ 3 j)) 8s0 #b11111110 255 255 :scan) scanr)))
+    (setf *scan* (reverse scanr))))
+
 (defparameter *presentation-time* nil)
 (defvar *scan* nil)
 (defvar *scan-result* nil)
 (defvar *old-e* nil)
+
 (defun draw-screen ()
   (when *t8*
       (gl:with-pushed-matrix
@@ -180,8 +197,9 @@ minpack_lsquares(
   (when *scan*  
     (let ((e (pop *scan*)))
       (destructuring-bind (i j radius r g b type) e
-	(format t "prepare image type ~a ~a~%" type e)
+	(format t "prepare image type ~a%" type)
 	(when *old-e*
+	  (sleep .1)
 	  (capture)
 	  (push (list *old-e* (copy-image *line*)
 		      :capture-time (multiple-value-list (common-lisp-user::get-time-of-day))
@@ -193,7 +211,8 @@ minpack_lsquares(
 	  (draw-disk i j radius)
 	  (setf *presentation-time* (multiple-value-list (common-lisp-user::get-time-of-day))))
 	(setf *old-e* e))))
-  (when *old-e*
+#+nil  (when *old-e*
+    (sleep .1)
     (capture)
     (push (list *old-e* 
 		(copy-image *line*)
