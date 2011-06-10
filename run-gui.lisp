@@ -21,7 +21,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) -.5))
+ (+ (focus:get-position) .25))
 
 (defvar *mma-chan* nil)
 
@@ -201,14 +201,14 @@
        ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .88)
+  (let* ((s .8349911264174253)
 	 (sx  s)
 	 (sy  (- s))
-	 (phi -3.1)
+	 (phi -3.448754960606491)
 	 (cp (cos phi))
 	 (sp (sqrt (- 1s0 (* cp cp))))
-	 (tx 1198s0)
-	 (ty -20.0)
+	 (tx 1264.757063764796)
+	 (ty 304.7836960672012)
 	 (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
 			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
@@ -216,6 +216,7 @@
 			       (list .0     .0   1.0  .0)
 			       (list .0     .0    .0 1.0)))))
     (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
+
 
 (defun draw-circle (x y r)
   (gl:with-primitive :line-loop
@@ -362,15 +363,17 @@
 (loop for e in (cdr *scan-pos*) do
      (destructuring-bind (lx ly (x y intens)) e
        (format t "s*(cos(p)*~a+q*sin(p)*~a)+tx-~a,s*(-sin(p)*~a+q*cos(p)*~a)+ty-~a,~%"
-	       x y lx x y ly))))
+	       lx ly x lx ly y)))
+
+
 #||
 load(minpack)$
 q:-1;
-g(s,c,tx,ty):=[   ]$
+g(s,p,tx,ty):=[   ]$
 minpack_lsquares(
-  g(s,c,x,y),
-  [s,c,x,y],
-  [0.0,.25,1089,1200]);
+  g(s,p,x,y),
+  [s,p,x,y],
+  [0.88,-3.1,1200,-20]);
 
 ||#
 
@@ -407,7 +410,8 @@ minpack_lsquares(
      (push (list 500s0 500s0 1000s0 #b111110 1 1 :bright) *scan*))
     (dotimes (i 9)
       (dotimes (j 9)
-	(push (list (* 50 (+ 4 i)) (* 50 (+ 2 j)) 8s0 #b11111110 255 255 :scan) *scan*)))))
+	(push (list (* 50 (+ 5 i)) (* 50 (+ 3 j)) 8s0 #b11111110 255 255 :scan) *scan*)))))
+(defparameter *presentation-time* nil)
 (defun draw-screen ()
   (when *t8*
       (gl:with-pushed-matrix
@@ -422,16 +426,22 @@ minpack_lsquares(
 	(format t "prepare image ~a~%" e)
 	(when *old-e*
 	  (capture)
-	  (push (list *old-e* (copy-image *line*))
+	  (push (list *old-e* (copy-image *line*)
+		      :capture-time (multiple-value-list (get-time-of-day))
+		      :presentation-time *presentation-time*)
 		*scan-result*))
 	(gl:with-pushed-matrix
 	  (gl:translate 0 1024 0)
 	  (%gl:color-3ub r g b)
-	  (draw-disk i j radius))
+	  (draw-disk i j radius)
+	  (setf *presentation-time* (multiple-value-list (get-time-of-day))))
 	(setf *old-e* e))))
   (when *old-e*
     (capture)
-    (push (list *old-e* (copy-image *line*))
+    (push (list *old-e* 
+		(copy-image *line*)
+		:capture-time (multiple-value-list (get-time-of-day))
+		:presentation-time *presentation-time*)
 		*scan-result*)
     (setf *old-e* nil)))
 
