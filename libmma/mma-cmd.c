@@ -218,10 +218,26 @@ load(double*args)
 { // read bytes from binary input fifo
   int bytes=(int)args[0];
   int bytes_to_read=min(256*256*2,bytes);
-  int n=fread(buf,bytes_to_read,1,fifofile);
+  int n=fread(buf,1,bytes_to_read,fifofile);
   printf("read %d of %d bytes\n",n,bytes_to_read);
   fflush(stdout);
   return 1.0*n;
+}
+
+double
+frame_voltage (double*args)
+{
+  float deflection=args[0],load=args[1];
+
+  if(0!=SLM_SetVoltage(SLM_SMART_IDX_VFRAME_F,deflection)){
+    e("set voltage vframe deflection phase");
+    return NAN;
+  }
+  if(0!=SLM_SetVoltage(SLM_SMART_IDX_VFRAME_L,load)){
+    e("set voltage vframe load phase");
+    return NAN;
+  }
+  return 0.0;
 }
 
 // array that contains all functions that can be called from text interface
@@ -244,6 +260,7 @@ struct{
 	{"intern-trigger",0,intern_trigger},
 	{"extern-trigger",0,extern_trigger},
 	{"set-cycle-time",1,set_cycle_time},
+	{"frame-voltage",2,frame_voltage},
 	{"load",1,load},
 	{"quit",0,quit},};
 
@@ -379,6 +396,15 @@ main()
   }
   if(0!=SLM_LoadCalibrationData("/home/martin/mma-essentials-0209/VC2481_15_67_2011-02-01_0-250nm_Rand7_Typ1.cal")){
     e("calib");
+    goto disconnect;
+  }
+
+  if(0!=SLM_SetVoltage(SLM_SMART_IDX_VFRAME_F,15.0)){
+    e("set voltage vframe deflection phase");
+    goto disconnect;
+  }
+  if(0!=SLM_SetVoltage(SLM_SMART_IDX_VFRAME_L,15.0)){
+    e("set voltage vframe load phase");
     goto disconnect;
   }
   

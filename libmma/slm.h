@@ -1,4 +1,6 @@
-
+enum {
+  SLM_SMART_IDX_VFRAME_F,
+  SLM_SMART_IDX_VFRAME_L};
 // I copied the function definitions from the manual. 
 int SLM_RegisterBoard(unsigned long long,const char*,
 		      const char*,const char*,unsigned short);

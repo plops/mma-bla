@@ -4,7 +4,6 @@
 (defpackage :run-clara
   (:use :cl :clara))
 (in-package :run-clara)
-
 (progn
   (check 
     (set-current-camera
@@ -32,7 +31,7 @@
 (get-temperature-f)
 (uninit)
 (check
- (set-exposure-time  .01521))
+  (set-exposure-time  .01521))
 
 #+nil
 (set-shutter 1 1 0 0)

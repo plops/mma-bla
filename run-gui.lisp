@@ -25,6 +25,10 @@
 
 (defvar *mma-chan* nil)
 (defvar *binary-fifo* nil)
+
+#+NIL
+(sb-ext:run-program "/home/martin/0505/mma/libmma/reset" '()
+		    :wait nil)
 #+nil
 (progn
   (defparameter *mma-chan*
@@ -61,13 +65,17 @@
 	(finish-output *binary-fifo*)))
 
 (defparameter *mma-img*
-  (let ((a (make-array (list 256 256)
+  (let* ((n 256)
+	 (a (make-array (list n n)
 		       :element-type '(unsigned-byte 16))))
     (dotimes (i 256)
       (dotimes (j 256)
-	(setf (aref a j i) (if (= 0 (mod (+ i j) 2))
-			       4095
-			       90))))
+	(let* ((x (- i (floor n 2)))
+	       (y (- j (floor n 2)))
+	       (r2 (+ (* x x) (* y y))))
+	  (setf (aref a j i) (if (< r2 (expt 100 2)) #+nil (= 0 (mod (+ i j) 2))
+				 4095
+				 90)))))
     a))
 #+nil
 (send-binary *mma-img*)
@@ -82,6 +90,16 @@
 (mma "black")
 #+nil
 (mma "img")
+#+nil
+(mma "stop")
+#+nil
+(mma "off")
+#+nil
+(mma "on")
+#+nil
+(mma "start")
+#+nil
+(mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
 (mma "splat 118 138 40")
 #+nil
@@ -253,8 +271,8 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 500 :ril 80s0)
-(let* ((px 900s0) (py 600s0) (pr 50s0)
+(change-target 865 630 6 :ril 900s0)
+(let* ((px 900s0) (py 600s0) (pr 900s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
        (h 1040)
