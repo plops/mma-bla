@@ -74,7 +74,7 @@
 	(let* ((x (- i (floor n 2)))
 	       (y (- j (floor n 2)))
 	       (r2 (+ (* x x) (* y y))))
-	  (setf (aref a j i) (if (< r2 (expt 100 2)) #+nil (= 0 (mod (+ i j) 2))
+	  (setf (aref a j i) (if (< r2 (expt 45 2)) #+nil (= 0 (mod (+ i j) 2))
 				 4095
 				 90)))))
     a))
@@ -114,7 +114,18 @@
 	       (+ 128 (* r (sin phi)))
 	       d)))
 #+nil
-(mma-polar 107. 35. 1.)
+(progn
+ (defparameter *mma-size* 20s0)
+ (defparameter *mma-radius* 80s0)
+ (defparameter *mma-do-run* t))
+#+nil
+(sb-thread:make-thread #'(lambda ()
+			  (loop while *mma-do-run* do
+			       (loop for p from 0 below 360 by 30 do
+				    (sleep .06)
+				    (mma-polar *mma-radius* (* 3.1415 (/ 180) p) *mma-size*))))
+		       :name "mma-update")
+
 
 #+nil
 (mma "set-cycle-time 285")
@@ -134,16 +145,23 @@
 	  (incf sum (aref img j i))))
       sum)))
 
+
+
 #+nil
-(let ((fac 8))
+(start-acquisition)
+#+nil
+(let ((fac 2))
+  (start-acquisition)
   (defparameter *scan* nil)
   (loop for j below 256 by fac do
        (loop for i below 256 by fac do
-	    (mma (format nil "splat ~a ~a 2" i j))
+	    (mma (format nil "splat ~a ~a 7" i j))
+	    (sleep .07)
 	    (capture)
 	    (let ((s (list i j (sum *line*))))
 	      (format t "~a~%" s)
-	      (push s *scan*)))))
+	      (push s *scan*))))
+  (abort-acquisition))
 #+nil
 (capture)
 #+nil
@@ -151,7 +169,7 @@
 #+nil
 (vol:write-pgm "/dev/shm/o.pgm"
  (let* ((d *scan*)
-	(fac 8)
+	(fac 2)
 	(ma (reduce #'max d :key #'third))
 	(mi (reduce #'min d :key #'third))
 	(b (make-array (list (/ 256 fac) (/ 256 fac))
@@ -338,8 +356,8 @@
     (gl:with-pushed-matrix
       (%gl:color-3ub  #b11111110 255  255)
       (load-cam-to-lcos-matrix 0s0 1024s0)
-      (draw-disk px-ill py-ill pr-ill)
-      #+nil (dotimes (i 6) 
+      #+nil (draw-disk px-ill py-ill pr-ill)
+       #+nil(dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-disk (+ (* 50 i) px-ill) 
 		     (+ (* 50 j) py-ill) 
@@ -400,9 +418,9 @@
 	   (declare (ignorable h))
 
 	   (dotimes (i (length b1))
-	     (let ((v (if (< 20 (aref l1 i))
-			  (min 255 (max 0 (floor (- (aref l1 i) 40) 
-						 19)))
+	     (let ((v (if (< 1 (aref l1 i))
+			  (min 255 (max 0 (floor (- (aref l1 i) 23) 
+						 .09)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))

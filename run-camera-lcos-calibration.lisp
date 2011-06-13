@@ -118,7 +118,7 @@
 		       ",~%")))))))
 
 #+nil
-(print-maxima *scan-pos* nil) 
+(print-maxima *scan-pos* t) 
 
 #+nil
 (defparameter *sscan* (sort  *scan-pos* #'> :key #'(lambda (e) (third (third e)))))
@@ -148,6 +148,8 @@ minpack_lsquares(
 (check (start-acquisition))
 #+nil
 (check (abort-acquisition))
+#+nl
+(clara:status)
 #+nil
 (check (free-internal-memory))
 
@@ -178,13 +180,14 @@ minpack_lsquares(
 	  (setf *presentation-time* (multiple-value-list (common-lisp-user::get-time-of-day))))
 	(setf *old-e* e)))))
 
-
+#+nil
+(defvar *scan* nil)
 #+nil
 (progn
   (defparameter *scan* nil)
   (defparameter *old-e* nil)
   (defparameter *scan-result* nil)
-  
+  (check (start-acquisition))
   (let ((scanr nil))
     (dotimes (i 10)
       (push (list 0s0 0s0 0s0  0 0 0 :dark) scanr))
@@ -199,6 +202,10 @@ minpack_lsquares(
     (setf *scan* (reverse scanr))))
 
 #+nil
+(check (abort-acquisition))
+#+nil
+(status)
+#+nil
 (defparameter *dark* (accum-img :dark))
 #+nil
 (defparameter *bright* (accum-img :bright))
@@ -211,13 +218,15 @@ minpack_lsquares(
 	(let* ((ii (* (- i (floor x 2)) (/ 1s0 x)))
 	       (jj (* (- j (floor y 2)) (/ 1s0 x)))
 	       (r2 (+ (* ii ii) (* jj jj))))
-	  (setf (aref a j i) (complex (exp (* -.3e4 r2)))))))
+	  (setf (aref a j i) (complex (exp (* -.9e4 r2)))))))
     a))
 #+nil
 (vol:write-pgm "/dev/shm/blob.pgm" (vol:normalize-2-csf/ub8-realpart *blob*))
 
 #+nil
 (progn
+  (defparameter *dark* (accum-img :dark))
+  (defparameter *bright* (accum-img :bright))
   (defparameter *scan-pos* nil)
   (let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))
 	(i 0))
