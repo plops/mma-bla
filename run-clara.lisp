@@ -33,10 +33,10 @@
 (check (set-frame-transfer-mode 1))
 (set-ad-channel 1)
 (check
- (clara::set-isolated-crop-mode 0 380 380 1 1))
-(check (clara::set-overlap-mode 1))
+ (clara::set-isolated-crop-mode 1 380 380 1 1))
+(check (clara::set-overlap-mode 0))
 (get-temperature-range)
-
+(start-acquisition)
 (abort-acquisition)
 
 (get-detector)

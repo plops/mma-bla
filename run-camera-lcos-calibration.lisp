@@ -54,7 +54,7 @@
 (let* ((i 0))
   (dolist (e *scan-result*)
     (destructuring-bind ((ii j radius r g b img-type) img cap captime pres prestime) e
-      (when (eq img-type :scan)
+      (when t ; (eq img-type :scan)
 	(format t "~a~%" (list img-type ii j))
 	(vol:write-pgm (format nil "/dev/shm/o~3,'0d.pgm" (incf i))
 		      (vol:convert-2-sf/ub8-floor
@@ -97,7 +97,7 @@
  (find-maxima (vol:convert-2-csf/sf-realpart *blob*))
  #'>
  :key #'third)
-
+(defvar *scan-pos* nil)
 #+nil
 (with-open-file (s "/home/martin/d0609/scan-pos-time.lisp" :direction :output
 		   :if-does-not-exist :create :if-exists :supersede)
@@ -118,13 +118,13 @@
 		       ",~%")))))))
 
 #+nil
-(print-maxima)
+(print-maxima *scan-pos* nil) 
 
 #+nil
 (defparameter *sscan* (sort  *scan-pos* #'> :key #'(lambda (e) (third (third e)))))
 #+nil
 (defparameter *scan-pos* *scan-pos2*)
-
+#+nil
 (defparameter *ascan* (subseq (sort  *scan-pos* #'> :key #'(lambda (e) (third (third e))))
 			      0 20))
 
@@ -144,6 +144,14 @@ minpack_lsquares(
 (defvar *scan-result* nil)
 (defvar *old-e* nil)
 
+#+nil
+(check (start-acquisition))
+#+nil
+(check (abort-acquisition))
+#+nil
+(check (free-internal-memory))
+
+#+nil
 (defun draw-screen ()
   (when *t8*
       (gl:with-pushed-matrix
@@ -157,7 +165,7 @@ minpack_lsquares(
       (destructuring-bind (i j radius r g b type) e
 	(format t "prepare image type ~a%~%" type)
 	(when *old-e*
-	 ; (sleep .1)
+	  (sleep .1)
 	  (capture)
 	  (push (list *old-e* (copy-image *line*)
 		      :capture-time (multiple-value-list (common-lisp-user::get-time-of-day))
@@ -181,15 +189,20 @@ minpack_lsquares(
     (dotimes (i 10)
       (push (list 0s0 0s0 0s0  0 0 0 :dark) scanr))
     (dotimes (i 10)
-     (push (list 500s0 500s0 1000s0 #b0 1 0 :bright) scanr))
-    (dotimes (i 10)
-      (dotimes (j 9)
-	(push (list (* 50 (+ 5 i)) (* 50 (+ 3 j)) 2s0 #b11111110 255 255 :scan) scanr)))
+     (push (list 500s0 500s0 1000s0 #b10 11 0 :bright) scanr))
+   (let ((d 2))
+    (dotimes (i (* d 6))
+      (dotimes (j (* d 5))
+	(push (list (* (floor 50 d) (+ (* d 6) i)) 
+		    (* (floor 50 d) (+ (* d 5) j)) 
+		    3s0 #b11111110 255 255 :scan) scanr))))
     (setf *scan* (reverse scanr))))
 
-
+#+nil
 (defparameter *dark* (accum-img :dark))
+#+nil
 (defparameter *bright* (accum-img :bright))
+#+nil
 (defparameter *blob*
   (let ((a (make-array (array-dimensions *bright*)
 		       :element-type '(complex single-float))))
@@ -203,6 +216,7 @@ minpack_lsquares(
 #+nil
 (vol:write-pgm "/dev/shm/blob.pgm" (vol:normalize-2-csf/ub8-realpart *blob*))
 
+#+nil
 (progn
   (defparameter *scan-pos* nil)
   (let ((diff (replace-zero-with-one (vol:.- *bright* *dark*)))

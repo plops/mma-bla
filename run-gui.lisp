@@ -182,7 +182,7 @@
     b))
 
 
-(defmacro with-lcos-to-cam (&body body)
+#+nil (defmacro with-lcos-to-cam (&body body)
   `(let* ((s 1.129781s0)
 	  (sx  s)
 	  (sy  (- s))
@@ -201,11 +201,12 @@
        (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
        ,@body)))
 
+#+nil
 (defmacro with-cam-to-lcos ((&optional (x 0s0) (y 0s0)) &body body)
-  `(let* ((s .8291927201273807)
+  `(let* ((s .8274659387376514)
 	  (sx  s)
 	  (sy  (- s))
-	  (phi 1.0)
+	  (phi 1.4)
 	  (cp (cos phi))
 	  (sp (sqrt (- 1s0 (* cp cp))))
 	  (tx 783.23854s0)
@@ -221,14 +222,31 @@
        ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .8291927)
+  (let* ((s .8265137622124499)
 	 (sx  s)
 	 (sy  (- s))
-	 (phi -3.17509)
-	 (cp (cos phi))
-	 (sp (sqrt (- 1s0 (* cp cp))))
-	 (tx 1146.17)
-	 (ty 5.59507)
+	 (phi -1.528831430369031)
+	 (sp (sin phi))
+	 (cp (sqrt (- 1s0 (* sp sp))))
+	 (tx 275.3735899995156)
+	 (ty 191.8748047351049)
+	 (a (make-array (list 4 4) :element-type 'single-float
+			 :initial-contents
+			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
+			       (list (* -1 sx sp) (* sy cp)  .0  (+ y ty))
+			       (list .0     .0   1.0  .0)
+			       (list .0     .0    .0 1.0)))))
+    (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
+
+(defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
+  (let* ((s .8265137622124499)
+	 (sx  s)
+	 (sy  (- s))
+	 (phi -1.5)
+	 (sp (sin phi))
+	 (cp (sqrt (- 1s0 (* sp sp))))
+	 (tx 270)
+	 (ty 190)
 	 (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
 			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
@@ -283,7 +301,7 @@
 (change-capture-size 1 1 380 380 nil)
 #+nil
 (change-target 840 470 200 :ril 210s0)
-(let* ((px 840s0) (py 470s0) (pr 210s0)
+(let* ((px 30s0) (py 30s0) (pr 21s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 380)
        (h 380)
@@ -328,19 +346,17 @@
     (gl:color 1 .4 0)
     (gl:line-width 2)
     (draw-circle px py pr)
-    #+nil (dotimes (i 6) 
+     (dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-circle (+ (* 50 i) px-ill) 
-		     (+ (* 50 j) py-ill) 
-		     (* .5 pr-ill))))
+		       (+ (* 50 j) py-ill) 
+		       (* .5 pr-ill))))
     (gl:with-pushed-matrix
-      (%gl:color-3ub  #b11111110 255  255
-		      )
-      (gl:translate 0 1024 0)
+      (%gl:color-3ub  #b11111110 255  255)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
-      #+nil (dotimes (i 16) 
-	(dotimes (j 13)
+      (dotimes (i 6) 
+	(dotimes (j 3)
 	  (draw-disk (+ (* 50 i) px-ill) 
 		     (+ (* 50 j) py-ill) 
 		     (* .5 pr-ill))))))
@@ -402,7 +418,7 @@
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 20 (aref l1 i))
 			  (min 255 (max 0 (floor (- (aref l1 i) 40) 
-						 5)))
+						 19)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
@@ -420,6 +436,8 @@
 (clara::prepare-acquisition)
 #+nil
 (abort-acquisition)
+#+nil
+(lookup-error (val2 (get-status)))
 #+nil
 (sb-thread:make-thread 
  #'(lambda ()
