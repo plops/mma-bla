@@ -13,15 +13,25 @@
   (check
     (initialize "/usr/local/etc/andor"))
   (trigger-mode :external)
-  (set-exposure-time .0121)
+  (set-exposure-time .01521)
   (read-mode :image)
   (acquisition-mode :single-scan)
   (check
     (set-image 1 1
 	       1 1392
 	       1 1040))
-  (set-ad-channel 1))
+  (set-ad-channel 1) ;; 1 is the fast one
+  (check (clara::set-fast-external-trigger 1))
+  (check (set-frame-transfer-mode 1))
+  )
+
+(acquisition-mode :kinetics)
+
+
 (set-ad-channel 1)
+(check
+ (clara::set-isolated-crop-mode 1 400 400 1 1))
+
 (get-temperature-range)
 
 (get-detector)
@@ -34,6 +44,9 @@
   (set-exposure-time  .01521))
 
 #+nil
+(format t "~a" (clara::save-camera-specs "/dev/shm/o"))
+
+#+nil
 (set-shutter 1 1 0 0)
 
 (clara:status)
@@ -44,10 +57,10 @@
 
 (clara:uninit)
 
-
+(format t "~a~%" (clara::capabilities))
 
 ;; set-accumulation-cycle-time
-;; aet-number-accumulations (that's just in memory)
+;; set-number-accumulations (that's just in memory)
 
 
 

@@ -356,3 +356,15 @@
 (define-alien-routine ("SaveAsSif" save-as-sif)
     unsigned-int
   (path c-string))
+
+(define-alien-routine ("SetFastExtTrigger" set-fast-external-trigger)
+    unsigned-int
+  (mode int))
+
+(define-alien-routine ("SetIsolatedCropMode" set-isolated-crop-mode)
+    unsigned-int
+  (active int)
+  (height int)
+  (width int)
+  (vbin int)
+  (hbin int))

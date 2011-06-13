@@ -21,8 +21,9 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) .1))
-
+ (+ (focus:get-position) 1.0))
+#+nil
+(capture)
 (defvar *mma-chan* nil)
 (defvar *binary-fifo* nil)
 
@@ -89,6 +90,8 @@
 #+nil
 (mma "black")
 #+nil
+(mma "set-cycle-time 33")
+#+nil
 (mma "img")
 #+nil
 (mma "stop")
@@ -101,7 +104,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 118 138 40")
+(mma "splat 118 138 64")
 #+nil
 (mma "quit")
 
@@ -111,10 +114,10 @@
 	       (+ 128 (* r (sin phi)))
 	       d)))
 #+nil
-(mma-polar 128. 45. 20)
+(mma-polar 107. 35. 1.)
 
 #+nil
-(mma "set-cycle-time 350")
+(mma "set-cycle-time 285")
 #+nil
 (mma "stop")
 #+nil
@@ -131,13 +134,12 @@
 	  (incf sum (aref img j i))))
       sum)))
 
-
 #+nil
-(progn
+(let ((fac 8))
   (defparameter *scan* nil)
-  (loop for j below 256 by 2 do
-       (loop for i below 256 by 2 do
-	    (mma (format nil "splat ~a ~a 7" i j))
+  (loop for j below 256 by fac do
+       (loop for i below 256 by fac do
+	    (mma (format nil "splat ~a ~a 2" i j))
 	    (capture)
 	    (let ((s (list i j (sum *line*))))
 	      (format t "~a~%" s)
@@ -149,7 +151,7 @@
 #+nil
 (vol:write-pgm "/dev/shm/o.pgm"
  (let* ((d *scan*)
-	(fac 2)
+	(fac 8)
 	(ma (reduce #'max d :key #'third))
 	(mi (reduce #'min d :key #'third))
 	(b (make-array (list (/ 256 fac) (/ 256 fac))
@@ -200,7 +202,7 @@
        ,@body)))
 
 (defmacro with-cam-to-lcos ((&optional (x 0s0) (y 0s0)) &body body)
-  `(let* ((s .885090144449)
+  `(let* ((s .8291927201273807)
 	  (sx  s)
 	  (sy  (- s))
 	  (phi 1.0)
@@ -219,14 +221,14 @@
        ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .82705)
+  (let* ((s .8291927)
 	 (sx  s)
 	 (sy  (- s))
-	 (phi -3.17375)
+	 (phi -3.17509)
 	 (cp (cos phi))
 	 (sp (sqrt (- 1s0 (* cp cp))))
-	 (tx 1140.49)
-	 (ty 7.782)
+	 (tx 1146.17)
+	 (ty 5.59507)
 	 (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
 			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
@@ -271,8 +273,12 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-target 865 630 6 :ril 900s0)
-(let* ((px 900s0) (py 600s0) (pr 900s0)
+(change-capture-size 1 1 1392 1040)
+#+nil
+(change-capture-size 1 1 400 400)
+#+nil
+(change-target 840 470 200 :ril 210s0)
+(let* ((px 840s0) (py 470s0) (pr 210s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 1392)
        (h 1040)
@@ -297,7 +303,7 @@
 	  y yy
 	  new-size t))
   #+nil(change-capture-size 1 1 1392 1040)
-  
+ 
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
     (gl:clear :color-buffer-bit)
@@ -313,27 +319,30 @@
 		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex))))
     (gl:color 1 .4 0)
-    (gl:line-width 4)
+    (gl:line-width 2)
     (draw-circle px py pr)
-      (dotimes (i 6) 
+    #+nil (dotimes (i 6) 
 	(dotimes (j 3)
-	  (draw-disk (+ (* 50 i) px-ill) 
+	  (draw-circle (+ (* 50 i) px-ill) 
 		     (+ (* 50 j) py-ill) 
-		     (* .2 pr-ill))))
+		     (* .5 pr-ill))))
     (gl:with-pushed-matrix
-      (%gl:color-3ub  #b11111110 255  255)
+      (%gl:color-3ub  #b11111110 255  255
+		      )
       (gl:translate 0 1024 0)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
-      (dotimes (i 6) 
-	(dotimes (j 3)
+      #+nil (dotimes (i 16) 
+	(dotimes (j 13)
 	  (draw-disk (+ (* 50 i) px-ill) 
 		     (+ (* 50 j) py-ill) 
-		     (* .2 pr-ill))))))
+		     (* .5 pr-ill))))))
 
   (defun capture ()
     #-clara (when new-size
-      (check
+	     (check 
+		(clara::set-isolated-crop-mode 1 h w 1 1))
+      #+nil (check
 	(set-image 1 1 x w y h))
       (setf new-size nil))
     #+andor3 (defparameter *line*
@@ -376,8 +385,8 @@
 	   (declare (ignorable h))
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 20 (aref l1 i))
-			  (min 255 (max 0 (floor (aref l1 i) 
-						 10)))
+			  (min 255 (max 0 (floor (- (aref l1 i) 40) 
+						 1)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
