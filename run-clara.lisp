@@ -25,13 +25,16 @@
   (check (set-frame-transfer-mode 1))
   )
 
-(acquisition-mode :kinetics)
+(acquisition-mode :run-till-abort)
 
 
+(get-acquisition-timings)
+(check (clara::set-fast-external-trigger 1))
+(check (set-frame-transfer-mode 1))
 (set-ad-channel 1)
 (check
- (clara::set-isolated-crop-mode 1 400 400 1 1))
-
+ (clara::set-isolated-crop-mode 1 380 380 1 1))
+(check (clara::set-overlap-mode 1))
 (get-temperature-range)
 
 (get-detector)

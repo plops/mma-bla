@@ -368,3 +368,7 @@
   (width int)
   (vbin int)
   (hbin int))
+
+(define-alien-routine ("SetOverlapMode" set-overlap-mode)
+    unsigned-int
+  (mode int))

@@ -275,7 +275,7 @@
 #+nil
 (change-capture-size 1 1 1392 1040)
 #+nil
-(change-capture-size 1 1 400 400)
+(change-capture-size 1 1 380 380)
 #+nil
 (change-target 840 470 200 :ril 210s0)
 (let* ((px 840s0) (py 470s0) (pr 210s0)
