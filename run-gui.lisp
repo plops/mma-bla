@@ -257,13 +257,18 @@
 (defparameter *do-capture* t)
 
 #+nil
-(sb-thread:make-thread 
- #'(lambda () 
-     (loop while *do-capture* do
-	(capture)
-	#+nil
-	(sleep .01)))
- :name "capture")
+(progn
+  
+ (sb-thread:make-thread 
+  #'(lambda () 
+      (start-acquisition)
+      (loop while *do-capture* do
+	   (capture)
+	   #+nil
+	   (sleep .01))
+      (abort-acquisition)
+      (free-internal-memory))
+  :name "capture"))
 
 (progn
  (defparameter *t8* nil)
@@ -275,15 +280,16 @@
 #+nil
 (change-capture-size 1 1 1392 1040)
 #+nil
-(change-capture-size 1 1 380 380)
+(change-capture-size 1 1 380 380 nil)
 #+nil
 (change-target 840 470 200 :ril 210s0)
 (let* ((px 840s0) (py 470s0) (pr 210s0)
        (px-ill px) (py-ill py) (pr-ill pr)
-       (w 1392)
-       (h 1040)
+       (w 380)
+       (h 380)
        (x 1)
        (y 1)
+       (crop-mode nil)
        (new-size nil))
   (defun change-target (x y r &key (xil x) (yil y) (ril r))
     (setf px x
@@ -296,12 +302,13 @@
 			 (max 1 (+ 1 py (- r)))
 			 (min 1392 (+ px r))
 			 (min 1040 (+ py r))))
-  (defun change-capture-size (xx yy ww hh)
+  (defun change-capture-size (xx yy ww hh &optional crop)
     (setf w ww
 	  h hh
 	  x xx
 	  y yy
-	  new-size t))
+	  new-size t
+	  crop-mode crop))
   #+nil(change-capture-size 1 1 1392 1040)
  
   (defun draw-screen ()
@@ -340,11 +347,14 @@
 
   (defun capture ()
     #-clara (when new-size
-	     (check 
-		(clara::set-isolated-crop-mode 1 h w 1 1))
-      #+nil (check
-	(set-image 1 1 x w y h))
-      (setf new-size nil))
+	      (abort-acquisition)
+	      (if crop-mode
+		(check 
+		 (clara::set-isolated-crop-mode 1 h w 1 1))
+		(check
+		  (set-image 1 1 x w y h)))
+	      (start-acquisition)
+	      (setf new-size nil))
     #+andor3 (defparameter *line*
       (multiple-value-bind (ptr img) (andor3::wait-buffer)
 	(let* ((cpy (make-array (array-dimensions img)
@@ -361,15 +371,20 @@
 	    (img1 (sb-ext:array-storage-vector img))
 	    (sap (sb-sys:vector-sap img1)))
        (progn
-	 (start-acquisition)
-	 (loop while (not (eq 'clara::DRV_IDLE
+	#+nil (start-acquisition)
+	 #+nil (loop while (not (eq 'clara::DRV_IDLE
 			      (lookup-error (val2 (get-status)))))
 	    do
 	    (sleep .003))
+	(check (wait-for-acquisition)) 
+	(format t "imgs ~a~%" (multiple-value-list (get-total-number-images-acquired)))
 	 (sb-sys:with-pinned-objects (img)
-	   (get-acquired-data16 sap (length img1)))
-	 (check
-	   (free-internal-memory)))
+	    (check (get-most-recent-image16 sap (length img1)))
+	   #+nil (check (get-acquired-data16 sap (length img1))))
+	#+nil (abort-acquisition)
+        #+nil(check
+	   (free-internal-memory))
+	 )
        img))
    (defparameter *t8*
      (when (and *line*			;*dark* *white* *line*
@@ -383,10 +398,11 @@
 	      )
 	 (destructuring-bind (h w) (array-dimensions *line*)
 	   (declare (ignorable h))
+
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 20 (aref l1 i))
 			  (min 255 (max 0 (floor (- (aref l1 i) 40) 
-						 1)))
+						 5)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
@@ -400,10 +416,10 @@
 	 b)))))
 #+nil
 (capture)
-
-
-
-
+#+nil
+(clara::prepare-acquisition)
+#+nil
+(abort-acquisition)
 #+nil
 (sb-thread:make-thread 
  #'(lambda ()
