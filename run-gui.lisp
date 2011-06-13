@@ -21,7 +21,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) -3.0))
+ (+ (focus:get-position) 1.0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -518,6 +518,31 @@
 	  b))
       (change-phase nil))))
 
+(defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
+  (when *line*
+    (destructuring-bind (h w) (array-dimensions *line*)
+     (let ((v (make-array (list n h w)
+			  :element-type '(unsigned-byte 16)))
+	   (z0 (focus:get-position)))
+       (setf *do-capture* nil)
+       (start-acquisition)
+       (dotimes (k n)
+	 (focus:set-position (+ z0 (* k (/ depth n))))
+	 (sleep .02)
+	 (obtain-section)
+	 (dotimes (j h)
+	   (dotimes (i w)
+	     (setf (aref v k j i) (aref *sec* j i)))))
+       (defparameter *vol* v)
+       (focus:set-position z0)
+       (setf *do-capture* t)
+       (abort-acquisition)))))
+#+nil
+(time (obtain-sectioned-stack))
+#+nil
+(focus:get-position)
+#+nil
+(change-phase nil)
 #+nil
 (capture)
 #+nil
