@@ -21,7 +21,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) 1.0))
+ (+ (focus:get-position) -3.0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -90,7 +90,7 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 600")
+(mma "set-cycle-time 33")
 #+nil
 (mma "img")
 #+nil
@@ -279,7 +279,16 @@
 
 (defparameter *do-capture* nil)
 (defparameter *do-capture* t)
-
+#+nil
+(progn
+  (sb-thread:make-thread 
+  #'(lambda () 
+      (start-acquisition)
+      (loop while *do-capture* do
+	   (obtain-section))
+      (abort-acquisition)
+      (free-internal-memory))
+  :name "capture-section"))
 #+nil
 (progn
   
@@ -296,6 +305,7 @@
 
 (progn
  (defparameter *t8* nil)
+ (defparameter *t9* nil)
  (defparameter *dark* nil)
  (defparameter *white* nil)
  (defparameter *line* nil))
@@ -307,6 +317,8 @@
 (change-capture-size 1 1 432 412 nil)
 #+nil
 (change-target 840 470 200 :ril 210s0)
+#+nil
+(change-phase 1)
 (let* ((px 220s0) (py 230s0) (pr 230s0)
        (px-ill px) (py-ill py) (pr-ill pr)
        (w 432)
@@ -316,16 +328,18 @@
        (crop-mode t)
        (new-size t)
        
-       (white-width 12)
+       (white-width 8)
        (phases-x 4)
        (phases-y 1)
        (grating (make-array (* phases-x phases-y white-width)
 			    :element-type '(unsigned-byte 8)))
        (phase 0))
   (defun change-phase (p)
-    (setf phase p
-	  grating (gui:grating->texture (gui:grating-stack phases-y phases-x)
-					p :h white-width :w white-width)))
+    (setf phase p)
+    (when p
+      (setf grating (gui:grating->texture (gui:grating-stack phases-y phases-x)
+					  p :h white-width :w white-width)))
+    nil)
   (change-phase 0)
   (defun change-target (x y r &key (xil x) (yil y) (ril r))
     (setf px x
@@ -361,6 +375,14 @@
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex))))
+    (when *t9*
+      (gl:with-pushed-matrix
+	(gl:translate (+ 10 w (- x 1)) (- y 1) 0)
+	(let ((tex (make-instance 'gui::texture :data *t9*)))
+	  (destructuring-bind (h w) (array-dimensions *t9*)
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		      :wt 1s0 :ht 1s0))
+	  (gui:destroy tex))))
     (gl:color 1 .4 0)
     (gl:line-width 2)
     (draw-circle px py pr)
@@ -372,15 +394,17 @@
     (gl:with-pushed-matrix
       (%gl:color-3ub  #b11111110 255  255)
       (load-cam-to-lcos-matrix 0s0 1024s0)
-      (gl:with-pushed-matrix 
-	(gl:translate -30 -30 0)
-       (let ((repetition 12s0))
-	 (gui::with-grating (g grating)
-	   (gui::draw-grating g
-			      :w (* repetition white-width phases-x)
-			      :h (* 4 repetition white-width phases-y)
-			      :wt repetition
-			      :ht repetition))))
+      #-nil
+      (when phase
+	(gl:with-pushed-matrix 
+	 (gl:translate -40 -40 0)
+	 (let ((repetition 19s0))
+	   (gui::with-grating (g grating)
+	     (gui::draw-grating g
+				:w (* repetition white-width phases-x)
+				:h (* 4 repetition white-width phases-y)
+				:wt repetition
+				:ht repetition)))))
       #+nil 
       (draw-disk px-ill py-ill pr-ill)
        #+nil(dotimes (i 6) 
@@ -388,7 +412,7 @@
 	  (draw-disk (+ (* 50 i) px-ill) 
 		     (+ (* 50 j) py-ill) 
 		     (* .5 pr-ill))))))
-
+  
   (defun capture ()
     #-clara (when new-size
 	      (unless (eq 'clara::DRV_IDLE
@@ -445,8 +469,8 @@
 
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 1 (aref l1 i))
-			  (min 255 (max 0 (floor (- (aref l1 i) 1065) 
-						 3)))
+			  (min 255 (max 0 (floor (- (aref l1 i) 20) 
+						 1)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
@@ -457,10 +481,54 @@
 				   80)
 				  (t 0))))))
 	       (setf (aref b1 i) v))))
-	 b)))))
+	 b))))
+  (defun obtain-section ()
+    (let ((phase-im (make-array (list phases-y phases-x h w)
+				:element-type '(unsigned-byte 16)))
+	  (sec (make-array (list h w)
+			   :element-type '(unsigned-byte 16))))
+      (dotimes (py phases-y)
+	(dotimes (px phases-x)
+	  (change-phase (+ px (* phases-x py)))
+	  (sleep .01)
+	  (capture)
+	  (dotimes (j h)
+	    (dotimes (i w)
+	      (setf (aref phase-im py px j i) (aref *line* j i))))))
+      (dotimes (j h)
+	(dotimes (i w)
+	  (let* ((v (aref phase-im 0 0 j i))
+		 (mi v)
+		 (ma v))
+	    (dotimes (py phases-y)
+	      (dotimes (px phases-x)
+		(setf mi (min mi (aref phase-im py px j i))
+		      ma (max ma (aref phase-im py px j i)))))
+	    (setf (aref sec j i) (- ma mi)))))
+      (defparameter *sec* sec)
+      (defparameter *t9*
+	(let* ((b (make-array (list h w)
+			      :element-type '(unsigned-byte 8)))
+	       (b1 (sb-ext:array-storage-vector b))
+	       (s1 (sb-ext:array-storage-vector sec)))
+	  (dotimes (i (length b1))
+	    (setf (aref b1 i) (min 255 (max 0
+					    (floor (aref s1 i)
+						   1)))))
+	  b))
+      (change-phase nil))))
 
 #+nil
 (capture)
+#+nil
+(progn (start-acquisition)
+       (obtain-section)
+       (abort-acquisition))
+#+nil
+(let ((a (sb-ext:array-storage-vector *sec*)))
+  (reduce #'max a))
+#+NIL
+(status)
 #+nil
 (clara::prepare-acquisition)
 #+nil

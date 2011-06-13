@@ -38,6 +38,7 @@
 (get-temperature-range)
 (start-acquisition)
 (abort-acquisition)
+(status)
 
 (get-detector)
 (cooler-on)
