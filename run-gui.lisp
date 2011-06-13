@@ -90,7 +90,7 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 33")
+(mma "set-cycle-time 600")
 #+nil
 (mma "img")
 #+nil
@@ -163,7 +163,11 @@
 	      (push s *scan*))))
   (abort-acquisition))
 #+nil
-(capture)
+(progn
+  (check (start-acquisition))
+  (capture)
+  (check (abort-acquisition)))
+
 #+nil
 (require :vol)
 #+nil
@@ -300,7 +304,7 @@
 #+nil
 (change-capture-size 1 1 1392 1040 nil)
 #+nil
-(change-capture-size 1 1 432 412 t)
+(change-capture-size 1 1 432 412 nil)
 #+nil
 (change-target 840 470 200 :ril 210s0)
 (let* ((px 220s0) (py 230s0) (pr 230s0)
@@ -310,7 +314,19 @@
        (x 1)
        (y 1)
        (crop-mode t)
-       (new-size t))
+       (new-size t)
+       
+       (white-width 12)
+       (phases-x 4)
+       (phases-y 1)
+       (grating (make-array (* phases-x phases-y white-width)
+			    :element-type '(unsigned-byte 8)))
+       (phase 0))
+  (defun change-phase (p)
+    (setf phase p
+	  grating (gui:grating->texture (gui:grating-stack phases-y phases-x)
+					p :h white-width :w white-width)))
+  (change-phase 0)
   (defun change-target (x y r &key (xil x) (yil y) (ril r))
     (setf px x
 	  py y
@@ -356,7 +372,17 @@
     (gl:with-pushed-matrix
       (%gl:color-3ub  #b11111110 255  255)
       (load-cam-to-lcos-matrix 0s0 1024s0)
-      #+nil (draw-disk px-ill py-ill pr-ill)
+      (gl:with-pushed-matrix 
+	(gl:translate -30 -30 0)
+       (let ((repetition 12s0))
+	 (gui::with-grating (g grating)
+	   (gui::draw-grating g
+			      :w (* repetition white-width phases-x)
+			      :h (* 4 repetition white-width phases-y)
+			      :wt repetition
+			      :ht repetition))))
+      #+nil 
+      (draw-disk px-ill py-ill pr-ill)
        #+nil(dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-disk (+ (* 50 i) px-ill) 
@@ -419,8 +445,8 @@
 
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 1 (aref l1 i))
-			  (min 255 (max 0 (floor (- (aref l1 i) 23) 
-						 .09)))
+			  (min 255 (max 0 (floor (- (aref l1 i) 1065) 
+						 3)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
@@ -432,6 +458,7 @@
 				  (t 0))))))
 	       (setf (aref b1 i) v))))
 	 b)))))
+
 #+nil
 (capture)
 #+nil
