@@ -544,6 +544,29 @@
 #+nil
 (change-phase nil)
 #+nil
+(progn
+  (push "/home/martin/0215/0126/bead-eval/" asdf:*central-registry*)
+  (push "/home/martin/0215/0102/woropt-cyb-0628/" asdf:*central-registry*)
+  (require :bead-eval))
+#+nil
+(defparameter *g3* (bead-eval:make-gauss3 (vol:convert-3-ub16/sf-mul *vol*) :sigma-x-pixel 3.1s0))
+#+nil
+(defparameter *bvol* (vol:convert-3-csf/sf-realpart
+		    (vol:convolve-circ-3-csf *g3*
+					     (vol:convert-3-ub16/csf-mul *vol*))))
+#+nil
+(vol:write-pgm "/dev/shm/c.pgm" 
+	       (vol:normalize-2-sf/ub8
+		(vol:cross-section-xz *bvol*)))
+
+(let ((l (run-ics::nuclear-seeds *bvol*)))
+  (multiple-value-bind (hist n mi ma)
+      (run-ics::point-list-histogram l)
+    (run-ics::print-histogram hist n (* 1s10 mi) (* 1s10 ma))
+    (terpri)
+    (setf *num-points* (reduce #'+ (subseq hist 5)))))
+
+#+nil
 (capture)
 #+nil
 (progn (start-acquisition)
