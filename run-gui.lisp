@@ -222,14 +222,14 @@
        ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .8265137622124499)
+  (let* ((s 0.828333873909549)
 	 (sx  s)
 	 (sy  (- s))
-	 (phi -1.528831430369031)
+	 (phi -3.101722728951688)
 	 (sp (sin phi))
-	 (cp (sqrt (- 1s0 (* sp sp))))
-	 (tx 275.3735899995156)
-	 (ty 191.8748047351049)
+	 (cp (cos phi))
+	 (tx 608.4330743004457)
+	 (ty 168.9188383630887)
 	 (a (make-array (list 4 4) :element-type 'single-float
 			 :initial-contents
 			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
@@ -238,22 +238,6 @@
 			       (list .0     .0    .0 1.0)))))
     (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
 
-(defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
-  (let* ((s .8265137622124499)
-	 (sx  s)
-	 (sy  (- s))
-	 (phi -1.5)
-	 (sp (sin phi))
-	 (cp (sqrt (- 1s0 (* sp sp))))
-	 (tx 270)
-	 (ty 190)
-	 (a (make-array (list 4 4) :element-type 'single-float
-			 :initial-contents
-			 (list (list (* sx cp)    (* sy sp)  .0  (+ x tx))
-			       (list (* -1 sx sp) (* sy cp)  .0  (+ y ty))
-			       (list .0     .0   1.0  .0)
-			       (list .0     .0    .0 1.0)))))
-    (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
 
 
 (defun draw-circle (x y r)
@@ -296,19 +280,19 @@
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
-(change-capture-size 1 1 1392 1040)
+(change-capture-size 1 1 1392 1040 nil)
 #+nil
-(change-capture-size 1 1 380 380 nil)
+(change-capture-size 1 1 432 412 t)
 #+nil
 (change-target 840 470 200 :ril 210s0)
-(let* ((px 30s0) (py 30s0) (pr 21s0)
+(let* ((px 220s0) (py 230s0) (pr 230s0)
        (px-ill px) (py-ill py) (pr-ill pr)
-       (w 380)
-       (h 380)
+       (w 432)
+       (h 412)
        (x 1)
        (y 1)
-       (crop-mode nil)
-       (new-size nil))
+       (crop-mode t)
+       (new-size t))
   (defun change-target (x y r &key (xil x) (yil y) (ril r))
     (setf px x
 	  py y
@@ -346,7 +330,7 @@
     (gl:color 1 .4 0)
     (gl:line-width 2)
     (draw-circle px py pr)
-     (dotimes (i 6) 
+     #+nil(dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-circle (+ (* 50 i) px-ill) 
 		       (+ (* 50 j) py-ill) 
@@ -355,7 +339,7 @@
       (%gl:color-3ub  #b11111110 255  255)
       (load-cam-to-lcos-matrix 0s0 1024s0)
       (draw-disk px-ill py-ill pr-ill)
-      (dotimes (i 6) 
+      #+nil (dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-disk (+ (* 50 i) px-ill) 
 		     (+ (* 50 j) py-ill) 
@@ -363,12 +347,12 @@
 
   (defun capture ()
     #-clara (when new-size
-	      (abort-acquisition)
+	      (unless (eq 'clara::DRV_IDLE
+			  (lookup-error (val2 (get-status))))
+		(abort-acquisition))
 	      (if crop-mode
-		(check 
-		 (clara::set-isolated-crop-mode 1 h w 1 1))
-		(check
-		  (set-image 1 1 x w y h)))
+		  (check (clara::set-isolated-crop-mode 1 h w 1 1))
+		  (check (set-image 1 1 x w y h)))
 	      (start-acquisition)
 	      (setf new-size nil))
     #+andor3 (defparameter *line*
@@ -389,7 +373,7 @@
        (progn
 	#+nil (start-acquisition)
 	 #+nil (loop while (not (eq 'clara::DRV_IDLE
-			      (lookup-error (val2 (get-status)))))
+				    (lookup-error (val2 (get-status)))))
 	    do
 	    (sleep .003))
 	(check (wait-for-acquisition)) 
