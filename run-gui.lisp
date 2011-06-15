@@ -1,5 +1,6 @@
 #.(progn
     (sb-posix:setenv "DISPLAY" ":0" 1)
+    (sb-posix:setenv "__GL_SYNC_TO_VBLANK" "1" 1)
     (sb-ext:run-program "/usr/bin/xset" '("s" "off"))
     (sb-ext:run-program "/usr/bin/xset" '("-dpms"))
 
@@ -21,7 +22,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) 1.0))
+ (+ (focus:get-position) .1))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -113,6 +114,9 @@
 	       (+ 128 (* r (cos phi)))
 	       (+ 128 (* r (sin phi)))
 	       d)))
+
+#+nil
+(mma-polar 20s0 1.2s0 22s0)
 #+nil
 (progn
  (defparameter *mma-size* 20s0)
@@ -285,6 +289,7 @@
   #'(lambda () 
       (start-acquisition)
       (loop while *do-capture* do
+	   (sleep .01)
 	   (obtain-section))
       (abort-acquisition)
       (free-internal-memory))
@@ -306,6 +311,8 @@
 (progn
  (defparameter *t8* nil)
  (defparameter *t9* nil)
+ (defparameter *phase-im* nil)
+ (defparameter *sec* nil)
  (defparameter *dark* nil)
  (defparameter *white* nil)
  (defparameter *line* nil))
@@ -364,7 +371,7 @@
   (defun draw-screen ()
     (gl:clear-color 0 0 0 1)
     (gl:clear :color-buffer-bit)
-    (sleep (/ 60))
+    ;(sleep (/ 60))
     (gl:line-width 1)
     (gl:color 0 1 1)
     (when *t8*
@@ -490,11 +497,12 @@
       (dotimes (py phases-y)
 	(dotimes (px phases-x)
 	  (change-phase (+ px (* phases-x py)))
-	  (sleep .01)
+	  (sleep .05)
 	  (capture)
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (setf (aref phase-im py px j i) (aref *line* j i))))))
+      (defparameter *phase-im* phase-im)
       (dotimes (j h)
 	(dotimes (i w)
 	  (let* ((v (aref phase-im 0 0 j i))
@@ -505,7 +513,7 @@
 		(setf mi (min mi (aref phase-im py px j i))
 		      ma (max ma (aref phase-im py px j i)))))
 	    (setf (aref sec j i) (- ma mi)))))
-      (defparameter *sec* sec)
+      (setf *sec* sec)
       (defparameter *t9*
 	(let* ((b (make-array (list h w)
 			      :element-type '(unsigned-byte 8)))
@@ -514,40 +522,51 @@
 	  (dotimes (i (length b1))
 	    (setf (aref b1 i) (min 255 (max 0
 					    (floor (aref s1 i)
-						   1)))))
+						   4)))))
 	  b))
       (change-phase nil))))
 
 (defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
   (when *line*
     (destructuring-bind (h w) (array-dimensions *line*)
-     (let ((v (make-array (list n h w)
-			  :element-type '(unsigned-byte 16)))
-	   (z0 (focus:get-position)))
-       (setf *do-capture* nil)
-       (start-acquisition)
-       (dotimes (k n)
-	 (focus:set-position (+ z0 (* k (/ depth n))))
-	 (sleep .02)
-	 (obtain-section)
-	 (dotimes (j h)
-	   (dotimes (i w)
-	     (setf (aref v k j i) (aref *sec* j i)))))
-       (defparameter *vol* v)
-       (focus:set-position z0)
-       (setf *do-capture* t)
-       (abort-acquisition)))))
+      (let* ((phases-x 4)
+	    (v (make-array (list n h w)
+			   :element-type '(unsigned-byte 16)))
+	    (vp (make-array (list (* n phases-x) h w)
+			    :element-type '(unsigned-byte 16)))
+	    (z0 (focus:get-position)))
+	(setf *do-capture* nil)
+	(start-acquisition)
+	(dotimes (k n)
+	  (focus:set-position (+ z0 (* k (/ depth n))))
+	  (sleep .02)
+	  (obtain-section)
+	  (dotimes (j h)
+	    (dotimes (i w)
+	      (setf (aref v k j i) (aref *sec* j i))
+	      (dotimes (p phases-x)
+		(setf (aref vp (+ (* phases-x k) p) j i) (aref *phase-im* 0 p j i))))))
+	(defparameter *vol* v)
+	(defparameter *volp* vp)
+	(focus:set-position z0)
+	(setf *do-capture* t)
+	(abort-acquisition)))))
 #+nil
 (time (obtain-sectioned-stack))
 #+nil
 (focus:get-position)
 #+nil
 (change-phase nil)
+
 #+nil
 (progn
   (push "/home/martin/0215/0126/bead-eval/" asdf:*central-registry*)
   (push "/home/martin/0215/0102/woropt-cyb-0628/" asdf:*central-registry*)
-  (require :bead-eval))
+  (require :bead-eval)
+  (require :vol))
+#+nil
+(vol:save-stack-ub8 "/dev/shm/op/" 
+		    (vol:normalize-3-sf/ub8 (vol:convert-3-ub16/sf-mul *volp*)))
 #+nil
 (defparameter *g3* (bead-eval:make-gauss3 (vol:convert-3-ub16/sf-mul *vol*) :sigma-x-pixel 3.1s0))
 #+nil
@@ -558,7 +577,7 @@
 (vol:write-pgm "/dev/shm/c.pgm" 
 	       (vol:normalize-2-sf/ub8
 		(vol:cross-section-xz *bvol*)))
-
+#+nil
 (let ((l (run-ics::nuclear-seeds *bvol*)))
   (multiple-value-bind (hist n mi ma)
       (run-ics::point-list-histogram l)
@@ -589,4 +608,5 @@
      (gui:with-gui (1280 (* 2 1024))
        (draw-screen)))
  :name "display-gui")
-
+#+nil
+(gui::get-frame-rate)

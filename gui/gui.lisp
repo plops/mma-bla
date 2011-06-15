@@ -27,12 +27,37 @@
       (matrix-mode :modelview)
       (load-identity))
 
+(defun current-time ()
+  (multiple-value-bind (sec usec)
+      (sb-ext:get-time-of-day)
+    (+ sec (/ usec 1000000))))
+#+nil
+(current-time)
+
+(let* ((start 0)
+       (end 0)
+       (count-max 10)
+       (count count-max)
+       (frame-rate 0))
+  (defun measure-frame-rate ()
+    (when (= 0 count)
+      (setf end (current-time)
+	    frame-rate (/ (* 1s0 count-max)
+			  (- end start))
+	    count count-max
+	    start (current-time)))
+    (decf count))
+  (defun get-frame-rate ()
+    frame-rate))
+
+
 (defmethod display ((w fenster))
   (clear :color-buffer-bit :depth-buffer-bit)
   (load-identity)
   
   (funcall (draw-func w))
-    
+  
+  (measure-frame-rate)
   (swap-buffers)
   (post-redisplay))
 
