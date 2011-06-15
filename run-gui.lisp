@@ -22,7 +22,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) .1))
+ (+ (focus:get-position) .2))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -91,7 +91,7 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 33")
+(mma "set-cycle-time 330")
 #+nil
 (mma "img")
 #+nil
@@ -105,7 +105,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 118 138 64")
+(mma "splat 128 128 21")
 #+nil
 (mma "quit")
 
@@ -289,7 +289,7 @@
   #'(lambda () 
       (start-acquisition)
       (loop while *do-capture* do
-	   (sleep .01)
+	   ;(sleep .01)
 	   (obtain-section))
       (abort-acquisition)
       (free-internal-memory))
@@ -340,7 +340,9 @@
        (phases-y 1)
        (grating (make-array (* phases-x phases-y white-width)
 			    :element-type '(unsigned-byte 8)))
-       (phase 0))
+       (phase 0)
+       (count 0)
+       (phase-ims (list nil nil nil nil)))
   (defun change-phase (p)
     (setf phase p)
     (when p
@@ -369,11 +371,14 @@
   #+nil(change-capture-size 1 1 1392 1040)
  
   (defun draw-screen ()
+    (incf count)
     (gl:clear-color 0 0 0 1)
+    
     (gl:clear :color-buffer-bit)
     ;(sleep (/ 60))
     (gl:line-width 1)
     (gl:color 0 1 1)
+    
     (when *t8*
       (gl:with-pushed-matrix
 	(gl:translate (- x 1) (- y 1) 0)
@@ -382,9 +387,18 @@
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex))))
+    (format t "~a~%" phase-ims)
+    (when (elt phase-ims 0)
+      (gl:with-pushed-matrix
+	(gl:translate 0 0 0)
+	(let ((tex (make-instance 'gui::texture :data (elt phase-ims 0))))
+	  (destructuring-bind (h w) (array-dimensions (elt phase-ims 0))
+	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		      :wt 1s0 :ht 1s0))
+	  (gui:destroy tex))))
     (when *t9*
       (gl:with-pushed-matrix
-	(gl:translate (+ 10 w (- x 1)) (- y 1) 0)
+	(gl:translate (+ 30 w (- x 1)) (- y 1) 0)
 	(let ((tex (make-instance 'gui::texture :data *t9*)))
 	  (destructuring-bind (h w) (array-dimensions *t9*)
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
@@ -409,11 +423,11 @@
 	   (gui::with-grating (g grating)
 	     (gui::draw-grating g
 				:w (* repetition white-width phases-x)
-				:h (* 4 repetition white-width phases-y)
+				:h (* 6 repetition white-width phases-y)
 				:wt repetition
 				:ht repetition)))))
-      #+nil 
-      (draw-disk px-ill py-ill pr-ill)
+      #+nil(when (= 1 (mod count 2))
+       (draw-disk px-ill py-ill pr-ill))
        #+nil(dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-disk (+ (* 50 i) px-ill) 
@@ -476,7 +490,7 @@
 
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 1 (aref l1 i))
-			  (min 255 (max 0 (floor (- (aref l1 i) 20) 
+			  (min 255 (max 0 (floor (- (aref l1 i) 0) 
 						 1)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
@@ -499,6 +513,7 @@
 	  (change-phase (+ px (* phases-x py)))
 	  (sleep .05)
 	  (capture)
+	  (setf (elt phase-ims px) *line*)
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (setf (aref phase-im py px j i) (aref *line* j i))))))
@@ -522,19 +537,17 @@
 	  (dotimes (i (length b1))
 	    (setf (aref b1 i) (min 255 (max 0
 					    (floor (aref s1 i)
-						   4)))))
+						   1)))))
 	  b))
-      (change-phase nil))))
-
-(defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
+      (change-phase nil)))
+  (defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
   (when *line*
     (destructuring-bind (h w) (array-dimensions *line*)
-      (let* ((phases-x 4)
-	    (v (make-array (list n h w)
-			   :element-type '(unsigned-byte 16)))
-	    (vp (make-array (list (* n phases-x) h w)
+      (let* ((v (make-array (list n h w)
 			    :element-type '(unsigned-byte 16)))
-	    (z0 (focus:get-position)))
+	     (vp (make-array (list (* n phases-x) h w)
+			    :element-type '(unsigned-byte 16)))
+	     (z0 (focus:get-position)))
 	(setf *do-capture* nil)
 	(start-acquisition)
 	(dotimes (k n)
@@ -550,7 +563,9 @@
 	(defparameter *volp* vp)
 	(focus:set-position z0)
 	(setf *do-capture* t)
-	(abort-acquisition)))))
+	(abort-acquisition))))))
+
+
 #+nil
 (time (obtain-sectioned-stack))
 #+nil

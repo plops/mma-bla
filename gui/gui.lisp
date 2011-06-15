@@ -36,7 +36,7 @@
 
 (let* ((start 0)
        (end 0)
-       (count-max 10)
+       (count-max 30)
        (count count-max)
        (frame-rate 0))
   (defun measure-frame-rate ()
