@@ -91,7 +91,7 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 330")
+(mma "set-cycle-time 33")
 #+nil
 (mma "img")
 #+nil
@@ -265,7 +265,6 @@
     (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
 
 
-
 (defun draw-circle (x y r)
   (gl:with-primitive :line-loop
    (let ((n 37))
@@ -387,15 +386,18 @@
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex))))
-    (format t "~a~%" phase-ims)
-    (when (elt phase-ims 0)
-      (gl:with-pushed-matrix
-	(gl:translate 0 0 0)
-	(let ((tex (make-instance 'gui::texture :data (elt phase-ims 0))))
-	  (destructuring-bind (h w) (array-dimensions (elt phase-ims 0))
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		      :wt 1s0 :ht 1s0))
-	  (gui:destroy tex))))
+    #+nil (format t "~a~%" phase-ims)
+    (dotimes (i phases-x)
+     (when (elt phase-ims i)
+       (gl:with-pushed-matrix
+	 (gl:translate (* 420 i) 420 0)
+	 (let* ((p8 (vol:normalize-2-sf/ub8
+		     (vol:convert-2-ub16/sf-mul (elt phase-ims i))))
+		(tex (make-instance 'gui::texture :data p8)))
+	   (destructuring-bind (h w) (array-dimensions p8)
+	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		       :wt 1s0 :ht 1s0))
+	   (gui:destroy tex)))))
     (when *t9*
       (gl:with-pushed-matrix
 	(gl:translate (+ 30 w (- x 1)) (- y 1) 0)
@@ -491,7 +493,7 @@
 	   (dotimes (i (length b1))
 	     (let ((v (if (< 1 (aref l1 i))
 			  (min 255 (max 0 (floor (- (aref l1 i) 0) 
-						 1)))
+						 11)))
 			  (let ((yy (floor i w))
 				(xx (mod i w)))
 			    (cond ((or (= 0 (mod (+ y yy) 500))
@@ -537,7 +539,7 @@
 	  (dotimes (i (length b1))
 	    (setf (aref b1 i) (min 255 (max 0
 					    (floor (aref s1 i)
-						   1)))))
+						   11)))))
 	  b))
       (change-phase nil)))
   (defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
