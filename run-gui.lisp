@@ -322,6 +322,8 @@
 #+nil
 (change-capture-size 1 1 432 412 nil)
 #+nil
+(change-capture-size 1 1 256 256 t)
+#+nil
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
@@ -371,13 +373,13 @@
  
   (defun draw-screen ()
     (incf count)
-    (gl:clear-color 0 0 0 1)
+    (gl:clear-color 1 0 0 1)
     
     (gl:clear :color-buffer-bit)
     ;(sleep (/ 60))
     (gl:line-width 1)
     (gl:color 0 1 1)
-    
+    #+nil8
     (when *t8*
       (gl:with-pushed-matrix
 	(gl:translate (- x 1) (- y 1) 0)
@@ -390,13 +392,12 @@
     (dotimes (i phases-x)
      (when (elt phase-ims i)
        (gl:with-pushed-matrix
-	 (gl:translate (* 420 i) 420 0)
-	 (let* ((p8 (vol:normalize-2-sf/ub8
-		     (vol:convert-2-ub16/sf-mul (elt phase-ims i))))
-		(tex (make-instance 'gui::texture :data p8)))
-	   (destructuring-bind (h w) (array-dimensions p8)
+	 (gl:translate (* (+ 1 w) i) (1+ h) 0)
+	 (let* ((tex (make-instance 'gui::texture16 :data (elt phase-ims i)
+				    :scale 30s0 :offset 0s0)))
+	   (destructuring-bind (h w) (array-dimensions (elt phase-ims i))
 	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		       :wt 1s0 :ht 1s0))
+		       :wt (* h 1s0) :ht (* w 1s0)))
 	   (gui:destroy tex)))))
     (when *t9*
       (gl:with-pushed-matrix
@@ -428,7 +429,7 @@
 				:h (* 6 repetition white-width phases-y)
 				:wt repetition
 				:ht repetition)))))
-      #+nil(when (= 1 (mod count 2))
+      #-nil(when (= 1 (mod count 2))
        (draw-disk px-ill py-ill pr-ill))
        #+nil(dotimes (i 6) 
 	(dotimes (j 3)
@@ -477,7 +478,7 @@
 	   (free-internal-memory))
 	 )
        img))
-   (defparameter *t8*
+   #+nil8 (defparameter *t8*
      (when (and *line*			;*dark* *white* *line*
 		)
        (let* ((b (make-array (array-dimensions *line*)
@@ -519,8 +520,8 @@
 	  (dotimes (j h)
 	    (dotimes (i w)
 	      (setf (aref phase-im py px j i) (aref *line* j i))))))
-      (defparameter *phase-im* phase-im)
-      (dotimes (j h)
+      #+nil8 (defparameter *phase-im* phase-im)
+      #+nil8 (dotimes (j h)
 	(dotimes (i w)
 	  (let* ((v (aref phase-im 0 0 j i))
 		 (mi v)
@@ -530,8 +531,8 @@
 		(setf mi (min mi (aref phase-im py px j i))
 		      ma (max ma (aref phase-im py px j i)))))
 	    (setf (aref sec j i) (- ma mi)))))
-      (setf *sec* sec)
-      (defparameter *t9*
+      #+nil8 (setf *sec* sec)
+      #+nil8 (defparameter *t9*
 	(let* ((b (make-array (list h w)
 			      :element-type '(unsigned-byte 8)))
 	       (b1 (sb-ext:array-storage-vector b))
