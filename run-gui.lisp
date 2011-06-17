@@ -22,7 +22,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) .2))
+ (+ (focus:get-position) -.5s0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -105,7 +105,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 128 128 21")
+(mma "splat 128 128 16")
 #+nil
 (mma "quit")
 
@@ -295,8 +295,7 @@
   :name "capture-section"))
 #+nil
 (progn
-  
- (sb-thread:make-thread 
+  (sb-thread:make-thread 
   #'(lambda () 
       (start-acquisition)
       (loop while *do-capture* do
@@ -321,6 +320,8 @@
 (change-capture-size 1 1 1392 1040 nil)
 #+nil
 (change-capture-size 1 1 432 412 nil)
+#+nil
+(change-capture-size 1 1 512 512 t)
 #+nil
 (change-capture-size 1 1 256 256 t)
 #+nil
@@ -373,7 +374,7 @@
  
   (defun draw-screen ()
     (incf count)
-    (gl:clear-color 1 0 0 1)
+    (gl:clear-color 0 0 0 1)
     
     (gl:clear :color-buffer-bit)
     ;(sleep (/ 60))
@@ -388,11 +389,20 @@
 	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 		      :wt 1s0 :ht 1s0))
 	  (gui:destroy tex))))
+    (when *line*
+       (gl:with-pushed-matrix
+	 (gl:translate 0 0 0)
+	 (let* ((tex (make-instance 'gui::texture16 :data *line*
+				    :scale 30s0 :offset 0s0)))
+	   (destructuring-bind (h w) (array-dimensions *line*)
+	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		       :wt (* h 1s0) :ht (* w 1s0)))
+	   (gui:destroy tex))))
     #+nil (format t "~a~%" phase-ims)
     (dotimes (i phases-x)
      (when (elt phase-ims i)
        (gl:with-pushed-matrix
-	 (gl:translate (* (+ 1 w) i) (1+ h) 0)
+	 (gl:translate (* (+ 1 w -100) i) (1+ h) 0)
 	 (let* ((tex (make-instance 'gui::texture16 :data (elt phase-ims i)
 				    :scale 30s0 :offset 0s0)))
 	   (destructuring-bind (h w) (array-dimensions (elt phase-ims i))
@@ -430,7 +440,7 @@
 				:wt repetition
 				:ht repetition)))))
       #-nil(when (= 1 (mod count 2))
-       (draw-disk px-ill py-ill pr-ill))
+       (draw-disk px-ill py-ill (* .3 pr-ill)))
        #+nil(dotimes (i 6) 
 	(dotimes (j 3)
 	  (draw-disk (+ (* 50 i) px-ill) 
@@ -464,10 +474,10 @@
 	    (sap (sb-sys:vector-sap img1)))
        (progn
 	#+nil (start-acquisition)
-	 #+nil (loop while (not (eq 'clara::DRV_IDLE
-				    (lookup-error (val2 (get-status)))))
-	    do
-	    (sleep .003))
+	#+nil (loop while (eq 'clara::DRV_IDLE
+			(lookup-error (val2 (get-status))))
+	   do
+	     (sleep .003))
 	(check (wait-for-acquisition)) 
 	(format t "imgs ~a~%" (multiple-value-list (get-total-number-images-acquired)))
 	 (sb-sys:with-pinned-objects (img)
@@ -514,7 +524,7 @@
       (dotimes (py phases-y)
 	(dotimes (px phases-x)
 	  (change-phase (+ px (* phases-x py)))
-	  (sleep .05)
+	  ;(sleep .05)
 	  (capture)
 	  (setf (elt phase-ims px) *line*)
 	  (dotimes (j h)
@@ -555,7 +565,7 @@
 	(start-acquisition)
 	(dotimes (k n)
 	  (focus:set-position (+ z0 (* k (/ depth n))))
-	  (sleep .02)
+	  ;(sleep .02)
 	  (obtain-section)
 	  (dotimes (j h)
 	    (dotimes (i w)

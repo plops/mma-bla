@@ -42,7 +42,7 @@
               (load-identity)
               (scale scale scale scale)
               (translate (- offset) (- offset) (- offset))
-              (tex-image-2d target 0 :luminance16 w h 0 :luminance
+              (tex-image-2d target 0 :luminance16 h w 0 :luminance
                             :unsigned-short data-sap))
             (matrix-mode :modelview)))))))
 

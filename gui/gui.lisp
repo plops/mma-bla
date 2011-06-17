@@ -58,7 +58,10 @@
   (funcall (draw-func w))
   
   (measure-frame-rate)
-  (swap-buffers)
+  (swap-buffers) ;; does flush
+  ;;http://www.d-silence.com/feature.php?id=255
+  ;(flush) ;; practically no effect for double buffered rendering
+  ;(finish) ;; sync cpu and gpu
   (post-redisplay))
 
 (defmethod reshape ((w fenster) x y)
