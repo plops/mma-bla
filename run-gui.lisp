@@ -479,7 +479,7 @@
 	   do
 	     (sleep .003))
 	(check (wait-for-acquisition)) 
-	(format t "imgs ~a~%" (multiple-value-list (get-total-number-images-acquired)))
+	(format t "imgs ~a~%" (list (mod count 4) (floor count 2) (val2 (get-total-number-images-acquired))))
 	 (sb-sys:with-pinned-objects (img)
 	    (check (get-most-recent-image16 sap (length img1)))
 	   #+nil (check (get-acquired-data16 sap (length img1))))
