@@ -299,12 +299,29 @@
   (sb-thread:make-thread 
   #'(lambda () 
       (start-acquisition)
+       (gui::reset-frame-count)
       (loop while *do-capture* do
 	   (capture)
+	   (when (< (gui::get-frame-count) (length *img-array*))
+	     (setf (aref *img-array* (gui::get-frame-count)) *line*))
 	   #+nil (sleep .01))
       (abort-acquisition)
       (free-internal-memory))
   :name "capture"))
+#+nil
+(sb-thread:make-thread 
+ #'(lambda () 
+     (sb-sys:without-gcing
+      (start-acquisition)
+      (gui::reset-frame-count)
+      (loop while (and (< (gui::get-frame-count) (length *img-array*)) 
+		       *do-capture*) do
+	   (capture)
+	   (when (< (gui::get-frame-count) (length *img-array*)) 
+	     (setf (aref *img-array* (gui::get-frame-count)) *line*)))
+      (abort-acquisition)
+      (free-internal-memory)))
+ :name "capture")
 
 (progn
  (defparameter *t8* nil)
@@ -328,32 +345,30 @@
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
-(defparameter *img-array* (make-array 1000))
+(defparameter *img-array* (make-array (* 100 30)))
 #+nil
 (require :vol)
-(time
- (dotimes (i (length *img-array*))
-   (vol::write-pgm-transposed 
-    (format nil "/dev/shm/~4,'0d.pgm" i)
-    (vol:normalize-2-sf/ub8
-     (vol:convert-2-ub16/sf-mul
-      (aref *img-array* i))))))
-
+(dotimes (i (length *img-array*))
+  (when (arrayp (aref *img-array* i))
+    (vol::write-pgm-transposed 
+     (format nil "/dev/shm/~4,'0d.pgm" i)
+     (vol:normalize-2-sf/ub8
+      (vol:convert-2-ub16/sf-mul
+       (aref *img-array* i))))))
 (let* ((count 0)
        (h 412)
        (w 432)
        (px-ill 220s0)
        (py-ill 230s0)
        (pr-ill 230s0))
-  (gui::reset-frame-count)
+ 
   (defun draw-screen ()
     (incf count)
     (gl:clear-color .02 .02 .02 1)
     ;(gl:clear :color-buffer-bit)
     (let ((p  (mod count 8)))
      (when *line*
-       (when (< (gui::get-frame-count) (length *img-array*))
-	(setf (aref *img-array* (gui::get-frame-count)) *line*))
+       
        (gl:with-pushed-matrix
 	 (gl:translate 0 0 0)
 	 (let* ((tex (make-instance 'gui::texture16 :data *line*
