@@ -124,4 +124,4 @@ will be called in the same order thah DEQUEUE would return them."
  (enqueue *q* i))
 #+nil
 (loop for i below (queue-count *q*) collect
-     (dequeue *q*))
+     (list i (dequeue *q*)))

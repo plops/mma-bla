@@ -328,7 +328,7 @@
  (defparameter *sec* nil)
  (defparameter *dark* nil)
  (defparameter *white* nil)
- (defparameter *line* nil))
+ (defparameter *line* (make-instance 'clara:queue)))
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
@@ -364,26 +364,25 @@
 			     :element-type '(unsigned-byte 16))))
   (gui::reset-frame-count)
   (defun draw-screen ()
-    (gl:clear-color .432 .02 .02 1)
-    ;(gl:clear :color-buffer-bit)
-    (when *line*
-     (let ((p  (mod count 10)))
-       (dotimes (q (length *line*))
-	 (let ((e (elt *line* q)))
+    (gl:clear-color .01 .02 .02 1)
+    (gl:clear :color-buffer-bit)
+    (loop for e below (queue-count *line*) do
+	 (let ((e (dequeue *line*))
+	       (p (mod count 10)))
 	   (gl:with-pushed-matrix
 	     (let* ((tex (make-instance 'gui::texture16 :data e
 					:scale 80s0 :offset 0s0)))
 	       (destructuring-bind (h w) (array-dimensions e)
 		 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			   :wt (* h 1s0) :ht (* w 1s0))
-		
+		 
 		 (with-pushed-matrix 
 		   (gl:scale .25 .25 .25)
-		   (gl:translate (* w (floor (+ p q))) 2500 0)
+		   (gl:translate (* w (floor p)) 2500 0)
 		   (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			     :wt (* h 1s0) :ht (* w 1s0))))
-	       (gui:destroy tex)))))
-       (incf count (length *line*))))
+	       (gui:destroy tex))))
+	 (incf count))
     (gl:with-pushed-matrix
 	 (load-cam-to-lcos-matrix 0s0 1024s0)
 	 (gl:color 0 0 0) (rect -10 -10 500 600)
@@ -495,17 +494,14 @@
 			 (= validfirst first))
 		  (break "couldn't get as many images as expected ~a"
 			 (list first last :valid validfirst validlast)))))
-	    (setf *line* 
-		  (let ((res ()))
-		    (dotimes (k (1+ n))
-		      (let ((a (make-array (list y x) 
-					   :element-type '(unsigned-byte 16))))
-			(dotimes (j y)
-			  (dotimes (i x)
-			    (setf (aref a j i)
-				  (aref img-circ k j i))))
-			(push a res)))
-		    (reverse res))))))))
+	    (dotimes (k (1+ n))
+	      (let ((a (make-array (list y x) 
+				   :element-type '(unsigned-byte 16))))
+		(dotimes (j y)
+		  (dotimes (i x)
+		    (setf (aref a j i)
+			  (aref img-circ k j i))))
+		(enqueue *line* a))))))))
   #+nil
   (defun obtain-section ()
     (let ((phase-im (make-array (list phases-y phases-x h w)
