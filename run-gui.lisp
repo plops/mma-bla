@@ -105,7 +105,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 128 128 16")
+(mma "splat 128 128 46")
 #+nil
 (mma "quit")
 #+nil
@@ -319,7 +319,7 @@
 #+nil
 (change-capture-size 1 1 1392 1040 nil)
 #+nil
-(change-capture-size 1 1 432 412 nil)
+(change-capture-size 1 1 432 412 t)
 #+nil
 (change-capture-size 1 1 512 512 t)
 #+nil
@@ -328,6 +328,9 @@
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
+(defparameter *img-array* (make-array 1000))
+
+
 (let* ((count 0)
        (h 412)
        (w 432)
@@ -337,9 +340,11 @@
   (defun draw-screen ()
     (incf count)
     (gl:clear-color .02 .02 .02 1)
-    (gl:clear :color-buffer-bit)
+    ;(gl:clear :color-buffer-bit)
     (let ((p  (mod count 8)))
      (when *line*
+       (when (< count (length *img-array*))
+	(setf (aref *img-array* (1- count)) *line*))
        (gl:with-pushed-matrix
 	 (gl:translate 0 0 0)
 	 (let* ((tex (make-instance 'gui::texture16 :data *line*
@@ -350,7 +355,7 @@
 	     
 	     (with-pushed-matrix 
 	       (gl:scale .25 .25 .25)
-	       (gl:translate (* w (floor p 2)) 2500 0)
+	       (gl:translate (* w (floor p)) 2500 0)
 
 	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			 :wt (* h 1s0) :ht (* w 1s0))))
@@ -360,21 +365,21 @@
        (load-cam-to-lcos-matrix 0s0 1024s0)
        
        (gl:color 0 0 0)
-       (rect 10 10 400 600)
+       (rect -10 -10 500 600)
        (%gl:color-3ub  #b11111110 255  255)
-       (let ((x (+ px-ill (* 60 (- p 3))))
+       #+nil(let ((x (+ px-ill (* 60 (- p 3))))
 	     (y py-ill))
 	 (if (= 0 (mod p 2))
 	   (rect (- y 150) (- x 20) (+ y 150) (+ x 20))
 	   (rect  (- x 20) (- y 150)  (+ x 20) (+ y 150))))
        (let ((s 6))
 	 (scale s (- s) s))
-       (translate 10 -20 0)
+       (translate 0 -20 0)
        (enable :color-logic-op)
        (logic-op :xor)
        (gui:draw-number (floor (* 100 (gui::get-frame-rate))))
        (translate 0 -24 0)
-       (gui:draw-number (incf count))
+       (gui:draw-number count)
        (disable :color-logic-op))))
   #+nil
   (defun capture ()
