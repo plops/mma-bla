@@ -17,17 +17,20 @@
   (read-mode :image)
   (acquisition-mode :single-scan)
   (cooler-on)
-  (check
+  #+nil (check
     (set-image 1 1
 	       1 1392
 	       1 1040))
   (set-ad-channel 1) ;; 1 is the fast one
   (check (clara::set-fast-external-trigger 1))
   (check (set-frame-transfer-mode 1))
+  (check
+    (clara::set-isolated-crop-mode 1 432 412 1 1))
   (defparameter *circ-buf-size*
-    (val2 (clara:get-size-of-circular-buffer))))
+    (val2 (clara:get-size-of-circular-buffer)))
+  (acquisition-mode :run-till-abort))
 
-(acquisition-mode :run-till-abort)
+
 
 
 
@@ -35,8 +38,7 @@
 (check (clara::set-fast-external-trigger 1))
 (check (set-frame-transfer-mode 1))
 (set-ad-channel 1)
-(check
- (clara::set-isolated-crop-mode 1 432 412 1 1))
+
 (check (clara::set-overlap-mode 0))
 (get-temperature-range)
 (start-acquisition)
@@ -44,7 +46,7 @@
 (status)
 
 (get-detector)
-(cooler-on)
+(check (cooler-on))
 (cooler-off)
 (check (set-temperature (val2 (get-temperature-range))))
 (get-temperature-f)

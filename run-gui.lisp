@@ -11,7 +11,7 @@
     (require :clara)
    ; (require :mma)
     (require :focus)
-    (require :sb-queue)) 
+    (require :sb-concurrency)) 
 (defpackage :run-gui
 	(:use :cl :gl #-clara :clara
 	      ))
@@ -329,7 +329,7 @@
  (defparameter *sec* nil)
  (defparameter *dark* nil)
  (defparameter *white* nil)
- (defparameter *line* (sb-queue:make-queue :name "picture-fifo")))
+ (defparameter *line* (sb-concurrency:make-queue :name 'picture-fifo)))
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
@@ -361,15 +361,18 @@
        (px-ill 220s0)
        (py-ill 230s0)
        (pr-ill 230s0)
-       (img-circ (make-array (list run-clara::*circ-buf-size* h w)
+       (img-circ (make-array (list 141 #+nil run-clara::*circ-buf-size* h w)
 			     :element-type '(unsigned-byte 16))))
   (gui::reset-frame-count)
   (defun draw-screen ()
     (gl:clear-color .01 .02 .02 1)
     (gl:clear :color-buffer-bit)
+    (let ((c (sb-queue:queue-count *line*)))
+     (unless (or (= 0 c) (= 1 c))
+       (format t "WAAAAA ~a~%" c)))
     (loop for e below (sb-queue:queue-count *line*) do
 	 (let ((e (sb-queue:dequeue *line*))
-	       (p (mod count 10)))
+	       (p (mod count 5))
 	   (gl:with-pushed-matrix
 	     (let* ((tex (make-instance 'gui::texture16 :data e
 					:scale 80s0 :offset 0s0)))
@@ -502,7 +505,7 @@
 		  (dotimes (i x)
 		    (setf (aref a j i)
 			  (aref img-circ k j i))))
-		(sb-queue:enqueue *line* a))))))))
+		(sb-queue:enqueue a *line*))))))))
   #+nil
   (defun obtain-section ()
     (let ((phase-im (make-array (list phases-y phases-x h w)
