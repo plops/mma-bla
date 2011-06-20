@@ -38,6 +38,7 @@
        (end 0)
        (count-max 30)
        (count count-max)
+       (frame-count 0)
        (frame-rate 0))
   (defun measure-frame-rate ()
     (when (= 0 count)
@@ -46,9 +47,14 @@
 			  (- end start))
 	    count count-max
 	    start (current-time)))
-    (decf count))
+    (decf count)
+    (incf frame-count))
   (defun get-frame-rate ()
-    frame-rate))
+    frame-rate)
+  (defun get-frame-count ()
+    frame-count)
+  (defun reset-frame-count ()
+    (setf frame-count 0)))
 
 
 (defmethod display ((w fenster))

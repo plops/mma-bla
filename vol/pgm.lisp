@@ -50,6 +50,30 @@
 	(write-sequence data-1d s)))
     nil))
 
+(defun write-pgm-transposed (filename img)
+  (declare (simple-string filename)
+	   ((array (unsigned-byte 8) 2) img)
+	   (values null &optional))
+  (destructuring-bind (h w)
+      (array-dimensions img)
+    (declare ((integer 0 65535) w h))
+    (with-open-file (s filename
+		       :direction :output
+		       :if-exists :supersede
+		       :if-does-not-exist :create)
+      (declare (stream s))
+      (format s "P5~%~D ~D~%255~%" h w))
+    (with-open-file (s filename 
+		       :element-type '(unsigned-byte 8)
+		       :direction :output
+		       :if-exists :append)
+      (let ((data-1d (make-array 
+		      (* h w)
+		      :element-type '(unsigned-byte 8)
+		      :displaced-to img)))
+	(write-sequence data-1d s)))
+    nil))
+
 (defun read-stack (fn)
   (declare (string fn)
 	   (values (simple-array (unsigned-byte 8) 3) &optional))

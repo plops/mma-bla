@@ -329,7 +329,15 @@
 #+nil
 (change-phase 1)
 (defparameter *img-array* (make-array 1000))
-
+#+nil
+(require :vol)
+(time
+ (dotimes (i (length *img-array*))
+   (vol::write-pgm-transposed 
+    (format nil "/dev/shm/~4,'0d.pgm" i)
+    (vol:normalize-2-sf/ub8
+     (vol:convert-2-ub16/sf-mul
+      (aref *img-array* i))))))
 
 (let* ((count 0)
        (h 412)
@@ -337,14 +345,15 @@
        (px-ill 220s0)
        (py-ill 230s0)
        (pr-ill 230s0))
+  (gui::reset-frame-count)
   (defun draw-screen ()
     (incf count)
     (gl:clear-color .02 .02 .02 1)
     ;(gl:clear :color-buffer-bit)
     (let ((p  (mod count 8)))
      (when *line*
-       (when (< count (length *img-array*))
-	(setf (aref *img-array* (1- count)) *line*))
+       (when (< (gui::get-frame-count) (length *img-array*))
+	(setf (aref *img-array* (gui::get-frame-count)) *line*))
        (gl:with-pushed-matrix
 	 (gl:translate 0 0 0)
 	 (let* ((tex (make-instance 'gui::texture16 :data *line*
@@ -379,7 +388,7 @@
        (logic-op :xor)
        (gui:draw-number (floor (* 100 (gui::get-frame-rate))))
        (translate 0 -24 0)
-       (gui:draw-number count)
+       (gui:draw-number (gui::get-frame-count))
        (disable :color-logic-op))))
   #+nil
   (defun capture ()
