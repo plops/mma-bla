@@ -10,7 +10,8 @@
    ; (require :andor3)
     (require :clara)
    ; (require :mma)
-    (require :focus)) 
+    (require :focus)
+    (require :sb-queue)) 
 (defpackage :run-gui
 	(:use :cl :gl #-clara :clara
 	      ))
@@ -328,7 +329,7 @@
  (defparameter *sec* nil)
  (defparameter *dark* nil)
  (defparameter *white* nil)
- (defparameter *line* (make-instance 'clara:queue)))
+ (defparameter *line* (sb-queue:make-queue :name "picture-fifo")))
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
@@ -366,8 +367,8 @@
   (defun draw-screen ()
     (gl:clear-color .01 .02 .02 1)
     (gl:clear :color-buffer-bit)
-    (loop for e below (queue-count *line*) do
-	 (let ((e (dequeue *line*))
+    (loop for e below (sb-queue:queue-count *line*) do
+	 (let ((e (sb-queue:dequeue *line*))
 	       (p (mod count 10)))
 	   (gl:with-pushed-matrix
 	     (let* ((tex (make-instance 'gui::texture16 :data e
@@ -501,7 +502,7 @@
 		  (dotimes (i x)
 		    (setf (aref a j i)
 			  (aref img-circ k j i))))
-		(enqueue *line* a))))))))
+		(sb-queue:enqueue *line* a))))))))
   #+nil
   (defun obtain-section ()
     (let ((phase-im (make-array (list phases-y phases-x h w)
