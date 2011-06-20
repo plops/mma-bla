@@ -20,4 +20,5 @@
 	   #:SCALE-V
 	   #:texture-luminance-ub8
 	   #:draw-xz
-	   ))
+	   #:get-frame-rate
+	   #:draw-number))

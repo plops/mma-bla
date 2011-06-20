@@ -52,7 +52,7 @@
 
 
 (defmethod display ((w fenster))
-  (clear :color-buffer-bit :depth-buffer-bit)
+  ;(clear :color-buffer-bit :depth-buffer-bit)
   (load-identity)
   
   (funcall (draw-func w))

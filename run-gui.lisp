@@ -108,7 +108,8 @@
 (mma "splat 128 128 16")
 #+nil
 (mma "quit")
-
+#+nil
+(clara::uninit )
 (defun mma-polar (r phi d)
   (mma (format nil "splat ~a ~a ~a" 
 	       (+ 128 (* r (cos phi)))
@@ -300,8 +301,7 @@
       (start-acquisition)
       (loop while *do-capture* do
 	   (capture)
-	   #+nil
-	   (sleep .01))
+	   #+nil (sleep .01))
       (abort-acquisition)
       (free-internal-memory))
   :name "capture"))
@@ -328,125 +328,55 @@
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
-(let* ((px 220s0) (py 230s0) (pr 230s0)
-       (px-ill px) (py-ill py) (pr-ill pr)
-       (w 432)
+(let* ((count 0)
        (h 412)
-       (x 1)
-       (y 1)
-       (crop-mode t)
-       (new-size t)
-       
-       (white-width 8)
-       (phases-x 4)
-       (phases-y 1)
-       (grating (make-array (* phases-x phases-y white-width)
-			    :element-type '(unsigned-byte 8)))
-       (phase 0)
-       (count 0)
-       (phase-ims (list nil nil nil nil)))
-  (defun change-phase (p)
-    (setf phase p)
-    (when p
-      (setf grating (gui:grating->texture (gui:grating-stack phases-y phases-x)
-					  p :h white-width :w white-width)))
-    nil)
-  (change-phase 0)
-  (defun change-target (x y r &key (xil x) (yil y) (ril r))
-    (setf px x
-	  py y
-	  pr r
-	  px-ill xil
-	  py-ill yil
-	  pr-ill ril)
-    (change-capture-size (max 1 (+ 1 px (- r))) 
-			 (max 1 (+ 1 py (- r)))
-			 (min 1392 (+ px r))
-			 (min 1040 (+ py r))))
-  (defun change-capture-size (xx yy ww hh &optional crop)
-    (setf w ww
-	  h hh
-	  x xx
-	  y yy
-	  new-size t
-	  crop-mode crop))
-  #+nil(change-capture-size 1 1 1392 1040)
- 
+       (w 432)
+       (px-ill 220s0)
+       (py-ill 230s0)
+       (pr-ill 230s0))
   (defun draw-screen ()
     (incf count)
-    (gl:clear-color 0 0 0 1)
-    
+    (gl:clear-color .02 .02 .02 1)
     (gl:clear :color-buffer-bit)
-    ;(sleep (/ 60))
-    (gl:line-width 1)
-    (gl:color 0 1 1)
-    #+nil8
-    (when *t8*
-      (gl:with-pushed-matrix
-	(gl:translate (- x 1) (- y 1) 0)
-	(let ((tex (make-instance 'gui::texture :data *t8*)))
-	  (destructuring-bind (h w) (array-dimensions *t8*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		      :wt 1s0 :ht 1s0))
-	  (gui:destroy tex))))
-    (when *line*
+    (let ((p  (mod count 8)))
+     (when *line*
        (gl:with-pushed-matrix
 	 (gl:translate 0 0 0)
 	 (let* ((tex (make-instance 'gui::texture16 :data *line*
-				    :scale 30s0 :offset 0s0)))
+				    :scale 80s0 :offset 0s0)))
 	   (destructuring-bind (h w) (array-dimensions *line*)
 	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		       :wt (* h 1s0) :ht (* w 1s0)))
+		       :wt (* h 1s0) :ht (* w 1s0))
+	     
+	     (with-pushed-matrix 
+	       (gl:scale .25 .25 .25)
+	       (gl:translate (* w (floor p 2)) 2500 0)
+
+	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+			 :wt (* h 1s0) :ht (* w 1s0))))
 	   (gui:destroy tex))))
-    #+nil (format t "~a~%" phase-ims)
-    (dotimes (i phases-x)
-     (when (elt phase-ims i)
-       (gl:with-pushed-matrix
-	 (gl:translate (* (+ 1 w -100) i) (1+ h) 0)
-	 (let* ((tex (make-instance 'gui::texture16 :data (elt phase-ims i)
-				    :scale 30s0 :offset 0s0)))
-	   (destructuring-bind (h w) (array-dimensions (elt phase-ims i))
-	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		       :wt (* h 1s0) :ht (* w 1s0)))
-	   (gui:destroy tex)))))
-    (when *t9*
-      (gl:with-pushed-matrix
-	(gl:translate (+ 30 w (- x 1)) (- y 1) 0)
-	(let ((tex (make-instance 'gui::texture :data *t9*)))
-	  (destructuring-bind (h w) (array-dimensions *t9*)
-	    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		      :wt 1s0 :ht 1s0))
-	  (gui:destroy tex))))
-    (gl:color 1 .4 0)
-    (gl:line-width 2)
-    (draw-circle px py pr)
-     #+nil(dotimes (i 6) 
-	(dotimes (j 3)
-	  (draw-circle (+ (* 50 i) px-ill) 
-		       (+ (* 50 j) py-ill) 
-		       (* .5 pr-ill))))
-    (gl:with-pushed-matrix
-      (%gl:color-3ub  #b11111110 255  255)
-      (load-cam-to-lcos-matrix 0s0 1024s0)
-      #-nil
-      (when phase
-	(gl:with-pushed-matrix 
-	 (gl:translate -40 -40 0)
-	 (let ((repetition 19s0))
-	   (gui::with-grating (g grating)
-	     (gui::draw-grating g
-				:w (* repetition white-width phases-x)
-				:h (* 6 repetition white-width phases-y)
-				:wt repetition
-				:ht repetition)))))
-      #-nil(when (= 1 (mod count 2))
-       (draw-disk px-ill py-ill (* .3 pr-ill)))
-       #+nil(dotimes (i 6) 
-	(dotimes (j 3)
-	  (draw-disk (+ (* 50 i) px-ill) 
-		     (+ (* 50 j) py-ill) 
-		     (* .5 pr-ill))))))
-  
+     (gl:with-pushed-matrix
+
+       (load-cam-to-lcos-matrix 0s0 1024s0)
+       
+       (gl:color 0 0 0)
+       (rect 10 10 400 600)
+       (%gl:color-3ub  #b11111110 255  255)
+       (let ((x (+ px-ill (* 60 (- p 3))))
+	     (y py-ill))
+	 (if (= 0 (mod p 2))
+	   (rect (- y 150) (- x 20) (+ y 150) (+ x 20))
+	   (rect  (- x 20) (- y 150)  (+ x 20) (+ y 150))))
+       (let ((s 6))
+	 (scale s (- s) s))
+       (translate 10 -20 0)
+       (enable :color-logic-op)
+       (logic-op :xor)
+       (gui:draw-number (floor (* 100 (gui::get-frame-rate))))
+       (translate 0 -24 0)
+       (gui:draw-number (incf count))
+       (disable :color-logic-op))))
+  #+nil
   (defun capture ()
     #-clara (when new-size
 	      (unless (eq 'clara::DRV_IDLE
@@ -516,6 +446,20 @@
 				  (t 0))))))
 	       (setf (aref b1 i) v))))
 	 b))))
+
+  (defun capture ()
+    (defparameter *line*
+      (let* ((img (make-array (list h w)
+			     :element-type '(unsigned-byte 16)))
+	    (img1 (sb-ext:array-storage-vector img))
+	    (sap (sb-sys:vector-sap img1)))
+       (progn
+	 (check (wait-for-acquisition)) 
+	 (format t "imgs ~a~%" (list (mod count 8) (floor count 2) (val2 (get-total-number-images-acquired))))
+	 (sb-sys:with-pinned-objects (img)
+	   (check (get-most-recent-image16 sap (length img1)))))
+       img)))
+#+nil
   (defun obtain-section ()
     (let ((phase-im (make-array (list phases-y phases-x h w)
 				:element-type '(unsigned-byte 16)))
@@ -553,6 +497,7 @@
 						   11)))))
 	  b))
       (change-phase nil)))
+  #+nil
   (defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
   (when *line*
     (destructuring-bind (h w) (array-dimensions *line*)
