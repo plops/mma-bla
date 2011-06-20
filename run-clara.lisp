@@ -16,6 +16,7 @@
   (set-exposure-time .01521)
   (read-mode :image)
   (acquisition-mode :single-scan)
+  (cooler-on)
   (check
     (set-image 1 1
 	       1 1392
@@ -23,9 +24,11 @@
   (set-ad-channel 1) ;; 1 is the fast one
   (check (clara::set-fast-external-trigger 1))
   (check (set-frame-transfer-mode 1))
-  )
+  (defparameter *circ-buf-size*
+    (val2 (clara:get-size-of-circular-buffer))))
 
 (acquisition-mode :run-till-abort)
+
 
 
 (get-acquisition-timings)

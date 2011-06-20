@@ -72,7 +72,12 @@
 (define-alien-routine ("GetSizeOfCircularBuffer" get-size-of-circular-buffer)
     unsigned-int
   (index int :out))
+
 (define-alien-routine ("GetNumberNewImages" get-number-new-images)
+    unsigned-int
+  (first int :out)
+  (last int :out))
+(define-alien-routine ("GetNumberAvailableImages" get-number-available-images)
     unsigned-int
   (first int :out)
   (last int :out))
@@ -92,6 +97,16 @@
     unsigned-int
   (arr (* unsigned-short))
   (size unsigned-int))
+
+(define-alien-routine ("GetImages16" get-images16)
+    unsigned-int
+  (first long)
+  (last long)
+  (arr (* unsigned-short))
+  (size unsigned-long)
+  (validfirst long :out)
+  (validlast long :out))
+
 ;; returns 4 values
 (define-alien-routine ("GetAcquisitionTimings" get-acquisition-timings)
     unsigned-int

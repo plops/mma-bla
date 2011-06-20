@@ -80,4 +80,10 @@
    #:read-mode
    #:acquisition-mode
    #:lookup-error
-   #:get-acquired-data16))
+   #:get-acquired-data16
+
+   #:queue
+   #:enqueue
+   #:dequeue
+   #:queue-empty-p
+   #:queue-count))

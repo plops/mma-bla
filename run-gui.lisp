@@ -105,7 +105,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 128 128 46")
+(mma "splat 128 128 76")
 #+nil
 (mma "quit")
 #+nil
@@ -299,28 +299,26 @@
   (sb-thread:make-thread 
   #'(lambda () 
       (start-acquisition)
-       (gui::reset-frame-count)
+      (gui::reset-frame-count)
       (loop while *do-capture* do
-	   (capture)
-	   (when (< (gui::get-frame-count) (length *img-array*))
-	     (setf (aref *img-array* (gui::get-frame-count)) *line*))
-	   #+nil (sleep .01))
+	   (capture))
       (abort-acquisition)
       (free-internal-memory))
   :name "capture"))
 #+nil
+(clara::abort-acquisition)
+#+nil
 (sb-thread:make-thread 
  #'(lambda () 
-     (sb-sys:without-gcing
-      (start-acquisition)
-      (gui::reset-frame-count)
-      (loop while (and (< (gui::get-frame-count) (length *img-array*)) 
-		       *do-capture*) do
-	   (capture)
-	   (when (< (gui::get-frame-count) (length *img-array*)) 
-	     (setf (aref *img-array* (gui::get-frame-count)) *line*)))
-      (abort-acquisition)
-      (free-internal-memory)))
+     (start-acquisition)
+     (gui::reset-frame-count)
+     (loop while (and (< (gui::get-frame-count) (length *img-array*)) 
+		      *do-capture*) do
+	  (capture)
+	  (when (< (gui::get-frame-count) (length *img-array*)) 
+	    (setf (aref *img-array* (gui::get-frame-count)) *line*)))
+     (abort-acquisition)
+     (free-internal-memory))
  :name "capture")
 
 (progn
@@ -348,6 +346,7 @@
 (defparameter *img-array* (make-array (* 100 30)))
 #+nil
 (require :vol)
+#+nil
 (dotimes (i (length *img-array*))
   (when (arrayp (aref *img-array* i))
     (vol::write-pgm-transposed 
@@ -360,51 +359,49 @@
        (w 432)
        (px-ill 220s0)
        (py-ill 230s0)
-       (pr-ill 230s0))
- 
+       (pr-ill 230s0)
+       (img-circ (make-array (list run-clara::*circ-buf-size* h w)
+			     :element-type '(unsigned-byte 16))))
+  (gui::reset-frame-count)
   (defun draw-screen ()
-    (incf count)
-    (gl:clear-color .02 .02 .02 1)
+    (gl:clear-color .432 .02 .02 1)
     ;(gl:clear :color-buffer-bit)
-    (let ((p  (mod count 8)))
-     (when *line*
-       
-       (gl:with-pushed-matrix
-	 (gl:translate 0 0 0)
-	 (let* ((tex (make-instance 'gui::texture16 :data *line*
-				    :scale 80s0 :offset 0s0)))
-	   (destructuring-bind (h w) (array-dimensions *line*)
-	     (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		       :wt (* h 1s0) :ht (* w 1s0))
-	     
-	     (with-pushed-matrix 
-	       (gl:scale .25 .25 .25)
-	       (gl:translate (* w (floor p)) 2500 0)
-
-	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-			 :wt (* h 1s0) :ht (* w 1s0))))
-	   (gui:destroy tex))))
-     (gl:with-pushed-matrix
-
-       (load-cam-to-lcos-matrix 0s0 1024s0)
-       
-       (gl:color 0 0 0)
-       (rect -10 -10 500 600)
-       (%gl:color-3ub  #b11111110 255  255)
-       #+nil(let ((x (+ px-ill (* 60 (- p 3))))
-	     (y py-ill))
-	 (if (= 0 (mod p 2))
-	   (rect (- y 150) (- x 20) (+ y 150) (+ x 20))
-	   (rect  (- x 20) (- y 150)  (+ x 20) (+ y 150))))
-       (let ((s 6))
-	 (scale s (- s) s))
-       (translate 0 -20 0)
-       (enable :color-logic-op)
-       (logic-op :xor)
-       (gui:draw-number (floor (* 100 (gui::get-frame-rate))))
-       (translate 0 -24 0)
-       (gui:draw-number (gui::get-frame-count))
-       (disable :color-logic-op))))
+    (when *line*
+     (let ((p  (mod count 10)))
+       (dotimes (q (length *line*))
+	 (let ((e (elt *line* q)))
+	   (gl:with-pushed-matrix
+	     (let* ((tex (make-instance 'gui::texture16 :data e
+					:scale 80s0 :offset 0s0)))
+	       (destructuring-bind (h w) (array-dimensions e)
+		 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+			   :wt (* h 1s0) :ht (* w 1s0))
+		
+		 (with-pushed-matrix 
+		   (gl:scale .25 .25 .25)
+		   (gl:translate (* w (floor (+ p q))) 2500 0)
+		   (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+			     :wt (* h 1s0) :ht (* w 1s0))))
+	       (gui:destroy tex)))))
+       (incf count (length *line*))))
+    (gl:with-pushed-matrix
+	 (load-cam-to-lcos-matrix 0s0 1024s0)
+	 (gl:color 0 0 0) (rect -10 -10 500 600)
+	 (%gl:color-3ub  #b11111110 255  255)
+	 #+nil (let ((x (+ px-ill (* 60 (- p 3))))
+		    (y py-ill))
+		(if (= 0 (mod p 2))
+		    (rect (- y 150) (- x 20) (+ y 150) (+ x 20))
+		    (rect  (- x 20) (- y 150)  (+ x 20) (+ y 150))))
+	 (let ((s 6))
+	   (scale s (- s) s))
+	 (translate 0 -20 0)
+	 (enable :color-logic-op)
+	 (logic-op :xor)
+	 (gui:draw-number (floor (* 100 (gui::get-frame-rate))))
+	 (translate 0 -24 0)
+	 (gui:draw-number (gui::get-frame-count))
+	 (disable :color-logic-op)))
   #+nil
   (defun capture ()
     #-clara (when new-size
@@ -477,18 +474,39 @@
 	 b))))
 
   (defun capture ()
-    (defparameter *line*
-      (let* ((img (make-array (list h w)
-			     :element-type '(unsigned-byte 16)))
-	    (img1 (sb-ext:array-storage-vector img))
-	    (sap (sb-sys:vector-sap img1)))
-       (progn
-	 (check (wait-for-acquisition)) 
-	 (format t "imgs ~a~%" (list (mod count 8) (floor count 2) (val2 (get-total-number-images-acquired))))
-	 (sb-sys:with-pinned-objects (img)
-	   (check (get-most-recent-image16 sap (length img1)))))
-       img)))
-#+nil
+    (let* ((img1 (sb-ext:array-storage-vector img-circ))
+	   (sap (sb-sys:vector-sap img1)))
+      (destructuring-bind (z y x) (array-dimensions img-circ)
+	(declare (ignorable z))
+	(check (wait-for-acquisition)) 
+	(multiple-value-bind (ret-num-avail first last)
+	    (clara::get-number-new-images)
+	  (check ret-num-avail)
+	  (let ((n (- last first)))
+	    (format t "capture ~a images ~a~%" (1+ n) (list :first first last
+							    :total (val2 (get-total-number-images-acquired))))
+	    (sb-sys:with-pinned-objects (img-circ)
+	      (multiple-value-bind (ret-get16 validfirst validlast)
+		  (clara::get-images16 first last sap (* (1+ n) y x))
+
+		(check ret-get16)
+		(unless (and 
+			 (= validlast last)
+			 (= validfirst first))
+		  (break "couldn't get as many images as expected ~a"
+			 (list first last :valid validfirst validlast)))))
+	    (setf *line* 
+		  (let ((res ()))
+		    (dotimes (k (1+ n))
+		      (let ((a (make-array (list y x) 
+					   :element-type '(unsigned-byte 16))))
+			(dotimes (j y)
+			  (dotimes (i x)
+			    (setf (aref a j i)
+				  (aref img-circ k j i))))
+			(push a res)))
+		    (reverse res))))))))
+  #+nil
   (defun obtain-section ()
     (let ((phase-im (make-array (list phases-y phases-x h w)
 				:element-type '(unsigned-byte 16)))
