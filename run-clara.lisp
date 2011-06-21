@@ -49,7 +49,8 @@
 (check (cooler-on))
 (cooler-off)
 (check (set-temperature (val2 (get-temperature-range))))
-(get-temperature-f)
+(check
+ (get-temperature-f))
 (uninit)
 (check
   (set-exposure-time  .01521))

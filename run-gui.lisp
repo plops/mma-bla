@@ -92,7 +92,7 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 33")
+(mma "set-cycle-time 33.27")
 #+nil
 (mma "img")
 #+nil
@@ -106,7 +106,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 128 128 76")
+(mma "splat 128 128 56")
 #+nil
 (mma "quit")
 #+nil
@@ -313,11 +313,14 @@
  #'(lambda () 
      (start-acquisition)
      (gui::reset-frame-count)
-     (loop while (and (< (gui::get-frame-count) (length *img-array*)) 
-		      *do-capture*) do
-	  (capture)
-	  (when (< (gui::get-frame-count) (length *img-array*)) 
-	    (setf (aref *img-array* (gui::get-frame-count)) *line*)))
+     (let ((count 0))
+       (loop while (and *do-capture*
+			(< count (length *img-array*))) do
+	    (capture)
+	    (loop for i below (sb-concurrency:queue-count *line*) do
+		 (setf (aref *img-array* count)
+		       (sb-concurrency:dequeue *line*))
+		 (incf count))))
      (abort-acquisition)
      (free-internal-memory))
  :name "capture")
@@ -367,12 +370,12 @@
   (defun draw-screen ()
     (gl:clear-color .01 .02 .02 1)
     (gl:clear :color-buffer-bit)
-    (let ((c (sb-queue:queue-count *line*)))
+    (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "WAAAAA ~a~%" c)))
-    (loop for e below (sb-queue:queue-count *line*) do
-	 (let ((e (sb-queue:dequeue *line*))
-	       (p (mod count 5))
+    (loop for e below (sb-concurrency:queue-count *line*) do
+	 (let ((e (sb-concurrency:dequeue *line*))
+	       (p (mod count 5)))
 	   (gl:with-pushed-matrix
 	     (let* ((tex (make-instance 'gui::texture16 :data e
 					:scale 80s0 :offset 0s0)))
@@ -401,7 +404,7 @@
 	 (translate 0 -20 0)
 	 (enable :color-logic-op)
 	 (logic-op :xor)
-	 (gui:draw-number (floor (* 100 (gui::get-frame-rate))))
+	 (gui:draw-number (floor (* 1000 (gui::get-frame-rate))))
 	 (translate 0 -24 0)
 	 (gui:draw-number (gui::get-frame-count))
 	 (disable :color-logic-op)))
@@ -505,7 +508,7 @@
 		  (dotimes (i x)
 		    (setf (aref a j i)
 			  (aref img-circ k j i))))
-		(sb-queue:enqueue a *line*))))))))
+		(sb-concurrency:enqueue a *line*))))))))
   #+nil
   (defun obtain-section ()
     (let ((phase-im (make-array (list phases-y phases-x h w)
