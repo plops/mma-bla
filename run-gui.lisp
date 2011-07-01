@@ -1,11 +1,13 @@
-#.(progn
+(eval-when (:compile-toplevel)
+  (progn
     (sb-posix:setenv "DISPLAY" ":0" 1)
     (sb-posix:setenv "__GL_SYNC_TO_VBLANK" "1" 1)
     (sb-ext:run-program "/usr/bin/xset" '("s" "off"))
     (sb-ext:run-program "/usr/bin/xset" '("-dpms"))
 
     (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
-    (ql:quickload "cl-opengl")
+    (ql:quickload "cl-opengl")))
+(eval-when (:compile-toplevel)
     (require :gui)
    ; (require :andor3)
     (require :clara)
@@ -13,8 +15,7 @@
     (require :focus)
     (require :sb-concurrency)) 
 (defpackage :run-gui
-	(:use :cl :gl #-clara :clara
-	      ))
+	(:use :cl :gl #-clara :clara))
 (in-package :run-gui)
 
 #+nil
@@ -23,7 +24,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) -.5s0))
+ (+ (focus:get-position) 1s0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -92,7 +93,13 @@
 #+nil
 (mma "black")
 #+nil
+(mma "set-cycle-time 330")
+#+nil
 (mma "set-cycle-time 33.27")
+#+nil
+(mma "set-cycle-time 23.5")
+#+nil
+(mma "deflection 118.5")
 #+nil
 (mma "img")
 #+nil
@@ -106,7 +113,7 @@
 #+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
 #+nil
-(mma "splat 128 128 56")
+(mma "splat 128 128 26")
 #+nil
 (mma "quit")
 #+nil
@@ -304,35 +311,44 @@
       (loop while *do-capture* do
 	   (capture))
       (abort-acquisition)
-      (free-internal-memory))
+      (free-internal-<memory))
   :name "capture"))
 #+nil
 (clara::abort-acquisition)
 #+nil
+(setf sb-ext:*after-gc-hooks*
+      (list #'(lambda () 
+                (format t " ~a~%" 
+                        (/ sb-ext:*gc-run-time*
+                           (* 1s0 internal-time-units-per-second)))
+                (setf sb-ext:*gc-run-time* 0))))
+#+nil
 (sb-thread:make-thread 
  #'(lambda () 
-     (start-acquisition)
-     (gui::reset-frame-count)
-     (let ((count 0))
-       (loop while (and *do-capture*
-			(< count (length *img-array*))) do
-	    (capture)
-	    (loop for i below (sb-concurrency:queue-count *line*) do
-		 (setf (aref *img-array* count)
-		       (sb-concurrency:dequeue *line*))
-		 (incf count))))
-     (abort-acquisition)
-     (free-internal-memory))
+     (sb-sys:without-gcing
+       (start-acquisition)
+       (gui::reset-frame-count)
+       (let ((count 0))
+	 (loop while (and *do-capture*
+			  (< count (length *img-array*))) do
+	      (capture)
+	      (loop for i below (sb-concurrency:queue-count *line*) do
+		       (setf (aref *img-array* count)
+			     (sb-concurrency:dequeue *line*))
+		   (incf count))))
+       (abort-acquisition)
+       (free-internal-memory)))
  :name "capture")
 
 (progn
- (defparameter *t8* nil)
- (defparameter *t9* nil)
- (defparameter *phase-im* nil)
- (defparameter *sec* nil)
- (defparameter *dark* nil)
- (defparameter *white* nil)
- (defparameter *line* (sb-concurrency:make-queue :name 'picture-fifo)))
+  (defparameter *t8* nil)
+  (defparameter *t9* nil)
+  (defparameter *phase-im* nil)
+  (defparameter *sec* nil)
+  (defparameter *dark* nil)
+  (defparameter *white* nil)
+  (defparameter *line* (sb-concurrency:make-queue :name 'picture-fifo)))
+
 #+nil
 (change-capture-size (+ 380 513) (+ 64 513) 980 650)
 #+nil
@@ -351,13 +367,29 @@
 #+nil
 (require :vol)
 #+nil
-(dotimes (i (length *img-array*))
-  (when (arrayp (aref *img-array* i))
-    (vol::write-pgm-transposed 
-     (format nil "/dev/shm/~4,'0d.pgm" i)
-     (vol:normalize-2-sf/ub8
-      (vol:convert-2-ub16/sf-mul
-       (aref *img-array* i))))))
+(time 
+ (let* ((max-threads 4)
+	(w (/ (length *img-array*)
+	      max-threads)))
+   (let ((thr (loop for p below max-threads collect
+		   (sb-thread:make-thread
+		    (lambda ()
+		      (sb-sys:without-gcing
+		       (dotimes (i w)
+			 (let* ((p (read-from-string (sb-thread:thread-name sb-thread:*current-thread*))) 
+				(ii (+ i (* w p))))
+			   (when (arrayp (aref *img-array* ii))
+			     (vol::write-pgm-transposed 
+			      (format nil "/dev/shm/~4,'0d.pgm" ii)
+			      (vol:normalize-2-sf/ub8
+			       (vol:convert-2-ub16/sf-mul
+				(aref *img-array* ii)))))))))
+		    :name (format nil "~a" p)))))
+     (mapcar #'sb-thread:join-thread thr))))
+
+#+nil
+(room)
+
 (let* ((count 0)
        (h 412)
        (w 432)
@@ -369,36 +401,38 @@
   (gui::reset-frame-count)
   (defun draw-screen ()
     (gl:clear-color .01 .02 .02 1)
-    (gl:clear :color-buffer-bit)
+    (gl:draw-buffer :front-and-back)
+    ;(gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
-       (format t "WAAAAA ~a~%" c)))
+       (format t "*~a*" c)))
     (loop for e below (sb-concurrency:queue-count *line*) do
 	 (let ((e (sb-concurrency:dequeue *line*))
 	       (p (mod count 5)))
-	   (gl:with-pushed-matrix
-	     (let* ((tex (make-instance 'gui::texture16 :data e
-					:scale 80s0 :offset 0s0)))
-	       (destructuring-bind (h w) (array-dimensions e)
-		 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-			   :wt (* h 1s0) :ht (* w 1s0))
-		 
-		 (with-pushed-matrix 
-		   (gl:scale .25 .25 .25)
-		   (gl:translate (* w (floor p)) 2500 0)
-		   (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-			     :wt (* h 1s0) :ht (* w 1s0))))
-	       (gui:destroy tex))))
+	 #+nil (when e
+	     (gl:with-pushed-matrix
+	       (let* ((tex (make-instance 'gui::texture16 :data e
+					  :scale 80s0 :offset 0s0)))
+		(destructuring-bind (h w) (array-dimensions e)
+		  (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+			    :wt (* h 1s0) :ht (* w 1s0))
+		  
+		  (with-pushed-matrix 
+		    (gl:translate (- 1024 (* .5 w (floor p))) 500 0)
+		    (gl:scale .5 .5 .25)
+		    
+		    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+			      :wt (* h 1s0) :ht (* w 1s0))))
+		(gui:destroy tex)))))
 	 (incf count))
     (gl:with-pushed-matrix
-	 (load-cam-to-lcos-matrix 0s0 1024s0)
-	 (gl:color 0 0 0) (rect -10 -10 500 600)
+	 (load-cam-to-lcos-matrix 0s0 0s0)
+	 (gl:color 0 0 0) #+nil (%gl:color-3ub  #b11111110 255  255)
+	 (rect -10 -10 500 400)
 	 (%gl:color-3ub  #b11111110 255  255)
-	 #+nil (let ((x (+ px-ill (* 60 (- p 3))))
-		    (y py-ill))
-		(if (= 0 (mod p 2))
-		    (rect (- y 150) (- x 20) (+ y 150) (+ x 20))
-		    (rect  (- x 20) (- y 150)  (+ x 20) (+ y 150))))
+	 
+	 (let ((v (+ 100 (* 20 (mod (gui::get-frame-count) 10)))))
+	  (rect v 0 (+ v 2) 400))
 	 (let ((s 6))
 	   (scale s (- s) s))
 	 (translate 0 -20 0)
@@ -489,12 +523,10 @@
 	    (clara::get-number-new-images)
 	  (check ret-num-avail)
 	  (let ((n (- last first)))
-	    (format t "capture ~a images ~a~%" (1+ n) (list :first first last
-							    :total (val2 (get-total-number-images-acquired))))
+	    (format t "~a" (1+ n))
 	    (sb-sys:with-pinned-objects (img-circ)
 	      (multiple-value-bind (ret-get16 validfirst validlast)
 		  (clara::get-images16 first last sap (* (1+ n) y x))
-
 		(check ret-get16)
 		(unless (and 
 			 (= validlast last)
@@ -628,7 +660,7 @@
 #+nil
 (sb-thread:make-thread 
  #'(lambda ()
-     (gui:with-gui (1280 (* 2 1024))
+     (gui:with-gui (1280 1024)
        (draw-screen)))
  :name "display-gui")
 #+nil

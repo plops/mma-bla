@@ -1,6 +1,10 @@
-(require :asdf)
-(push "/home/martin/0505/mma/" asdf:*central-registry*)
-(require :clara)
+
+(eval-when (:compile-toplevel)
+  (require :asdf)
+  (setf asdf:*central-registry* 
+	(union asdf:*central-registry* 
+	       '("/home/martin/0505/mma/")))
+  (require :clara))
 (defpackage :run-clara
   (:use :cl :clara))
 (in-package :run-clara)
@@ -31,29 +35,32 @@
   (acquisition-mode :run-till-abort))
 
 
-
-
-
-(get-acquisition-timings)
-(check (clara::set-fast-external-trigger 1))
-(check (set-frame-transfer-mode 1))
-(set-ad-channel 1)
-
-(check (clara::set-overlap-mode 0))
-(get-temperature-range)
-(start-acquisition)
-(abort-acquisition)
+#+nil
+(get-temperature-f)
+#+nil
 (status)
 
-(get-detector)
-(check (cooler-on))
-(cooler-off)
-(check (set-temperature (val2 (get-temperature-range))))
-(check
- (get-temperature-f))
-(uninit)
-(check
-  (set-exposure-time  .01521))
+
+;; (get-acquisition-timings)
+;; (check (clara::set-fast-external-trigger 1))
+;; (check (set-frame-transfer-mode 1))
+;; (set-ad-channel 1)
+
+;; (check (clara::set-overlap-mode 0))
+;; (get-temperature-range)
+;; (start-acquisition)
+;; (abort-acquisition)
+
+
+
+;; (get-detector)
+;; (check (cooler-on))
+;; (cooler-off)
+;; (check (set-temperature (val2 (get-temperature-range))))
+
+;; (uninit)
+;; (check
+;;   (set-exposure-time  (* 2.2 .0107)))
 
 #+nil
 (format t "~a" (clara::save-camera-specs "/dev/shm/o"))
@@ -61,21 +68,21 @@
 #+nil
 (set-shutter 1 1 0 0)
 
-(clara:status)
+;; (clara:status)
 
 
-(trigger-mode :internal)
-(trigger-mode :external)
+;; (trigger-mode :internal)
+;; (trigger-mode :external)
 
-(clara:uninit)
+;; (clara:uninit)
 
-(format t "~a~%" (clara::capabilities))
+;; (format t "~a~%" (clara::capabilities))
 
 ;; set-accumulation-cycle-time
 ;; set-number-accumulations (that's just in memory)
 
 
-
+#+nil
 (defparameter *blub*
   (let* ((w 1392)
 	 (h 1040)
@@ -95,13 +102,15 @@
 	(free-internal-memory)))
    img))
 
+#+nil
 (reduce #'max (sb-ext:array-storage-vector *blub*))
 
+#+nil
 (lookup-error (val2 (get-status)))
-(check (abort-acquisition))
 
 
 
+#+nil
 (progn
  (defparameter *q*
    (let* ((w 1392)
@@ -114,6 +123,7 @@
      img))
  nil)
 
+#+nil
 (save-as-sif "/dev/shm/o.sif")
 
 
@@ -127,12 +137,11 @@
 #+nil
 (save-camera-specs "/home/martin/0517/clara-e.cap")
 
-(require :cl-utilities) ;; I need this to split a string into tokens
-(require :sb-vector-io) ;; to read single-float values fast
-
-
-
-
+#+nil
+(progn
+ (require :cl-utilities) ;; I need this to split a string into tokens
+ (require :sb-vector-io)) ;; to read single-float values fast
+#+nil
 (defun read-sif (fn)
   (with-open-file (s fn)
     (let ((head-lines
@@ -151,6 +160,7 @@
 	    (vector-io:read-vector-data img1 s))
 	  img)))))
 
+#+nil
 (prog1 nil
  (defparameter *bla*
    (read-sif "/dev/shm/o.sif")))
@@ -163,7 +173,6 @@
 	 (incf sum (expt  (- (aref a j i)
 			     (aref b j i)) 2))))
       sum)))
-(sum *q* *bla*)
 
 #+nil
-(uninit)
+(sum *q* *bla*)
