@@ -8,15 +8,18 @@
     (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
     (ql:quickload "cl-opengl")))
 (eval-when (:compile-toplevel)
-    (require :gui)
+   ; (require :gui)
    ; (require :andor3)
     (require :clara)
    ; (require :mma)
     (require :focus)
-    (require :sb-concurrency)) 
+    (require :sb-concurrency)
+    (require :cl-glut)) 
 (defpackage :run-gui
 	(:use :cl :gl #-clara :clara))
 (in-package :run-gui)
+
+
 
 #+nil
 (focus:connect)
@@ -29,6 +32,8 @@
 (capture)
 (defvar *mma-chan* nil)
 (defvar *binary-fifo* nil)
+
+
 
 #+NIL
 (sb-ext:run-program "/home/martin/0505/mma/libmma/reset" '()
@@ -398,9 +403,9 @@
        (pr-ill 230s0)
        (img-circ (make-array (list 141 #+nil run-clara::*circ-buf-size* h w)
 			     :element-type '(unsigned-byte 16))))
-  (gui::reset-frame-count)
+  ;(gui::reset-frame-count)
   (defun draw-screen ()
-    (gl:clear-color .01 .02 .02 1)
+    (gl:clear-color .9 .2 .02 1)
     (gl:draw-buffer :front-and-back)
     ;(gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
@@ -431,16 +436,16 @@
 	 (rect -10 -10 500 400)
 	 (%gl:color-3ub  #b11111110 255  255)
 	 
-	 (let ((v (+ 100 (* 20 (mod (gui::get-frame-count) 10)))))
+	 (let ((v (+ 100 (* 20 (mod (get-frame-count) 10)))))
 	  (rect v 0 (+ v 2) 400))
 	 (let ((s 6))
 	   (scale s (- s) s))
 	 (translate 0 -20 0)
 	 (enable :color-logic-op)
 	 (logic-op :xor)
-	 (gui:draw-number (floor (* 1000 (gui::get-frame-rate))))
+	 #+nil (gui:draw-number (floor (* 1000 (get-frame-rate))))
 	 (translate 0 -24 0)
-	 (gui:draw-number (gui::get-frame-count))
+	 #+nil (gui:draw-number *count*)
 	 (disable :color-logic-op)))
   #+nil
   (defun capture ()
@@ -657,11 +662,48 @@
 (abort-acquisition)
 #+nil
 (lookup-error (val2 (get-status)))
+
+
+(let ((count 0)
+      (t0 0))
+  (defun get-frame-count ()
+    count)
+  (cffi:defcallback idle :void ()
+    (glut:post-redisplay))
+  
+  (cffi:defcallback draw :void ()
+    (draw-screen)
+    (glut:swap-buffers)
+    ;; Calculating frame rate
+    (incf count)
+    (let ((time (get-internal-real-time)))
+      (when (= t0 0)
+	(setq t0 time))
+      (when (>= (- time t0) (* 5 internal-time-units-per-second))
+	(let* ((seconds (/ (- time t0) internal-time-units-per-second))
+	       (fps (/ count seconds)))
+	  (format *terminal-io* "~D frames in ~3,1F seconds = ~6,3F FPS~%"
+		  count seconds fps))
+	(setq t0 time)
+	(setq count 0)))))
+
+(cffi:defcallback key :void ((key :uchar) (x :int) (y :int))
+  (declare (ignore x y))
+  (case (code-char key)
+    (#\Esc (glut:leave-main-loop)))
+  (glut:post-redisplay))
+
+(defun run ()
+  (glut:init)
+ ; (glut:init-window-size 1280 1024)
+  ;(glut:init-window-position 0 0)
+
+  (glut:init-display-mode :double :rgb :depth)
+  (glut:create-window "raaaw")
+  (glut:idle-func (cffi:callback idle))
+  (glut:display-func (cffi:callback draw))
+  (glut:keyboard-func (cffi:callback key))
+  (glut:main-loop))
+
 #+nil
-(sb-thread:make-thread 
- #'(lambda ()
-     (gui:with-gui (1280 1024)
-       (draw-screen)))
- :name "display-gui")
-#+nil
-(gui::get-frame-rate)
+(run)
