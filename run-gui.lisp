@@ -312,11 +312,10 @@
   (sb-thread:make-thread 
   #'(lambda () 
       (start-acquisition)
-      (gui::reset-frame-count)
       (loop while *do-capture* do
 	   (capture))
       (abort-acquisition)
-      (free-internal-<memory))
+      (free-internal-memory))
   :name "capture"))
 #+nil
 (clara::abort-acquisition)
@@ -330,9 +329,9 @@
 #+nil
 (sb-thread:make-thread 
  #'(lambda () 
-     (sb-sys:without-gcing
+     (progn
        (start-acquisition)
-       (gui::reset-frame-count)
+       (reset-frame-count)
        (let ((count 0))
 	 (loop while (and *do-capture*
 			  (< count (length *img-array*))) do
@@ -405,16 +404,15 @@
 			     :element-type '(unsigned-byte 16))))
   ;(gui::reset-frame-count)
   (defun draw-screen ()
-    (gl:clear-color .9 .2 .02 1)
     (gl:draw-buffer :front-and-back)
-    ;(gl:clear :color-buffer-bit)
+    (gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
     (loop for e below (sb-concurrency:queue-count *line*) do
 	 (let ((e (sb-concurrency:dequeue *line*))
 	       (p (mod count 5)))
-	 #+nil (when e
+	  #+nil (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
 					  :scale 80s0 :offset 0s0)))
@@ -666,8 +664,23 @@
 
 (let ((count 0)
       (t0 0))
+  
   (defun get-frame-count ()
     count)
+
+  (defun reset-frame-count ()
+    (setf count 0))
+  
+  (defun init-view (&key (w 1280) (h 1024))
+    (gl:clear-color .0 .0 .0 1)
+    (load-identity)
+    (viewport 0 0 w h)
+    (matrix-mode :projection)
+    (load-identity)
+    (ortho 0 w h 0 -1 1)
+    (matrix-mode :modelview)
+    (load-identity))
+  
   (cffi:defcallback idle :void ()
     (glut:post-redisplay))
   
@@ -695,15 +708,16 @@
 
 (defun run ()
   (glut:init)
- ; (glut:init-window-size 1280 1024)
-  ;(glut:init-window-position 0 0)
+  (glut:init-window-size 1280 1024)
+  (glut:init-window-position 0 0)
 
   (glut:init-display-mode :double :rgb :depth)
   (glut:create-window "raaaw")
+  (init-view)
   (glut:idle-func (cffi:callback idle))
   (glut:display-func (cffi:callback draw))
   (glut:keyboard-func (cffi:callback key))
   (glut:main-loop))
 
 #+nil
-(run)
+(sb-thread:make-thread #'run :name "display")
