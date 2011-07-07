@@ -6,7 +6,8 @@
     (sb-ext:run-program "/usr/bin/xset" '("-dpms"))
 
     (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
-    (ql:quickload "cl-opengl")))
+    ;(ql:quickload "cl-opengl")
+))
 (eval-when (:compile-toplevel)
    ; (require :gui)
    ; (require :andor3)
@@ -14,9 +15,10 @@
    ; (require :mma)
     (require :focus)
     (require :sb-concurrency)
-    (require :cl-glut)) 
+;    (require :cl-glut)
+) 
 (defpackage :run-gui
-	(:use :cl :gl #-clara :clara))
+	(:use :cl #+nil :gl #-clara :clara))
 (in-package :run-gui)
 
 
@@ -261,6 +263,7 @@
        (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
        ,@body)))
 
+#+nil
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
   (let* ((s 0.828333873909549)
 	 (sx  s)
@@ -278,14 +281,14 @@
 			       (list .0     .0    .0 1.0)))))
     (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
 
-
+#+nil
 (defun draw-circle (x y r)
   (gl:with-primitive :line-loop
    (let ((n 37))
      (loop for i from 0 below n do
 	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
-
+#+nil
 (defun draw-disk (x y r)
   (gl:with-primitive :triangle-fan
    (let ((n 38))
@@ -331,8 +334,9 @@
  #'(lambda () 
      (progn
        (start-acquisition)
-       (reset-frame-count)
+       ;(reset-frame-count)
        (let ((count 0))
+	 (format t "~a~%" count)
 	 (loop while (and *do-capture*
 			  (< count (length *img-array*))) do
 	      (capture)
@@ -403,7 +407,7 @@
        (img-circ (make-array (list 141 #+nil run-clara::*circ-buf-size* h w)
 			     :element-type '(unsigned-byte 16))))
   ;(gui::reset-frame-count)
-  (defun draw-screen ()
+  #+nil(defun draw-screen ()
     (gl:draw-buffer :front-and-back)
     (gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
@@ -527,6 +531,7 @@
 	  (check ret-num-avail)
 	  (let ((n (- last first)))
 	    (format t "~a" (1+ n))
+	    (finish-output)
 	    (sb-sys:with-pinned-objects (img-circ)
 	      (multiple-value-bind (ret-get16 validfirst validlast)
 		  (clara::get-images16 first last sap (* (1+ n) y x))
@@ -661,7 +666,7 @@
 #+nil
 (lookup-error (val2 (get-status)))
 
-
+#+nil
 (let ((count 0)
       (t0 0))
   
@@ -699,13 +704,13 @@
 		  count seconds fps))
 	(setq t0 time)
 	(setq count 0)))))
-
+#+nil
 (cffi:defcallback key :void ((key :uchar) (x :int) (y :int))
   (declare (ignore x y))
   (case (code-char key)
     (#\Esc (glut:leave-main-loop)))
   (glut:post-redisplay))
-
+#+nil
 (defun run ()
   (glut:init)
   (glut:init-window-size 1280 1024)
@@ -721,3 +726,36 @@
 
 #+nil
 (sb-thread:make-thread #'run :name "display")
+
+(defparameter *lcos-chan* nil)
+(defun lcos (cmd)
+  (let ((s (sb-ext:process-input *lcos-chan*)))
+    (format s "~a~%" cmd)
+    (finish-output s)))
+#+nil
+(progn
+  (setf *lcos-chan*
+        (sb-ext:run-program "/home/martin/0630/glfw/glfw" '("400" "420")
+                            :output :stream
+                            :input :stream
+                            :wait nil))
+  
+  (sb-thread:make-thread 
+   #'(lambda ()
+       (unwind-protect
+           (with-open-stream (s (sb-ext:process-output *lcos-chan*))
+             (loop for line = (read-line s nil nil)
+                while line do
+                  (format t "lcos read: ~a~%" line)
+                  (finish-output)))
+         (sb-ext:process-close *lcos-chan*)))
+   :name "cmd-reader"))
+#+nil
+(lcos "toggle-stripes 0")
+#+nil
+(lcos "quit")
+#+nil
+(let ((a (random 100)))
+ (dotimes (i 400)
+   (lcos (format nil "qline 0 ~a ~a 200" a i))
+   (lcos "qswap")))
