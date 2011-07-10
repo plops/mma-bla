@@ -180,7 +180,7 @@ R-LINE-TO and accumulate into absolute drawing commands only."
 		    (accumulate-relative-coordinates 
 		     (expand-all-relative-bezier-into-lines 
 		      (svg-path-d-to-lisp (split-at-comma-space path-data))
-		      :n 6))))))
+		      :n 3))))))
      (defun draw-digit (c)
        (ecase c
 	 ,@(loop for i from 0 below 10 collect

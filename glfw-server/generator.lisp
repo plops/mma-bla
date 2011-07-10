@@ -86,7 +86,7 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defparameter *numerals*
- (let ((doc (cxml:parse-file "numerals.svg" (cxml-dom:make-dom-builder))))
+ (let ((doc (cxml:parse-file "/home/martin/0505/mma/gui/numerals.svg" (cxml-dom:make-dom-builder))))
    (loop for i below 10 collect
 	(list i 
 	      (dom:get-attribute
@@ -254,27 +254,28 @@
 #+nil
 (fequal '(1.2 1.3) '(1.2 1.3000001))
 
-(defun translate-single-lines (ls)
-  "Replace each LINE-TO with a line which is defined by two
+(eval-when (:compile-toplevel)
+ (defun translate-single-lines (ls)
+   "Replace each LINE-TO with a line which is defined by two
 vertices (start and end) a TRANSLATE doesn't generate a new line
 but replaces START."
-  (labels ((coords (a)
-	   (destructuring-bind (cmd x y) a
-	     (declare (ignore cmd))
-	     (list x y))))
-   (let ((res)
-	 (start))
-     (dolist (end ls)
-       (let ((cmd (first end)))
-	(cond ((eq cmd 'line-to)
-	       (unless start
-		 (break "start should really be defined."))
-	       (unless (fequal (cdr start) (cdr end))
-		 (push (list (coords start) (coords end)) res)))
-	      ((eq cmd 'translate))
-	      (t (break "unexpected command ~a" cmd))))
-       (setf start end))
-     (reverse res))))
+   (labels ((coords (a)
+	      (destructuring-bind (cmd x y) a
+		(declare (ignore cmd))
+		(list x y))))
+     (let ((res)
+	   (start))
+       (dolist (end ls)
+	 (let ((cmd (first end)))
+	   (cond ((eq cmd 'line-to)
+		  (unless start
+		    (break "start should really be defined."))
+		  (unless (fequal (cdr start) (cdr end))
+		    (push (list (coords start) (coords end)) res)))
+		 ((eq cmd 'translate))
+		 (t (break "unexpected command ~a" cmd))))
+	 (setf start end))
+       (reverse res)))))
 
 
 #+nil
@@ -345,7 +346,11 @@ but replaces START."
   
   (format t "void draw_number(int number)~%{~%")
   (format t "  int i;~%  char s[200];~%  snprintf(s,200,\"%d\",number);~%")
-  (format t "  glPushMatrix();~%  glTranslated(350,100,0);~%  glScaled(3,3,3);~%  glRotated(90,0,0,1);~%")
+  (format t "  glPushMatrix();~%")
+  (format t "  glTranslated(100,130,0);~%")
+  (format t "  glScaled(-3,3,3);~%")
+  (format t "  glRotated(90,0,0,1);~%")
+  
   (format t "  for(i=0;i<strlen(s);i++){~%")
   (format t "    glTranslated(0,11,0);~%")
   (format t "    draw_digit(s[i]-48);~%")

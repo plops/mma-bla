@@ -647,7 +647,7 @@
 (progn
   (sb-posix:setenv "DISPLAY" ":0" 1)
   (setf *lcos-chan*
-        (sb-ext:run-program "/home/martin/0630/glfw/glfw" '("1280" "1024")
+        (sb-ext:run-program "/home/martin/0505/mma/glfw-server/glfw" '("1280" "1024")
                             :output :stream
                             :input :stream
                             :wait nil))
@@ -670,4 +670,9 @@
 (let ((a (random 100)))
  (dotimes (i 400)
    (lcos (format nil "qline 0 ~a ~a 200" a i))
+   (lcos (format nil "qline 0 0 400 0"))
+   (lcos (format nil "qline 0 0 0 400"))
+   (lcos (format nil "qline 0 400 400 400"))
+   (lcos (format nil "qline 400 0 400 400"))
+   (lcos (format nil "qnumber ~a" i))
    (lcos "qswap")))
