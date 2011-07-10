@@ -53,8 +53,10 @@ inc(int *pos)
 int
 push(char*s) // write the pointer s into the circular buffer
 {
-  if(fullp())
+  if(fullp()){
     printf("error circbuffer is full\n");
+    fflush(stdout);
+  }
   circbuf[circwrite]=s;
   return inc(&circwrite);
 }
@@ -69,6 +71,7 @@ pop() // obtain next pointer from circular buffer
 
   char*ret=circbuf[circread];
   printf("cread=%d cmd=%s\n",circread,ret);
+  fflush(stdout);
   inc(&circread);
 
   return ret;
@@ -226,6 +229,7 @@ help(double*ignore)
   for(i=0;i<len(cmd);i++)
     printf("%c %s %d .. %s\n",(cmd[i].queued==1)?'q':' ',
 	   cmd[i].name,cmd[i].args,cmd[i].docstring);
+  fflush(stdout);
   return 0.0;
 }
 
@@ -262,10 +266,12 @@ parse_name(char*tok)
       fun_index=lookup(tok);
     }else{
       printf("parse_name error, expected function name instead of %s\n", tok);
+      fflush(stdout);
       return -1;
     }
   }else{
     printf("parse_name error, expected some function name but got nothing\n");
+    fflush(stdout);
     return -1;
   }
   return fun_index;
@@ -294,6 +300,7 @@ parse_line(char*line)
     tok=strtok(0,search);
     if(!tok){
       printf("error, expected an argument but got 0\n");
+      fflush(stdout);
       return NAN;
     }
     if(isfloatchar(tok[0])){
@@ -301,11 +308,13 @@ parse_line(char*line)
         double d=strtod(tok,&endptr);
         if(endptr==tok){
           printf("error, couldn't parse double\n");
-          return NAN;
+	  fflush(stdout);
+	  return NAN;
         }else
           args[i]=d;
     }else{
       printf("error, expected digit or .+- but found %c\n",tok[0]);
+      fflush(stdout);
       return NAN;
     }   
   }
@@ -432,8 +441,10 @@ main(int argc,char**argv)
     while(check_stdin()>0){
       char*s=malloc(CMDLEN);
       char*line=fgets(s,CMDLEN,stdin);
-      if(line!=s)
+      if(line!=s){
 	printf("fgets error\n");
+	fflush(stdout);
+      }
       parse_line(line);
     }
     
@@ -450,6 +461,7 @@ main(int argc,char**argv)
 	gettimeofday(&tv,0);
 	printf("q swap frame-count=%d sec=%lu usec=%lu\n",
 	       frame_count,tv.tv_sec,tv.tv_usec);
+	fflush(stdout);
 	free(cmd);
 	goto nextframe;
       }
