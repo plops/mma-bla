@@ -157,7 +157,6 @@ clear(double*v)
   glClear(GL_COLOR_BUFFER_BIT);
   return 0.0;
 }
-
 double
 qdisk(double*v)
 {
@@ -190,6 +189,26 @@ disk(double*v)
 }
 
 double
+qnumber(double*v)
+{
+  char*cmd=malloc(CMDLEN);
+  snprintf(cmd,CMDLEN,"number %d",(int)v[0]);
+  push(cmd);
+  return 0.0;
+}
+
+double
+number(double*v)
+{
+  glPushMatrix();
+  glTranslated(0,3*27,0);
+  int n=(int)v[0];
+  draw_number(n);
+  glPopMatrix();
+  return 1.0*n;
+}
+
+double
 toggle_stripes(double*v){
   show_calibration_stripes=(int)v[0];
   return 1.0*show_calibration_stripes;
@@ -211,6 +230,8 @@ struct{
 	{"disk",3,0,disk,"immediately draw a disk"},
 	{"swap",0,0,swap,"immediate swap-buffers"},
 	{"qswap",0,1,qswap,"initiate swap-buffers"},
+	{"number",1,0,number,"immediately write number"},
+	{"qnumber",1,1,qnumber,"queue write number"},
 	{"clear",0,0,clear,"immediately clear screen"},
 	{"qclear",0,1,qclear,"clear screen"},
 	{"toggle-stripes",1,0,toggle_stripes,"toggle display of calibration stripes"},
