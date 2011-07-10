@@ -6,19 +6,18 @@
     (sb-ext:run-program "/usr/bin/xset" '("-dpms"))
 
     (setf asdf:*central-registry* (list "/home/martin/0505/mma/"))
-    ;(ql:quickload "cl-opengl")
-))
+    (ql:quickload "cl-opengl")))
 (eval-when (:compile-toplevel)
-   ; (require :gui)
-   ; (require :andor3)
-    (require :clara)
-   ; (require :mma)
-    (require :focus)
-    (require :sb-concurrency)
-;    (require :cl-glut)
-) 
+  (require :gui)
+  ;; (require :andor3)
+  (require :clara)
+  ;; (require :mma)
+  (require :focus)
+  (require :sb-concurrency)
+  ;; (require :cl-glut)
+  ) 
 (defpackage :run-gui
-	(:use :cl #+nil :gl #-clara :clara))
+  (:use :cl :gl #-clara :clara))
 (in-package :run-gui)
 
 
@@ -243,27 +242,6 @@
        (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
        ,@body)))
 
-#+nil
-(defmacro with-cam-to-lcos ((&optional (x 0s0) (y 0s0)) &body body)
-  `(let* ((s .8274659387376514)
-	  (sx  s)
-	  (sy  (- s))
-	  (phi 1.4)
-	  (cp (cos phi))
-	  (sp (sqrt (- 1s0 (* cp cp))))
-	  (tx 783.23854s0)
-	  (ty 1198.40181879s0)
-	  (a (make-array (list 4 4) :element-type 'single-float
-			 :initial-contents
-			 (list (list (* sx cp)    (* sy sp)  .0  (+ ,x tx))
-			       (list (* -1 sx sp) (* sy cp)  .0  (+ ,y ty))
-			       (list .0     .0   1.0  .0)
-			       (list .0     .0    .0 1.0)))))
-     (gl:with-pushed-matrix
-       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
-       ,@body)))
-
-#+nil
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
   (let* ((s 0.828333873909549)
 	 (sx  s)
@@ -407,8 +385,9 @@
        (img-circ (make-array (list 141 #+nil run-clara::*circ-buf-size* h w)
 			     :element-type '(unsigned-byte 16))))
   ;(gui::reset-frame-count)
-  #+nil(defun draw-screen ()
+  (defun draw-screen ()
     (gl:draw-buffer :front-and-back)
+    ;(clear-color 1 0 0 1)
     (gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
@@ -416,7 +395,7 @@
     (loop for e below (sb-concurrency:queue-count *line*) do
 	 (let ((e (sb-concurrency:dequeue *line*))
 	       (p (mod count 5)))
-	  #+nil (when e
+	  (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
 					  :scale 80s0 :offset 0s0)))
@@ -431,24 +410,7 @@
 		    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			      :wt (* h 1s0) :ht (* w 1s0))))
 		(gui:destroy tex)))))
-	 (incf count))
-    (gl:with-pushed-matrix
-	 (load-cam-to-lcos-matrix 0s0 0s0)
-	 (gl:color 0 0 0) #+nil (%gl:color-3ub  #b11111110 255  255)
-	 (rect -10 -10 500 400)
-	 (%gl:color-3ub  #b11111110 255  255)
-	 
-	 (let ((v (+ 100 (* 20 (mod (get-frame-count) 10)))))
-	  (rect v 0 (+ v 2) 400))
-	 (let ((s 6))
-	   (scale s (- s) s))
-	 (translate 0 -20 0)
-	 (enable :color-logic-op)
-	 (logic-op :xor)
-	 #+nil (gui:draw-number (floor (* 1000 (get-frame-rate))))
-	 (translate 0 -24 0)
-	 #+nil (gui:draw-number *count*)
-	 (disable :color-logic-op)))
+	 (incf count)))
   #+nil
   (defun capture ()
     #-clara (when new-size
@@ -667,75 +629,25 @@
 (lookup-error (val2 (get-status)))
 
 #+nil
-(let ((count 0)
-      (t0 0))
-  
-  (defun get-frame-count ()
-    count)
-
-  (defun reset-frame-count ()
-    (setf count 0))
-  
-  (defun init-view (&key (w 1280) (h 1024))
-    (gl:clear-color .0 .0 .0 1)
-    (load-identity)
-    (viewport 0 0 w h)
-    (matrix-mode :projection)
-    (load-identity)
-    (ortho 0 w h 0 -1 1)
-    (matrix-mode :modelview)
-    (load-identity))
-  
-  (cffi:defcallback idle :void ()
-    (glut:post-redisplay))
-  
-  (cffi:defcallback draw :void ()
-    (draw-screen)
-    (glut:swap-buffers)
-    ;; Calculating frame rate
-    (incf count)
-    (let ((time (get-internal-real-time)))
-      (when (= t0 0)
-	(setq t0 time))
-      (when (>= (- time t0) (* 5 internal-time-units-per-second))
-	(let* ((seconds (/ (- time t0) internal-time-units-per-second))
-	       (fps (/ count seconds)))
-	  (format *terminal-io* "~D frames in ~3,1F seconds = ~6,3F FPS~%"
-		  count seconds fps))
-	(setq t0 time)
-	(setq count 0)))))
-#+nil
-(cffi:defcallback key :void ((key :uchar) (x :int) (y :int))
-  (declare (ignore x y))
-  (case (code-char key)
-    (#\Esc (glut:leave-main-loop)))
-  (glut:post-redisplay))
-#+nil
-(defun run ()
-  (glut:init)
-  (glut:init-window-size 1280 1024)
-  (glut:init-window-position 0 0)
-
-  (glut:init-display-mode :double :rgb :depth)
-  (glut:create-window "raaaw")
-  (init-view)
-  (glut:idle-func (cffi:callback idle))
-  (glut:display-func (cffi:callback draw))
-  (glut:keyboard-func (cffi:callback key))
-  (glut:main-loop))
-
-#+nil
-(sb-thread:make-thread #'run :name "display")
+(progn
+  (sb-posix:setenv "DISPLAY" ":0" 1)
+  (sb-thread:make-thread
+   #'(lambda ()
+       (gui:with-gui (300 300)
+	 (draw-screen)))))
 
 (defparameter *lcos-chan* nil)
 (defun lcos (cmd)
   (let ((s (sb-ext:process-input *lcos-chan*)))
     (format s "~a~%" cmd)
     (finish-output s)))
+
+
 #+nil
 (progn
+  (sb-posix:setenv "DISPLAY" ":0" 1)
   (setf *lcos-chan*
-        (sb-ext:run-program "/home/martin/0630/glfw/glfw" '("400" "420")
+        (sb-ext:run-program "/home/martin/0630/glfw/glfw" '("1280" "1024")
                             :output :stream
                             :input :stream
                             :wait nil))
@@ -751,7 +663,7 @@
          (sb-ext:process-close *lcos-chan*)))
    :name "cmd-reader"))
 #+nil
-(lcos "toggle-stripes 0")
+(lcos "toggle-stripes 1")
 #+nil
 (lcos "quit")
 #+nil
