@@ -10,6 +10,8 @@
 
 #define len(x) (sizeof(x)/sizeof(x[0]))
 
+#include "digit.h"
+
 enum { CMDLEN=100,
        CIRCBUFLEN=10000,
        CIRCBUFNUMELEMS=CIRCBUFLEN-1,
@@ -473,7 +475,8 @@ main(int argc,char**argv)
   nextframe:
     if(show_calibration_stripes){
       float v = 100+20*(frame_count%10);
-      glRectf(v,0,v+2,400);    
+      glRectf(v,0,v+2,400);
+      draw_number(frame_count);
     }
     
     glfwSleep(1./72);
