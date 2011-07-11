@@ -490,7 +490,7 @@ main(int argc,char**argv)
       
       if(0==strncmp(cmd,"swap",4)){
 	
-	printf("q swap frame-count=%d sec=%lu usec=%lu dt_ms=%g\n",
+	printf("q swap frame-count=%d sec=%lu usec=%lu dt_ms=%3.3g\n",
 	       frame_count,tv.tv_sec,tv.tv_usec,
 	       (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.));
 	
