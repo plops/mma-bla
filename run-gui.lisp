@@ -664,11 +664,15 @@
 (progn
   (sb-posix:setenv "DISPLAY" ":0" 1)
   (sb-posix:setenv "__GL_SYNC_TO_VBLANK" "1" 1)
-  (setf *lcos-chan*
-        (sb-ext:run-program "/home/martin/0505/mma/glfw-server/glfw" '("1280" "1024")
-                            :output :stream
-                            :input :stream
-                            :wait nil))
+  (sb-thread:make-thread
+   #'(lambda () 
+       (setf *lcos-chan*
+	     (sb-ext:run-program "/home/martin/0505/mma/glfw-server/glfw" '("1280" "1024")
+				 :output :stream
+				 :input :stream
+				 :wait nil))
+       (sb-ext:process-wait *lcos-chan*))
+   :name "glfw-waiting-father")
   
   (sb-thread:make-thread 
    #'(lambda ()
@@ -686,7 +690,7 @@
 (lcos "quit")
 #+nil
 (let ((a (random 100)))
- (dotimes (i 6000)
+ (dotimes (i 600)
    (let* ((arg (* 2 pi (/ i 60)))
 	  (r 100)
 	  (c (+ 225 (* r (cos arg))))

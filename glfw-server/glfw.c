@@ -476,16 +476,22 @@ main(int argc,char**argv)
     
     frame_count++;
     
+    unsigned long old_usec=0;
+
     // run all commands which have been stored in the queue
     while(!emptyp()){
       char*cmd=pop();
       if(0==strncmp(cmd,"swap",4)){
 	struct timeval tv;
 	gettimeofday(&tv,0);
-	printf("q swap frame-count=%d sec=%lu usec=%lu\n",
-	       frame_count,tv.tv_sec,tv.tv_usec);
+	
+	printf("q swap frame-count=%d sec=%lu usec=%lu dt=%g\n",
+	       frame_count,tv.tv_sec,tv.tv_usec,
+	       (tv.tv_usec-old_usec)/1000.);
+	
 	fflush(stdout);
 	free(cmd);
+	old_usec=tv.tv_usec;
 	goto nextframe;
       }
       parse_line(cmd);
@@ -500,12 +506,14 @@ main(int argc,char**argv)
       draw_number(frame_count);
     }
     
-    glfwSleep(1./72);
+    // glfwSleep(1./72);
     glfwSwapBuffers();
   }
   
   glfwCloseWindow();
 
   glfwTerminate();
-  exit(EXIT_SUCCESS);
+  printf("bye from lcos\n");
+  return 0;
+  //exit(EXIT_SUCCESS);
 }
