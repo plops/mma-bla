@@ -23,12 +23,12 @@
 
 
 #+nil
-(focus:connect)
+(focus:connect "/dev/ttyUSB0")
 #+nil
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) 1s0))
+ (+ (focus:get-position) .25s0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -99,7 +99,7 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 330")
+(mma "set-cycle-time 33")
 #+nil
 (mma "set-cycle-time 33.27")
 #+nil
@@ -311,16 +311,31 @@
 (sb-thread:make-thread 
  #'(lambda () 
      (progn
+       #+nil (dotimes (i 600)
+	       (let* ((arg (* 2 pi (/ i 60)))
+		      (r 100)
+		      (c (+ 225 (* r (cos arg))))
+		      (s (+ 225 (* r (sin arg)))))
+		 (lcos (format nil "qline 225 225 ~a ~a" c s)))
+	       (let ((x 100) (xx 350)
+		     (y 90) (yy 350))
+		 (lcos (format nil "qline ~a ~a ~a ~a" x y xx y))
+		 (lcos (format nil "qline ~a ~a ~a ~a" x y x yy))
+		 (lcos (format nil "qline ~a ~a ~a ~a" x yy xx yy))
+		 (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
+	       (lcos (format nil "qnumber ~a" i))
+	       (lcos "qswap"))
+       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
        (start-acquisition)
        ;(reset-frame-count)
        (let ((count 0))
-	 (format t "~a~%" count)
+	 (format t "count: ~a~%" count)
 	 (loop while (and *do-capture*
 			  (< count (length *img-array*))) do
 	      (capture)
 	      (loop for i below (sb-concurrency:queue-count *line*) do
-		       (setf (aref *img-array* count)
-			     (sb-concurrency:dequeue *line*))
+		   (setf (aref *img-array* count)
+			 (sb-concurrency:dequeue *line*))
 		   (incf count))))
        (abort-acquisition)
        (free-internal-memory)))
@@ -349,7 +364,7 @@
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
-(defparameter *img-array* (make-array (* 100 30)))
+(defparameter *img-array* (make-array (* 100 10)))
 #+nil
 (require :vol)
 #+nil
@@ -387,8 +402,8 @@
   ;(gui::reset-frame-count)
   (defun draw-screen ()
     (gl:draw-buffer :front-and-back)
-    ;(clear-color 1 0 0 1)
-    (gl:clear :color-buffer-bit)
+    ;(clear-color .1 0 0 1)
+    ;(gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
@@ -404,8 +419,8 @@
 			    :wt (* h 1s0) :ht (* w 1s0))
 		  
 		  (with-pushed-matrix 
-		    (gl:translate (- 1024 (* .5 w (floor p))) 500 0)
-		    (gl:scale .5 .5 .25)
+		    (gl:translate (- 1024 550 (* .25 w (floor p))) 420 0)
+		    (gl:scale .25 .25 .25)
 		    
 		    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			      :wt (* h 1s0) :ht (* w 1s0))))
@@ -513,7 +528,7 @@
 		(sb-concurrency:enqueue a *line*))))))))
   #+nil
   (defun obtain-section ()
-    (let ((phase-im (make-array (list phases-y phases-x h w)
+-    (let ((phase-im (make-array (list phases-y phases-x h w)
 				:element-type '(unsigned-byte 16)))
 	  (sec (make-array (list h w)
 			   :element-type '(unsigned-byte 16))))
@@ -629,12 +644,14 @@
 (lookup-error (val2 (get-status)))
 
 #+nil
-(progn
+(let ((x 700)
+      (y 100))
   (sb-posix:setenv "DISPLAY" ":0" 1)
   (sb-thread:make-thread
    #'(lambda ()
-       (gui:with-gui (300 300)
-	 (draw-screen)))))
+       (gui:with-gui ((- 1280 x) 700 x y)
+	 (draw-screen)))
+   :name "camera-display"))
 
 (defparameter *lcos-chan* nil)
 (defun lcos (cmd)
@@ -646,6 +663,7 @@
 #+nil
 (progn
   (sb-posix:setenv "DISPLAY" ":0" 1)
+  (sb-posix:setenv "__GL_SYNC_TO_VBLANK" "1" 1)
   (setf *lcos-chan*
         (sb-ext:run-program "/home/martin/0505/mma/glfw-server/glfw" '("1280" "1024")
                             :output :stream
@@ -668,11 +686,18 @@
 (lcos "quit")
 #+nil
 (let ((a (random 100)))
- (dotimes (i 400)
-   (lcos (format nil "qline 0 ~a ~a 200" a i))
-   (lcos (format nil "qline 0 0 400 0"))
-   (lcos (format nil "qline 0 0 0 400"))
-   (lcos (format nil "qline 0 400 400 400"))
-   (lcos (format nil "qline 400 0 400 400"))
+ (dotimes (i 6000)
+   (let* ((arg (* 2 pi (/ i 60)))
+	  (r 100)
+	  (c (+ 225 (* r (cos arg))))
+	  (s (+ 225 (* r (sin arg)))))
+    (lcos (format nil "qline 225 225 ~a ~a" c s)))
+   (let ((x 100) (xx 350)
+	 (y 90) (yy 350))
+   #+nil  (lcos (format nil "qdisk ~a ~a 200" (+ 125 x) (+ 125 y)))
+     (lcos (format nil "qline ~a ~a ~a ~a" x y xx y))
+     (lcos (format nil "qline ~a ~a ~a ~a" x y x yy))
+     (lcos (format nil "qline ~a ~a ~a ~a" x yy xx yy))
+     (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
    (lcos (format nil "qnumber ~a" i))
    (lcos "qswap")))

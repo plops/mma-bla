@@ -347,7 +347,7 @@ but replaces START."
   (format t "void draw_number(int number)~%{~%")
   (format t "  int i;~%  char s[200];~%  snprintf(s,200,\"%d\",number);~%")
   (format t "  glPushMatrix();~%")
-  (format t "  glTranslated(100,130,0);~%")
+  (format t "  glTranslated(80,130,0);~%")
   (format t "  glScaled(-3,3,3);~%")
   (format t "  glRotated(90,0,0,1);~%")
   
