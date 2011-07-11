@@ -459,6 +459,11 @@ main(int argc,char**argv)
   glMatrixMode(GL_PROJECTION);
   glOrtho(0,1280,1024,0,-1,1);
   glMatrixMode(GL_MODELVIEW);
+
+  struct timeval tv;    
+  suseconds_t old_usec=0;
+  time_t old_sec=0;
+
   
   while(running){
     while(check_stdin()>0){
@@ -470,28 +475,27 @@ main(int argc,char**argv)
       }
       parse_line(line);
     }
-    
+
+    frame_count++;
+    gettimeofday(&tv,0);
+
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadMatrixf(m);
-    
-    frame_count++;
-    
-    unsigned long old_usec=0;
 
     // run all commands which have been stored in the queue
     while(!emptyp()){
       char*cmd=pop();
+      
+      
+      
       if(0==strncmp(cmd,"swap",4)){
-	struct timeval tv;
-	gettimeofday(&tv,0);
 	
-	printf("q swap frame-count=%d sec=%lu usec=%lu dt=%g\n",
+	printf("q swap frame-count=%d sec=%lu usec=%lu dt_ms=%g\n",
 	       frame_count,tv.tv_sec,tv.tv_usec,
-	       (tv.tv_usec-old_usec)/1000.);
+	       (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.));
 	
 	fflush(stdout);
 	free(cmd);
-	old_usec=tv.tv_usec;
 	goto nextframe;
       }
       parse_line(cmd);
@@ -506,8 +510,10 @@ main(int argc,char**argv)
       draw_number(frame_count);
     }
     
-    // glfwSleep(1./72);
+    //glfwSleep(1./72);
     glfwSwapBuffers();
+    old_usec=tv.tv_usec;
+    old_sec=tv.tv_sec;	
   }
   
   glfwCloseWindow();
