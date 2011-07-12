@@ -483,7 +483,7 @@
   (defun draw-screen ()
     ;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    (gl:clear :color-buffer-bit)
+    ;(gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
