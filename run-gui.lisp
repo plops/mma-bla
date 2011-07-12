@@ -82,16 +82,16 @@
 
 (defparameter *mma-imgs*
  (let ((res nil)
-       (n 5))
+       (n 12))
    (dotimes (k n)
-     (let* ((kk (- k (/ n 2)))
+     (let* ((arg (* 2 pi (/ k n)))
 	    (n 256)
 	    (a (make-array (list n n)
 			   :element-type '(unsigned-byte 16))))
        (dotimes (i 256)
 	 (dotimes (j 256)
-	   (let* ((x (+ (- i (floor n 2)) (* 40 kk)))
-		  (y (- j (floor n 2)))
+	   (let* ((x (+ (- i (floor n 2)) (* 40 (cos arg))))
+		  (y (+ (- j (floor n 2)) (* 40 (sin arg))))
 		  (r2 (+ (* x x) (* y y))))
 	     (setf (aref a j i) (if t #+nil (< r2 (expt 45 2)) 
 				    #+nil(= 0 (mod (+ i j) 2))
@@ -453,7 +453,7 @@
 	  (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
-					  :scale 120s0 :offset 0s0)))
+					  :scale 420s0 :offset 0s0)))
 		(destructuring-bind (h w) (array-dimensions e)
 		  ;; current image
 		  (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
@@ -744,7 +744,8 @@
 #+nil
 (lcos "quit")
 
-(dotimes (i 1000)
+#+nil ;; turn lcos white
+(dotimes (i 10000)
   (lcos "qdisk 225 225 200")
   (lcos "qswap"))
 #+nil
