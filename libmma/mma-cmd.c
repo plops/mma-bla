@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <math.h>
 #include "slm.h"
 
@@ -61,11 +62,24 @@ double
 img(double*ignore)
 {
   (void)ignore;
+  
+  struct timeval tv;    
+  suseconds_t old_usec=0;
+  time_t old_sec=0;
+  gettimeofday(&tv,0);
+  
+  old_usec=tv.tv_usec;
+  old_sec=tv.tv_sec;	
+  
+
   if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
     printf("error upload-image\n");
     return NAN;
   }
-  return 0.0;
+
+  gettimeofday(&tv,0);
+  
+  return (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.);
 }
 
 int keep_running=1;
@@ -219,7 +233,7 @@ load(double*args)
   int bytes=(int)args[0];
   int bytes_to_read=min(256*256*2,bytes);
   int n=fread(buf,1,bytes_to_read,fifofile);
-  printf("read %d of %d bytes\n",n,bytes_to_read);
+  printf("(mma-load :bytes %d :bytes-expected %d)\n",n,bytes_to_read);
   fflush(stdout);
   return 1.0*n;
 }
