@@ -79,6 +79,27 @@
 	(write-sequence img1 *binary-fifo*)
 	(finish-output *binary-fifo*)))
 
+
+(defparameter *mma-imgs*
+ (let ((res nil)
+       (n 5))
+   (dotimes (k n)
+     (let* ((kk (- k (/ n 2)))
+	    (n 256)
+	    (a (make-array (list n n)
+			   :element-type '(unsigned-byte 16))))
+       (dotimes (i 256)
+	 (dotimes (j 256)
+	   (let* ((x (+ (- i (floor n 2)) (* 40 kk)))
+		  (y (- j (floor n 2)))
+		  (r2 (+ (* x x) (* y y))))
+	     (setf (aref a j i) (if t #+nil (< r2 (expt 45 2)) 
+				    #+nil(= 0 (mod (+ i j) 2))
+				    (min 4095 (floor (* 4095 (exp (* -.0004 r2)))))
+				    90)))))
+       (push a res)))
+   (reverse res)))
+
 (defparameter *mma-img*
   (let* ((n 256)
 	 (a (make-array (list n n)
@@ -117,10 +138,13 @@
 #+nil
 (mma "help")
 #+nil
-(let ((n 5))
- (dotimes (i n) 
-   (mma (format nil "img ~a" (1+ i)))
-   (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))))
+(let ((n (length *mma-imgs*))
+      (i 0))
+  (dolist (e *mma-imgs*)
+    (send-binary e)
+    (mma (format nil "img ~a" (1+ i)))
+    (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))
+    (incf i)))
 
 #+nil
 (mma "stop")
@@ -443,16 +467,20 @@
 			      :wt (* h 1s0) :ht (* w 1s0))))
 		(gui:destroy tex)))))
 	 (incf count))
-    (with-pushed-matrix
-      ;; mma image
-      (gl:scale .5 .5 .5)
-      (gl:translate 0 1100 0)
-      (let ((tex (make-instance 'gui::texture16 :data *mma-img*
-				:scale 16s0 :offset 0s0)))
-       (destructuring-bind (h w) (array-dimensions *mma-img*)
-	 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-		   :wt (* h 1s0) :ht (* w 1s0)))
-       (gui:destroy tex))))
+    (when (and *mma-imgs* (first *mma-imgs*))
+      (let ((cnt 0))
+       (dolist (e *mma-imgs*)
+	 (with-pushed-matrix
+	   ;; mma image
+	   (gl:scale .25 .25 .25)
+	   (gl:translate (* cnt 256) 2100 0)
+	   (incf cnt)
+	   (let ((tex (make-instance 'gui::texture16 :data e
+				     :scale 16s0 :offset 0s0)))
+	     (destructuring-bind (h w) (array-dimensions e)
+	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+			 :wt (* h 1s0) :ht (* w 1s0)))
+	     (gui:destroy tex)))))))
   #+nil
   (defun capture ()
     #-clara (when new-size
@@ -715,6 +743,10 @@
 (lcos "toggle-stripes 1")
 #+nil
 (lcos "quit")
+
+(dotimes (i 1000)
+  (lcos "qdisk 225 225 200")
+  (lcos "qswap"))
 #+nil
 (let ((a (random 100)))
   (dotimes (i 600)
@@ -731,3 +763,4 @@
       (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
     (lcos (format nil "qnumber ~a" i))
     (lcos "qswap")))
+
