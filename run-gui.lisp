@@ -88,10 +88,13 @@
 	(let* ((x (- i (floor n 2)))
 	       (y (- j (floor n 2)))
 	       (r2 (+ (* x x) (* y y))))
-	  (setf (aref a j i) (if (< r2 (expt 45 2)) #+nil (= 0 (mod (+ i j) 2))
-				 4095
+	  (setf (aref a j i) (if t #+nil (< r2 (expt 45 2)) 
+				 #+nil(= 0 (mod (+ i j) 2))
+				 (min 4095 (floor (* 4095 (exp (* -.0004 r2)))))
 				 90)))))
     a))
+
+
 #+nil
 (send-binary *mma-img*)
 
@@ -114,7 +117,11 @@
 #+nil
 (mma "help")
 #+nil
-(dotimes (i 10) (mma "img 1"))
+(let ((n 5))
+ (dotimes (i n) 
+   (mma (format nil "img ~a" (1+ i)))
+   (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))))
+
 #+nil
 (mma "stop")
 #+nil
@@ -422,19 +429,30 @@
 	  (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
-					  :scale 80s0 :offset 0s0)))
+					  :scale 120s0 :offset 0s0)))
 		(destructuring-bind (h w) (array-dimensions e)
+		  ;; current image
 		  (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			    :wt (* h 1s0) :ht (* w 1s0))
 		  
 		  (with-pushed-matrix 
 		    (gl:translate (- 1024 550 (* .25 w (floor p))) 420 0)
 		    (gl:scale .25 .25 .25)
-		    
+		    ;; small copies of earlier images
 		    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			      :wt (* h 1s0) :ht (* w 1s0))))
 		(gui:destroy tex)))))
-	 (incf count)))
+	 (incf count))
+    (with-pushed-matrix
+      ;; mma image
+      (gl:scale .5 .5 .5)
+      (gl:translate 0 1100 0)
+      (let ((tex (make-instance 'gui::texture16 :data *mma-img*
+				:scale 16s0 :offset 0s0)))
+       (destructuring-bind (h w) (array-dimensions *mma-img*)
+	 (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+		   :wt (* h 1s0) :ht (* w 1s0)))
+       (gui:destroy tex))))
   #+nil
   (defun capture ()
     #-clara (when new-size
@@ -537,7 +555,7 @@
 		(sb-concurrency:enqueue a *line*))))))))
   #+nil
   (defun obtain-section ()
--    (let ((phase-im (make-array (list phases-y phases-x h w)
+    (let ((phase-im (make-array (list phases-y phases-x h w)
 				:element-type '(unsigned-byte 16)))
 	  (sec (make-array (list h w)
 			   :element-type '(unsigned-byte 16))))

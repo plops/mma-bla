@@ -87,6 +87,7 @@ img(double*params)
 	      );
 }
 
+//ftp.ipms.fraunhofer.de/mma-documentation/windows/2_dll/ipms_slm_interface_library_ docs.pdf
 double
 set_picture_sequence(double*params)
 {
@@ -307,6 +308,7 @@ struct{
   double (*fptr)(double*);
 }cmd[]={{"help",0,help},
 	{"img",1,img},
+	{"set-picture-sequence",3,set_picture_sequence},
 	{"splat",3,splat},
 	{"status",0,status},
 	{"start",0,start},
