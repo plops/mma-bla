@@ -66,7 +66,8 @@
 	  :direction :output
 	  :if-exists :supersede
 	  :if-does-not-exist :error
-	  :element-type '(unsigned-byte 16))))
+	  :element-type '(unsigned-byte 16)))
+  (send-binary *mma-img*))
 
 (defun send-binary (img)
       (declare (type (simple-array (unsigned-byte 16) (256 256)) img))
@@ -113,7 +114,7 @@
 #+nil
 (mma "help")
 #+nil
-(mma "img")
+(dotimes (i 10) (mma "img 1"))
 #+nil
 (mma "stop")
 #+nil

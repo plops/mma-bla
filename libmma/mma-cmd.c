@@ -58,28 +58,50 @@ status(double*ignore)
   return 0.0;
 }
 
+#define RETURN_TIME(code) do{                   \
+struct timeval tv;                              \
+suseconds_t old_usec=0;				\
+time_t old_sec=0;                               \
+gettimeofday(&tv,0);				\
+old_usec=tv.tv_usec;				\
+old_sec=tv.tv_sec;				\
+do{						\
+  code						\
+    }while(0);					\
+gettimeofday(&tv,0); \
+return (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.); \
+}while(0)
+
 double
-img(double*ignore)
+img(double*params)
+{  
+  int picture_nr=1;
+  if(params) // override default
+    picture_nr=(int)params[0];
+  
+  RETURN_TIME(
+	      if(0!=SLM_WriteMatrixData(picture_nr,3,buf,N*N)){
+		printf("error upload-image\n");
+		return NAN;
+	      }
+	      );
+}
+
+double
+set_picture_sequence(double*params)
 {
-  (void)ignore;
+  unsigned short picture_nr=1, last_picture_p=1, ready_out_p=1;
   
-  struct timeval tv;    
-  suseconds_t old_usec=0;
-  time_t old_sec=0;
-  gettimeofday(&tv,0);
-  
-  old_usec=tv.tv_usec;
-  old_sec=tv.tv_sec;	
-  
-
-  if(0!=SLM_WriteMatrixData(1,3,buf,N*N)){
-    printf("error upload-image\n");
-    return NAN;
+  if(params){ // override default parameters
+    picture_nr=(unsigned short)params[0];
+    last_picture_p=(unsigned short)params[1];
+    ready_out_p=(unsigned short)params[2];
   }
-
-  gettimeofday(&tv,0);
-  
-  return (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.);
+  RETURN_TIME(
+	      if(0!=SLM_SetPictureSequence(picture_nr,last_picture_p,ready_out_p)){
+		e("set-picture-sequence");
+		return NAN;
+	      });
 }
 
 int keep_running=1;
@@ -128,11 +150,12 @@ double
 intern_trigger(double*ignore)
 {
   (void)ignore;
-  if(0!=SLM_DisableExternStart()){
-    e("disable extern start");
-    return NAN;
-  }
-  return 0.0;
+  RETURN_TIME(
+	      if(0!=SLM_DisableExternStart()){
+		e("disable extern start");
+		return NAN;
+	      }
+	      );
 }
 
 double
@@ -283,7 +306,7 @@ struct{
   int args;
   double (*fptr)(double*);
 }cmd[]={{"help",0,help},
-	{"img",0,img},
+	{"img",1,img},
 	{"splat",3,splat},
 	{"status",0,status},
 	{"start",0,start},
