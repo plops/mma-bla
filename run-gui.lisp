@@ -82,7 +82,7 @@
 
 (defparameter *mma-imgs*
  (let ((res nil)
-       (n 12))
+       (n 5))
    (dotimes (k n)
      (let* ((arg (* 2 pi (/ k n)))
 	    (n 256)
@@ -90,8 +90,8 @@
 			   :element-type '(unsigned-byte 16))))
        (dotimes (i 256)
 	 (dotimes (j 256)
-	   (let* ((x (+ (- i (floor n 2)) (* 40 (cos arg))))
-		  (y (+ (- j (floor n 2)) (* 40 (sin arg))))
+	   (let* ((x (+ (- i (floor n 2)) (* 90 (cos arg))))
+		  (y (+ (- j (floor n 2)) (* 90 (sin arg))))
 		  (r2 (+ (* x x) (* y y))))
 	     (setf (aref a j i) (if t #+nil (< r2 (expt 45 2)) 
 				    #+nil(= 0 (mod (+ i j) 2))
@@ -145,6 +145,7 @@
     (mma (format nil "img ~a" (1+ i)))
     (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))
     (incf i)))
+
 
 #+nil
 (mma "stop")
@@ -381,6 +382,45 @@
        (free-internal-memory)))
  :name "capture")
 
+#+nil
+(progn ;; reset mma and lcos and start camera
+  ;; capture n frames and save into /dev/shm
+  (sb-thread:make-thread 
+   #'(lambda () 
+       (let ((n (* 100 (length *mma-imgs*))))
+	 (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+	 (start-acquisition)
+	 
+	 (dotimes (i n)
+	   (mma (format nil "set-picture-sequence ~a ~a 1" 
+			(1+ i) ;; images start with 1
+			(if (= i (1- n)) 1 0) ;; last image (n-1)th has parameter 1
+			)))
+	 (dotimes (j 1)
+	   (dotimes (i (* 2 n)) 
+	     (lcos (format nil "qnumber ~a" i))
+	     (lcos "qswap")))
+	 (let ((count 0))
+	   (loop while (< count n) do
+		(capture)
+		(dotimes (i (sb-concurrency:queue-count *line*))
+		  (setf (aref *img-array* count)
+			(sb-concurrency:dequeue *line*))
+		  (incf count))))
+	 (abort-acquisition)
+	 (free-internal-memory)
+	 (format t "capture finished!~%")
+	 (dotimes (i n) 
+	   (vol::write-pgm-transposed 
+	    (format nil "/dev/shm/~4,'0d.pgm" i)
+	    (vol:normalize-2-sf/ub8
+	     (vol:convert-2-ub16/sf-mul
+	      (aref *img-array* i)))))))
+   :name "capture"))
+#+nil
+(require :vol)
+
+
 (progn
   (defparameter *t8* nil)
   (defparameter *t9* nil)
@@ -443,7 +483,7 @@
   (defun draw-screen ()
     ;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    ;(gl:clear :color-buffer-bit)
+    (gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))

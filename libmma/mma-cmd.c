@@ -199,7 +199,7 @@ value(double*args)
   int i;
   for(i=0;i<NN;i++)
     buf[i]=d;
-  return img(0);
+  return img(0); //img writes into pic number 1 by default
 }
 
 double
