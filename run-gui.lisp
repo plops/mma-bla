@@ -41,12 +41,16 @@
 		    :wait nil)
 #+nil
 (progn
-  (defparameter *mma-chan*
-    (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
-			:output :stream
-			:input :stream
-			:wait nil))
-  
+  (sb-thread:make-thread 
+   #'(lambda ()
+       (defparameter *mma-chan*
+	 (sb-ext:run-program "/home/martin/0505/mma/libmma/mma-cmd" '()
+			     :output :stream
+			     :input :stream
+			     :wait nil))
+       (sb-ext:process-wait *mma-chan*))
+   :name "mma-waiting-father")
+  (sleep .3)
   (sb-thread:make-thread 
    #'(lambda ()
        (unwind-protect
@@ -401,7 +405,7 @@
 			     :element-type '(unsigned-byte 16))))
   ;(gui::reset-frame-count)
   (defun draw-screen ()
-    (gl:draw-buffer :front-and-back)
+    ;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
     ;(gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
@@ -690,18 +694,17 @@
 (lcos "quit")
 #+nil
 (let ((a (random 100)))
- (dotimes (i 600)
-   (let* ((arg (* 2 pi (/ i 60)))
-	  (r 100)
-	  (c (+ 225 (* r (cos arg))))
-	  (s (+ 225 (* r (sin arg)))))
-    (lcos (format nil "qline 225 225 ~a ~a" c s)))
-   (let ((x 100) (xx 350)
-	 (y 90) (yy 350))
-   #+nil  (lcos (format nil "qdisk ~a ~a 200" (+ 125 x) (+ 125 y)))
-     (lcos (format nil "qline ~a ~a ~a ~a" x y xx y))
-     (lcos (format nil "qline ~a ~a ~a ~a" x y x yy))
-     (lcos (format nil "qline ~a ~a ~a ~a" x yy xx yy))
-     (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
-   (lcos (format nil "qnumber ~a" i))
-   (lcos "qswap")))
+  (dotimes (i 600)
+    (let* ((arg (* 2 pi (/ (mod i 10) 10)))
+	   (r 140)
+	   (c (+ 225 (* r (cos arg))))
+	   (s (+ 225 (* r (sin arg)))))
+      (lcos (format nil "qline 225 225 ~a ~a" c s)))
+    (let ((x 100) (xx 350)
+	  (y 90) (yy 350))
+      (lcos (format nil "qline ~a ~a ~a ~a" x y xx y))
+      (lcos (format nil "qline ~a ~a ~a ~a" x y x yy))
+      (lcos (format nil "qline ~a ~a ~a ~a" x yy xx yy))
+      (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
+    (lcos (format nil "qnumber ~a" i))
+    (lcos "qswap")))
