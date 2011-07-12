@@ -240,6 +240,29 @@ frame_voltage (double*args)
   return 0.0;
 }
 
+double
+get_temperature(double *args)
+{
+  (void)args;
+  float temp;
+  if(0!=SLM_GetMMATemperature(&temp)){
+    e("get mma temperature");
+    return NAN;
+  }
+  return 1.0*temp;
+}
+
+double
+set_temperature(double *args)
+{
+  float temp=(float)args[0];
+  if(0!=SLM_SetMMATemperature(&temp)){
+    e("set mma temperature");
+    return NAN;
+  }
+  return 1.0*temp;
+}
+
 // array that contains all functions that can be called from text interface
 struct{ 
   char name[CMDLEN];
@@ -261,6 +284,8 @@ struct{
 	{"extern-trigger",0,extern_trigger},
 	{"set-cycle-time",1,set_cycle_time},
 	{"frame-voltage",2,frame_voltage},
+	{"get-temperature",0,get_temperature},
+	{"set-temperature",1,set_temperature},
 	{"load",1,load},
 	{"quit",0,quit},};
 

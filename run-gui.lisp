@@ -57,7 +57,7 @@
 	   (with-open-stream (s (sb-ext:process-output *mma-chan*))
 	     (loop for line = (read-line s nil nil)
 		while line do
-		  (format t "read: ~a~%" line)
+		  (format t "mma read: ~a~%" line)
 		  (finish-output)))
 	(sb-ext:process-close *mma-chan*)))
    :name "mma-cmd-reader")
@@ -111,6 +111,8 @@
 #+nil
 (mma "deflection 118.5")
 #+nil
+(mma "help")
+#+nil
 (mma "img")
 #+nil
 (mma "stop")
@@ -118,6 +120,8 @@
 (mma "off")
 #+nil
 (mma "on")
+#+nil
+(mma "get-temperature")
 #+nil
 (mma "start")
 #+nil
