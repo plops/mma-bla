@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #define NAN __builtin_nan("")
 
@@ -468,11 +469,15 @@ main(int argc,char**argv)
   while(running){
     while(check_stdin()>0){
       char*s=malloc(CMDLEN);
-      char*line=fgets(s,CMDLEN,stdin);
-      if(line!=s){
-	printf("fgets error\n");
-	fflush(stdout);
-      }
+      //char*line=fgets(s,CMDLEN,stdin);
+      // make sure you only send one line on the fifo
+      int n=read(0,s,CMDLEN);
+      s[n-1]=0;
+      char*line=s;
+      /* if(line!=s){ */
+      /* 	printf("fgets error\n"); */
+      /* 	fflush(stdout); */
+      /* } */
       parse_line(line);
     }
 
