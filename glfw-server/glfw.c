@@ -20,6 +20,9 @@ enum { CMDLEN=100,
        DOCSTRINGLEN=200,
 };
 
+char *mma_fifo_fn="/dev/shm/mma-fifo";
+int mma_fifo_fd;
+
 int frame_count=0; // increments whenever a new frame is shown
 
 // http://en.wikipedia.org/wiki/Circular_buffer
@@ -428,6 +431,8 @@ main(int argc,char**argv)
   // refresh of screen. On Nvidia hardware this can be done by setting
   // the following environment variable.
   setenv("__GL_SYNC_TO_VBLANK","1",1); 
+
+  mma_fifo_fd=open(mma_fifo_fn,O_WRONLY);
   
   if(!glfwInit())
     exit(EXIT_FAILURE);
@@ -525,6 +530,8 @@ main(int argc,char**argv)
 
   glfwTerminate();
   printf("bye from lcos\n");
+
+  close(mma_fifo_fd);
   return 0;
   //exit(EXIT_SUCCESS);
 }
