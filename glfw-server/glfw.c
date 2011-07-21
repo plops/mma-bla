@@ -6,6 +6,9 @@
 #include <math.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <sys/fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define NAN __builtin_nan("")
 
@@ -97,6 +100,8 @@ int running=GL_TRUE;
 // every frame. This is useful for verifying the synchronization of
 // the drawing function, screen and camera exposure.
 int show_calibration_stripes=1;
+// only when run_queue=1 the queue will start running
+int run_queue=0;
 
 double
 quit(double*ignore) 
@@ -218,6 +223,11 @@ toggle_stripes(double*v){
   return 1.0*show_calibration_stripes;
 }
 
+double
+toggle_queue(double*v){
+  run_queue=(int)v[0];
+  return 1.0*run_queue;
+}
 
 // array that contains all functions that can be called from text interface
 struct{ 
@@ -239,6 +249,7 @@ struct{
 	{"clear",0,0,clear,"immediately clear screen"},
 	{"qclear",0,1,qclear,"clear screen"},
 	{"toggle-stripes",1,0,toggle_stripes,"toggle display of calibration stripes"},
+	{"toggle-queue",1,0,toggle_queue,"toggle displaying things from the queue"},
 };
 
 
@@ -432,6 +443,7 @@ main(int argc,char**argv)
   // the following environment variable.
   setenv("__GL_SYNC_TO_VBLANK","1",1); 
 
+  mkfifo(mma_fifo_fn,0664);
   mma_fifo_fd=open(mma_fifo_fn,O_WRONLY);
   
   if(!glfwInit())
@@ -479,6 +491,7 @@ main(int argc,char**argv)
       int n=read(0,s,CMDLEN);
       s[n-1]=0;
       char*line=s;
+      printf("line='%s' len=%d\n",s,n);
       /* if(line!=s){ */
       /* 	printf("fgets error\n"); */
       /* 	fflush(stdout); */
@@ -492,26 +505,27 @@ main(int argc,char**argv)
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadMatrixf(m);
 
-    // run all commands which have been stored in the queue
-    while(!emptyp()){
-      char*cmd=pop();
-      
-      
-      
-      if(0==strncmp(cmd,"swap",4)){
+    
+    if(run_queue){ // run all commands which have been stored in the queue
+      run_queue=0;
+      while(!emptyp()){
+	char*cmd=pop();
 	
-	printf("q swap frame-count=%d sec=%lu usec=%lu dt_ms=%3.3g\n",
-	       frame_count,tv.tv_sec,tv.tv_usec,
-	       (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.));
-	
+	if(0==strncmp(cmd,"swap",4)){
+	  
+	  printf("q swap frame-count=%d sec=%lu usec=%lu dt_ms=%3.3g\n",
+		 frame_count,tv.tv_sec,tv.tv_usec,
+		 (tv.tv_usec/1000.-old_usec/1000.)+(tv.tv_sec/1000.-old_sec/1000.));
+	  
+	  fflush(stdout);
+	  free(cmd);
+	  goto nextframe;
+	}
+	parse_line(cmd);
+	printf("q cread=%5d cwrite=%5d cmd=%s\n",circread,circwrite,cmd);
 	fflush(stdout);
 	free(cmd);
-	goto nextframe;
       }
-      parse_line(cmd);
-      printf("q cread=%5d cwrite=%5d cmd=%s\n",circread,circwrite,cmd);
-      fflush(stdout);
-      free(cmd);
     }
   nextframe:
     if(show_calibration_stripes){

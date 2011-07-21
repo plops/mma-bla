@@ -483,7 +483,7 @@
   (defun draw-screen ()
     ;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    ;(gl:clear :color-buffer-bit)
+    (gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
@@ -752,7 +752,8 @@
 (defun lcos (cmd)
   (let ((s (sb-ext:process-input *lcos-chan*)))
     (format s "~a~%" cmd)
-    (finish-output s)))
+    (finish-output s)
+    (force-output s)))
 
 
 #+nil
@@ -780,7 +781,9 @@
          (sb-ext:process-close *lcos-chan*)))
    :name "cmd-reader"))
 #+nil
-(lcos "toggle-stripes 1")
+(lcos "toggle-stripes 0")
+#+nil
+(lcos "toggle-queue 0")
 #+nil
 (lcos "quit")
 
@@ -790,7 +793,7 @@
   (lcos "qswap"))
 #+nil
 (let ((a (random 100)))
-  (dotimes (i 600)
+  (dotimes (i 3)
     (let* ((arg (* 2 pi (/ (mod i 10) 10)))
 	   (r 140)
 	   (c (+ 225 (* r (cos arg))))
