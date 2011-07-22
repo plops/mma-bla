@@ -28,7 +28,7 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) .25s0))
+ (+ (focus:get-position) -1s0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -145,7 +145,10 @@
     (mma (format nil "img ~a" (1+ i)))
     (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))
     (incf i)))
-
+#+nil
+(let ((i 0)
+      (n 1))
+ (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0))))
 
 #+nil
 (mma "stop")
@@ -483,7 +486,7 @@
   (defun draw-screen ()
     ;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    (gl:clear :color-buffer-bit)
+    ;(gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
@@ -493,7 +496,8 @@
 	  (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
-					  :scale 420s0 :offset 0s0)))
+					  :scale 120s0 :offset 0s0
+					  )))
 		(destructuring-bind (h w) (array-dimensions e)
 		  ;; current image
 		  (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
@@ -812,3 +816,13 @@
     (lcos (format nil "qnumber ~f" i))
     (lcos "qswap")))
 
+#+nil
+(dotimes (i 300)
+    (lcos (format nil "qnumber ~a" i))
+    (lcos "qswap"))
+#+nil
+(progn
+  (let ((n (length *mma-imgs*)))
+  (dotimes (i n)
+    (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))))
+ (lcos "toggle-queue 1"))
