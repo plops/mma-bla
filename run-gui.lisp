@@ -783,7 +783,7 @@
 #+nil
 (lcos "toggle-stripes 0")
 #+nil
-(lcos "toggle-queue 0")
+(lcos "toggle-queue 1")
 #+nil
 (lcos "quit")
 

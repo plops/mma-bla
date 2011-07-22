@@ -426,6 +426,27 @@ check_stdin()
   return retval;
 }
 
+int
+replace_newline_0(char*lines,int*starts,int nstarts)
+{
+  // starts contains the start offsets of each line in lines. 
+  // it has to be allocated by caller. the first value is always 0
+
+  int i,n=strlen(lines),is=0;
+  starts[is]=0;
+  for(i=0;i<n;i++) // traverse string
+    if(lines[i]=='\n'){
+      lines[i]=0;
+      is++;
+      if(is>=nstarts){
+	printf("starts can't contain all detected lines\n");
+	return -1;
+      }
+      starts[is]=i+1;
+    }
+  return is+1; // return the number of detected lines
+}
+
 // Main program. Open a window. Continuously read commands from the
 // command line interface and draw frames with 60Hz onto the
 // screen. Commands for multiple frames can be cached within a ring
@@ -443,8 +464,8 @@ main(int argc,char**argv)
   // the following environment variable.
   setenv("__GL_SYNC_TO_VBLANK","1",1); 
 
-  mkfifo(mma_fifo_fn,0664);
-  mma_fifo_fd=open(mma_fifo_fn,O_WRONLY);
+  //mkfifo(mma_fifo_fn,0664);
+  //mma_fifo_fd=open(mma_fifo_fn,O_WRONLY);
   
   if(!glfwInit())
     exit(EXIT_FAILURE);
@@ -489,14 +510,13 @@ main(int argc,char**argv)
       //char*line=fgets(s,CMDLEN,stdin);
       // make sure you only send one line on the fifo
       int n=read(0,s,CMDLEN);
-      s[n-1]=0;
-      char*line=s;
-      printf("line='%s' len=%d\n",s,n);
-      /* if(line!=s){ */
-      /* 	printf("fgets error\n"); */
-      /* 	fflush(stdout); */
-      /* } */
-      parse_line(line);
+      s[n-1]=0; // the last character should always be \n
+      enum{NSTARTS=100};
+      int starts[NSTARTS];
+      int nlines=replace_newline_0(s,starts,NSTARTS);
+      int i;
+      for(i=0;i<nlines;i++)
+	parse_line(s+starts[i]);
     }
 
     frame_count++;
