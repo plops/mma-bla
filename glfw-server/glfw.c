@@ -444,7 +444,7 @@ replace_newline_0(char*lines,int*starts,int nstarts)
       }
       starts[is]=i+1;
     }
-  return is+1; // return the number of detected lines
+  return is; // return the number of detected lines
 }
 
 // Main program. Open a window. Continuously read commands from the
@@ -506,17 +506,26 @@ main(int argc,char**argv)
   
   while(running){
     while(check_stdin()>0){
-      char*s=malloc(CMDLEN);
+      char*s=malloc(BUFSIZ);
       //char*line=fgets(s,CMDLEN,stdin);
       // make sure you only send one line on the fifo
-      int n=read(0,s,CMDLEN);
-      s[n-1]=0; // the last character should always be \n
+      int n=read(0,s,BUFSIZ);
+      if(n>=BUFSIZ)
+	printf("read too much\n");
+      if(n==0){
+	printf("read empty\n");
+	continue;
+      }
+      s[n]=0; 
       enum{NSTARTS=100};
       int starts[NSTARTS];
       int nlines=replace_newline_0(s,starts,NSTARTS);
       int i;
-      for(i=0;i<nlines;i++)
+      for(i=0;i<nlines;i++){
+	printf("i=%d '%s'\n",i,s+starts[i]);
 	parse_line(s+starts[i]);
+      }
+      free(s);
     }
 
     frame_count++;
@@ -527,7 +536,8 @@ main(int argc,char**argv)
 
     
     if(run_queue){ // run all commands which have been stored in the queue
-      run_queue=0;
+      if(emptyp())
+	 run_queue=0;
       while(!emptyp()){
 	char*cmd=pop();
 	

@@ -781,7 +781,11 @@
          (sb-ext:process-close *lcos-chan*)))
    :name "cmd-reader"))
 #+nil
+(lcos "toggle-stripes 1")
+#+NIL
 (lcos "toggle-stripes 0")
+#+nil
+(lcos "toggle-queue 0")
 #+nil
 (lcos "toggle-queue 1")
 #+nil
@@ -793,18 +797,18 @@
   (lcos "qswap"))
 #+nil
 (let ((a (random 100)))
-  (dotimes (i 3)
+  (dotimes (i 300)
     (let* ((arg (* 2 pi (/ (mod i 10) 10)))
 	   (r 140)
 	   (c (+ 225 (* r (cos arg))))
 	   (s (+ 225 (* r (sin arg)))))
-      (lcos (format nil "qline 225 225 ~a ~a" c s)))
+      (lcos (format nil "qline 225 225 ~f ~f" c s)))
     (let ((x 100) (xx 350)
 	  (y 90) (yy 350))
-      (lcos (format nil "qline ~a ~a ~a ~a" x y xx y))
-      (lcos (format nil "qline ~a ~a ~a ~a" x y x yy))
-      (lcos (format nil "qline ~a ~a ~a ~a" x yy xx yy))
-      (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
-    (lcos (format nil "qnumber ~a" i))
+      (lcos (format nil "qline ~f ~f ~f ~f" x y xx y))
+      (lcos (format nil "qline ~f ~f ~f ~f" x y x yy))
+      (lcos (format nil "qline ~f ~f ~f ~f" x yy xx yy))
+      (lcos (format nil "qline ~f ~f ~f ~f" xx y xx yy)))
+    (lcos (format nil "qnumber ~f" i))
     (lcos "qswap")))
 
