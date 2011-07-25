@@ -354,27 +354,33 @@
                         (/ sb-ext:*gc-run-time*
                            (* 1s0 internal-time-units-per-second)))
                 (setf sb-ext:*gc-run-time* 0))))
+
 #+nil
 (sb-thread:make-thread 
  #'(lambda () 
+     
      (progn
-       #+nil (dotimes (i 600)
-	       (let* ((arg (* 2 pi (/ i 60)))
-		      (r 100)
-		      (c (+ 225 (* r (cos arg))))
-		      (s (+ 225 (* r (sin arg)))))
-		 (lcos (format nil "qline 225 225 ~a ~a" c s)))
-	       (let ((x 100) (xx 350)
-		     (y 90) (yy 350))
-		 (lcos (format nil "qline ~a ~a ~a ~a" x y xx y))
-		 (lcos (format nil "qline ~a ~a ~a ~a" x y x yy))
-		 (lcos (format nil "qline ~a ~a ~a ~a" x yy xx yy))
-		 (lcos (format nil "qline ~a ~a ~a ~a" xx y xx yy)))
-	       (lcos (format nil "qnumber ~a" i))
-	       (lcos "qswap"))
        (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
-       (start-acquisition)
-       ;(reset-frame-count)
+       
+       (clara::prepare-acquisition)
+
+       (progn ;; display a disk ontop of in-focus bead
+	 (dotimes (i (length *img-array*))
+	   (lcos "qdisk 200 225 80")
+	   (lcos "qswap"))
+	 (sleep 1)
+	 ;; start LCOS
+	 (lcos "toggle-queue 1"))
+
+       (let ((n (length *mma-imgs*))) ;; start MMA
+	 (dotimes (i n)
+	   (mma (format nil "set-picture-sequence ~a ~a 1"
+			(1+ i) (if (= i (1- n)) 
+				   1 
+				   0)))))
+
+       (start-acquisition) ;; start camera
+
        (let ((count 0))
 	 (format t "count: ~a~%" count)
 	 (loop while (and *do-capture*
@@ -450,11 +456,11 @@
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
-(defparameter *img-array* (make-array (* 100 10)))
+(defparameter *img-array* (make-array (* 100 6)))
 #+nil
 (require :vol)
-#+nil
-(time 
+#+nil 
+(time ;; STORE
  (let* ((max-threads 4)
 	(w (/ (length *img-array*)
 	      max-threads)))
