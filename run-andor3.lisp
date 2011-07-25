@@ -1,3 +1,4 @@
+;;Downloads5/andor-neo/andor/doc/Andor Software Development Kit 3.pdf
 (require :asdf)
 #.(progn
     (setf asdf:*central-registry* 

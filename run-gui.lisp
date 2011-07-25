@@ -137,7 +137,7 @@
 (mma "deflection 118.5")
 #+nil
 (mma "help")
-#+nil
+#+nil ;; ANGLE
 (let ((n (length *mma-imgs*))
       (i 0))
   (dolist (e *mma-imgs*)
@@ -496,7 +496,7 @@
 	  (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
-					  :scale 120s0 :offset 0s0
+					  :scale 920s0 :offset 0.0003s0
 					  )))
 		(destructuring-bind (h w) (array-dimensions e)
 		  ;; current image
@@ -796,9 +796,12 @@
 (lcos "quit")
 
 #+nil ;; turn lcos white
-(dotimes (i 10000)
-  (lcos "qdisk 225 225 200")
-  (lcos "qswap"))
+(progn
+  (dotimes (i 300)
+    (lcos "qdisk 200 225 30")
+    (lcos "qswap"))
+  (sleep .1)
+  (lcos "toggle-queue 1"))
 #+nil
 (let ((a (random 100)))
   (dotimes (i 300)
