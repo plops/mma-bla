@@ -1,7 +1,7 @@
 (in-package :clara)
 
 (defparameter *clara-library* 
-  (load-shared-object "/usr/local/lib/libandor.so.2.88.30003.0"))
+  (load-shared-object "/usr/local/lib/libandor.so.2.90.30013.1"))
 
 
 (define-alien-routine ("GetAvailableCameras" get-available-cameras)

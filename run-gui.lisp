@@ -319,6 +319,9 @@
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
+(loop while (not *bla*) do
+ (defparameter *bla* (sb-concurrency:dequeue *line*)))
+
 (defparameter *do-capture* nil)
 (defparameter *do-capture* t)
 #+nil
@@ -496,7 +499,7 @@
 	  (when e
 	     (gl:with-pushed-matrix
 	       (let* ((tex (make-instance 'gui::texture16 :data e
-					  :scale 920s0 :offset 0.0003s0
+					  :scale 402s0 :offset 0.0077s0
 					  )))
 		(destructuring-bind (h w) (array-dimensions e)
 		  ;; current image
@@ -798,7 +801,7 @@
 #+nil ;; turn lcos white
 (progn
   (dotimes (i 300)
-    (lcos "qdisk 200 225 30")
+    (lcos "qdisk 200 225 80")
     (lcos "qswap"))
   (sleep .1)
   (lcos "toggle-queue 1"))
