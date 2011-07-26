@@ -32,7 +32,8 @@
     (clara::set-isolated-crop-mode 1 432 412 1 1))
   (defparameter *circ-buf-size*
     (val2 (clara:get-size-of-circular-buffer)))
-  (acquisition-mode :run-till-abort))
+  (acquisition-mode :run-till-abort)
+  (check (set-temperature -20)))
 
 
 #+nil
@@ -40,7 +41,10 @@
 #+nil
 (status)
 
-
+#+nil
+(set-temperature 5)
+#+nil
+(set-temperature -55)
 ;; (get-acquisition-timings)
 ;; (check (clara::set-fast-external-trigger 1))
 ;; (check (set-frame-transfer-mode 1))

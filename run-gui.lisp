@@ -28,12 +28,11 @@
 (focus:get-position)
 #+nil
 (focus:set-position
- (+ (focus:get-position) -1s0))
+ (+ (focus:get-position) .4s0))
 #+nil
 (capture)
 (defvar *mma-chan* nil)
 (defvar *binary-fifo* nil)
-
 
 
 #+NIL
@@ -319,8 +318,6 @@
 	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
 	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
 
-(loop while (not *bla*) do
- (defparameter *bla* (sb-concurrency:dequeue *line*)))
 
 (defparameter *do-capture* nil)
 (defparameter *do-capture* t)
@@ -357,18 +354,21 @@
 
 #+nil
 (sb-thread:make-thread 
- #'(lambda () 
+ #'(lambda ()  ;; CAPTURE
      
      (progn
        (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
        
        (clara::prepare-acquisition)
 
+       
+
        (progn ;; display a disk ontop of in-focus bead
-	 (dotimes (i (length *img-array*))
+	 (dotimes (i (* 2 (length *img-array*)))
 	   (lcos "qdisk 200 225 80")
 	   (lcos "qswap"))
 	 (sleep 1)
+
 	 ;; start LCOS
 	 (lcos "toggle-queue 1"))
 
@@ -380,6 +380,8 @@
 				   0)))))
 
        (start-acquisition) ;; start camera
+       ;; the first captured frame doesn't have any lcos image
+       ;; it can be used as a dark frame
 
        (let ((count 0))
 	 (format t "count: ~a~%" count)
@@ -456,7 +458,7 @@
 (change-target 840 470 200 :ril 210s0)
 #+nil
 (change-phase 1)
-(defparameter *img-array* (make-array (* 100 6)))
+(defparameter *img-array* (make-array (* 100)))
 #+nil
 (require :vol)
 #+nil 
@@ -495,7 +497,7 @@
   (defun draw-screen ()
     ;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    ;(gl:clear :color-buffer-bit)
+    (gl:clear :color-buffer-bit)
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
@@ -792,7 +794,7 @@
                   (format t "lcos read: ~a~%" line)
                   (finish-output)))
          (sb-ext:process-close *lcos-chan*)))
-   :name "cmd-reader"))
+   :name "lcos-cmd-reader"))
 #+nil
 (lcos "toggle-stripes 1")
 #+NIL
@@ -803,13 +805,21 @@
 (lcos "toggle-queue 1")
 #+nil
 (lcos "quit")
+#+nil
+(lcos "help")
+#+nil
+(lcos (format nil "toggle-notify-mma ~d"
+	      (sb-ext:process-pid *mma-chan*)))
 
 #+nil ;; turn lcos white
 (progn
-  (dotimes (i 300)
-    (lcos "qdisk 200 225 80")
-    (lcos "qswap"))
-  (sleep .1)
+  
+  (dotimes (i 10)
+    (lcos "qdisk 200 225 200")
+    (lcos "qswap")
+    (dotimes (i 9)
+      (lcos "qswap")))
+
   (lcos "toggle-queue 1"))
 #+nil
 (let ((a (random 100)))

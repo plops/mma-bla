@@ -102,6 +102,7 @@ int running=GL_TRUE;
 int show_calibration_stripes=1;
 // only when run_queue=1 the queue will start running
 int run_queue=0;
+int queue_images_displayed=0;
 
 double
 quit(double*ignore) 
@@ -226,7 +227,25 @@ toggle_stripes(double*v){
 double
 toggle_queue(double*v){
   run_queue=(int)v[0];
+  queue_images_displayed=0;
   return 1.0*run_queue;
+}
+
+char mma_fn[200];
+int do_mma_notify=0;
+
+double
+toggle_notify_mma(double*v){
+  int pid=(int)v[0];
+  do_mma_notify=0;
+  if(pid){
+    do_mma_notify=1;
+    snprintf(mma_fn,200,"/proc/%d/fd/0",pid);
+    printf("mma will be notified\n"); 
+  } else {
+    printf("mma won't be notified\n");
+  }
+  return 1.0*do_mma_notify;
 }
 
 // array that contains all functions that can be called from text interface
@@ -250,6 +269,7 @@ struct{
 	{"qclear",0,1,qclear,"clear screen"},
 	{"toggle-stripes",1,0,toggle_stripes,"toggle display of calibration stripes"},
 	{"toggle-queue",1,0,toggle_queue,"toggle displaying things from the queue"},
+	{"toggle-notify-mma",1,0,toggle_notify_mma,"if pid!=0 send stop start to mma process"},
 };
 
 
@@ -447,6 +467,21 @@ replace_newline_0(char*lines,int*starts,int nstarts)
   return is; // return the number of detected lines
 }
 
+// write stop and start to the stdin of the mma control software
+// this is used to synchronize mma and lcos
+void
+mma_sync()
+{
+  if(!do_mma_notify)
+    return;
+  FILE*f=fopen(mma_fn,"w");
+  fprintf(f,"stop\n");
+  fprintf(f,"start\n");
+  fclose(f);
+  printf("mma has been notified\n");
+}
+
+
 // Main program. Open a window. Continuously read commands from the
 // command line interface and draw frames with 60Hz onto the
 // screen. Commands for multiple frames can be cached within a ring
@@ -534,7 +569,6 @@ main(int argc,char**argv)
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadMatrixf(m);
 
-    
     if(run_queue){ // run all commands which have been stored in the queue
       if(emptyp())
 	 run_queue=0;
@@ -549,10 +583,12 @@ main(int argc,char**argv)
 	  
 	  fflush(stdout);
 	  free(cmd);
+	  queue_images_displayed++;
 	  goto nextframe;
 	}
 	parse_line(cmd);
-	printf("q cread=%5d cwrite=%5d cmd=%s\n",circread,circwrite,cmd);
+	printf("q imgnr=%5d cread=%5d cwrite=%5d cmd=%s\n",
+	       queue_images_displayed,circread,circwrite,cmd);
 	fflush(stdout);
 	free(cmd);
       }
@@ -563,7 +599,10 @@ main(int argc,char**argv)
       glRectf(v,0,v+2,400);
       draw_number(frame_count);
     }
-    
+    if(queue_images_displayed==1) // if we are at the first image synchronize if mma
+	mma_sync();
+
+
     //glfwSleep(1./72);
     glfwSwapBuffers();
     old_usec=tv.tv_usec;
