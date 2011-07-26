@@ -42,7 +42,7 @@
 (status)
 
 #+nil
-(set-temperature 5)
+(check (set-temperature 5))
 #+nil
 (set-temperature -55)
 ;; (get-acquisition-timings)
@@ -53,7 +53,8 @@
 ;; (check (clara::set-overlap-mode 0))
 ;; (get-temperature-range)
 ;; (start-acquisition)
-;; (abort-acquisition)
+#+nil
+(abort-acquisition)
 
 
 
@@ -62,7 +63,8 @@
 ;; (cooler-off)
 ;; (check (set-temperature (val2 (get-temperature-range))))
 
-;; (uninit)
+#+nil
+(uninit)
 ;; (check
 ;;   (set-exposure-time  (* 2.2 .0107)))
 

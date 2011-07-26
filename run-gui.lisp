@@ -131,7 +131,7 @@
 #+nil
 (mma "set-cycle-time 33.27")
 #+nil
-(mma "set-cycle-time 23.5")
+(mma "set-cycle-time 193.5")
 #+nil
 (mma "deflection 118.5")
 #+nil
