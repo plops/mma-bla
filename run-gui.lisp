@@ -451,18 +451,6 @@
 	 (setf (aref r i j) (aref img1 (+ (* y i) j))))
        r))))
 
-(vol::write-pgm (format nil "/dev/shm/o~3,'0d.pgm" 0) 
-		 (vol:normalize-2-sf/ub8
-		  (vol:convert-2-ub16/sf-mul (transpose-ub16 (aref *bla* 1)))))
-(let ((in   (vol:convert-2-ub16/csf-mul (transpose-ub16 (aref *bla* 1)))))
-  (destructuring-bind (y x) (array-dimensions in)
-    (let ((b (vol:normalize-2-csf/ub8-realpart 
-	      (vol:convolve-circ
-	       (vol:draw-disk-csf 12s0 y x)
-	       in))))
-      (vol:write-pgm "/dev/shm/o.pgm" b)
-      (defparameter *q* b))))
-
 (defun maxima (img)
   (destructuring-bind (y x) (array-dimensions img)
     (let ((points ()))
@@ -477,7 +465,27 @@
              (push (list e (list j i)) points)))))
       points)))
 
-(sort (maxima *q*) #'(lambda (x y) (< (first y) (first x))))
+(let ((in (transpose-ub16 (aref *bla* 1))))
+  (destructuring-bind (y x) (array-dimensions in)
+    (let ((b (vol:normalize-2-csf/ub8-realpart 
+	      (vol:convolve-circ
+	       (vol:draw-disk-csf 9s0 y x)
+	       (vol:convert-2-ub16/csf-mul in)))))
+      (vol:write-pgm "/dev/shm/o.pgm" b)
+      (defparameter *q* b)
+      (let ((points
+	     (subseq (sort (maxima *q*) #'(lambda (x y) (< (first y) (first x))))
+		     0 4)))
+	(dolist (p points)
+	  (destructuring-bind (h (y x)) p
+	    (vol:do-region ((j i) ((+ y 2) (+ x 2)) ((- y 2) (- x 2)))
+	      (setf (aref in j i) 500))))
+	(vol:write-pgm "/dev/shm/o2.pgm" 
+		       (vol:normalize-2-sf/ub8 (vol:convert-2-ub16/sf-mul in)))))))
+
+
+
+
 
 #+nil
 (progn ;; reset mma and lcos and start camera
