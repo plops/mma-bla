@@ -66,7 +66,8 @@
 	  :if-exists :supersede
 	  :if-does-not-exist :error
 	  :element-type '(unsigned-byte 16)))
-  (send-binary *mma-img*))
+  (send-binary *mma-img*)
+  (mma "set-cycle-time 33.27"))
 
 (defun send-binary (img)
       (declare (type (simple-array (unsigned-byte 16) (256 256)) img))
@@ -81,7 +82,7 @@
 
 (defparameter *mma-imgs*
  (let ((res nil)
-       (n 5))
+       (n 20))
    (dotimes (k n)
      (let* ((arg (* 2 pi (/ k n)))
 	    (n 256)
@@ -364,10 +365,10 @@
        
 
        (progn ;; display a disk ontop of in-focus bead
-	 (dotimes (i (* 2 (length *img-array*)))
-	   (lcos "qdisk 200 225 80")
-	   (lcos "qswap"))
-	 (sleep 1)
+	 (dotimes (i (length *img-array*))
+	   (dotimes (j 2)
+	     (lcos "qdisk 225 225 80")
+	     (lcos "qswap")))
 
 	 ;; start LCOS
 	 (lcos "toggle-queue 1"))
@@ -395,6 +396,88 @@
        (abort-acquisition)
        (free-internal-memory)))
  :name "capture")
+
+#+nil
+(sb-thread:make-thread 
+ #'(lambda ()  ;; CAPTURE
+     
+     (let ((img-array (make-array 2)))
+       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+       
+       (clara::prepare-acquisition)
+       
+       (progn ;; display a disk ontop of in-focus bead
+	 (dotimes (i (1- (length img-array)))
+	   (dotimes (j 2)
+	    (lcos (format nil "qdisk 225 225 ~f" (/ 200 (1+ i))))
+	    (lcos "qswap")))
+	 
+	 ;; start LCOS
+	 (lcos "toggle-queue 1"))
+
+       (start-acquisition) ;; start camera
+       ;; the first captured frame doesn't have any lcos image
+       ;; it can be used as a dark frame
+
+       (let ((count 0))
+	 (format t "count: ~a~%" count)
+	 (loop while (and *do-capture*
+			  (< count (length img-array))) do
+	      (capture)
+	      (loop for i below (sb-concurrency:queue-count *line*) do
+		   (setf (aref img-array count)
+			 (sb-concurrency:dequeue *line*))
+		   (incf count))))
+       (abort-acquisition)
+       (free-internal-memory)
+       (defparameter *bla* img-array)
+       (dotimes (i (length *bla*))
+	 (vol::write-pgm (format nil "/dev/shm/o~3,'0d.pgm" i) 
+		 (vol:normalize-2-sf/ub8
+		  (vol:convert-2-ub16/sf-mul (transpose-ub16 (aref *bla* i))))))))
+ :name "capture")
+
+
+
+(defun transpose-ub16 (img)
+  "Transpose the image that comes from the Andor camera."
+  (declare (type (simple-array (unsigned-byte 16) 2) img)
+	   (values (simple-array (unsigned-byte 16) 2) &optional))
+  (let ((dim (array-dimensions img)))
+   (destructuring-bind (y x) dim
+     (let ((img1 (sb-ext:array-storage-vector img))
+	   (r (make-array (list x y) :element-type '(unsigned-byte 16))))
+       (vol:do-region ((j i) (y x))
+	 (setf (aref r i j) (aref img1 (+ (* y i) j))))
+       r))))
+
+(vol::write-pgm (format nil "/dev/shm/o~3,'0d.pgm" 0) 
+		 (vol:normalize-2-sf/ub8
+		  (vol:convert-2-ub16/sf-mul (transpose-ub16 (aref *bla* 1)))))
+(let ((in   (vol:convert-2-ub16/csf-mul (transpose-ub16 (aref *bla* 1)))))
+  (destructuring-bind (y x) (array-dimensions in)
+    (let ((b (vol:normalize-2-csf/ub8-realpart 
+	      (vol:convolve-circ
+	       (vol:draw-disk-csf 12s0 y x)
+	       in))))
+      (vol:write-pgm "/dev/shm/o.pgm" b)
+      (defparameter *q* b))))
+
+(defun maxima (img)
+  (destructuring-bind (y x) (array-dimensions img)
+    (let ((points ()))
+      (vol:do-region ((j i) ((1- y) (1- x)) (1 1))
+        (macrolet ((q (n m)
+                     `(< (aref img (+ ,n j) (+ ,m i)) e)))
+         (let* ((e (aref img j i)))
+           (when (and (q 0 1) (q 0 -1)
+                      (q 1 0) (q -1 0)
+                      (q 1 1) (q 1 -1)
+                      (q -1 1) (q -1 -1))
+             (push (list e (list j i)) points)))))
+      points)))
+
+(sort (maxima *q*) #'(lambda (x y) (< (first y) (first x))))
 
 #+nil
 (progn ;; reset mma and lcos and start camera
@@ -812,14 +895,13 @@
 	      (sb-ext:process-pid *mma-chan*)))
 
 #+nil ;; turn lcos white
-(progn
-  
-  (dotimes (i 10)
+(dotimes (j 1)
+  (dotimes (i 30)
     (lcos "qdisk 200 225 200")
     (lcos "qswap")
-    (dotimes (i 9)
-      (lcos "qswap")))
-
+    (lcos "qdisk 200 225 200")
+    (lcos "qswap"))
+  (sleep .4)
   (lcos "toggle-queue 1"))
 #+nil
 (let ((a (random 100)))
