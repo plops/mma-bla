@@ -485,7 +485,7 @@
 	   (destructuring-bind (h (y x)) p
 	     (declare (ignore h))
 	     (dotimes (i 2)
-	       (lcos (format nil "qdisk ~d ~d 80" y x))
+	       (lcos (format nil "qdisk ~d ~d 30" x y))
 	       (lcos "qswap"))))
 	 
 	 
