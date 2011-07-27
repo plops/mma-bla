@@ -362,8 +362,6 @@
        
        (clara::prepare-acquisition)
 
-       
-
        (progn ;; display a disk ontop of in-focus bead
 	 (dotimes (i (length *img-array*))
 	   (dotimes (j 2)
@@ -397,46 +395,6 @@
        (free-internal-memory)))
  :name "capture")
 
-#+nil
-(sb-thread:make-thread 
- #'(lambda ()  ;; CAPTURE
-     
-     (let ((img-array (make-array 2)))
-       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
-       
-       (clara::prepare-acquisition)
-       
-       (progn ;; display a disk ontop of in-focus bead
-	 (dotimes (i (1- (length img-array)))
-	   (dotimes (j 2)
-	    (lcos (format nil "qdisk 225 225 ~f" (/ 200 (1+ i))))
-	    (lcos "qswap")))
-	 
-	 ;; start LCOS
-	 (lcos "toggle-queue 1"))
-
-       (start-acquisition) ;; start camera
-       ;; the first captured frame doesn't have any lcos image
-       ;; it can be used as a dark frame
-
-       (let ((count 0))
-	 (format t "count: ~a~%" count)
-	 (loop while (and *do-capture*
-			  (< count (length img-array))) do
-	      (capture)
-	      (loop for i below (sb-concurrency:queue-count *line*) do
-		   (setf (aref img-array count)
-			 (sb-concurrency:dequeue *line*))
-		   (incf count))))
-       (abort-acquisition)
-       (free-internal-memory)
-       (defparameter *bla* img-array)
-       (dotimes (i (length *bla*))
-	 (vol::write-pgm (format nil "/dev/shm/o~3,'0d.pgm" i) 
-		 (vol:normalize-2-sf/ub8
-		  (vol:convert-2-ub16/sf-mul (transpose-ub16 (aref *bla* i))))))))
- :name "capture")
-
 
 
 (defun transpose-ub16 (img)
@@ -465,23 +423,93 @@
              (push (list e (list j i)) points)))))
       points)))
 
-(let ((in (transpose-ub16 (aref *bla* 1))))
-  (destructuring-bind (y x) (array-dimensions in)
-    (let ((b (vol:normalize-2-csf/ub8-realpart 
-	      (vol:convolve-circ
-	       (vol:draw-disk-csf 9s0 y x)
-	       (vol:convert-2-ub16/csf-mul in)))))
-      (vol:write-pgm "/dev/shm/o.pgm" b)
-      (defparameter *q* b)
-      (let ((points
-	     (subseq (sort (maxima *q*) #'(lambda (x y) (< (first y) (first x))))
-		     0 4)))
-	(dolist (p points)
-	  (destructuring-bind (h (y x)) p
-	    (vol:do-region ((j i) ((+ y 2) (+ x 2)) ((- y 2) (- x 2)))
-	      (setf (aref in j i) 500))))
-	(vol:write-pgm "/dev/shm/o2.pgm" 
-		       (vol:normalize-2-sf/ub8 (vol:convert-2-ub16/sf-mul in)))))))
+(defun locate-beads (img)
+  (let ((in (transpose-ub16 img)))
+    (destructuring-bind (y x) (array-dimensions in)
+      (let ((b (vol:normalize-2-csf/ub8-realpart 
+		(vol:convolve-circ
+		 (vol:draw-disk-csf 9s0 y x)
+		 (vol:convert-2-ub16/csf-mul in)))))
+	(let ((points
+	       (subseq (sort (maxima b) #'(lambda (x y) (< (first y) (first x))))
+		       0 4)))
+	  (dolist (p points)
+	   (destructuring-bind (h (y x)) p
+	     (declare (ignore h))
+	     (vol:do-region ((j i) ((+ y 2) (+ x 2)) ((- y 2) (- x 2)))
+	       (setf (aref in j i) 500))))
+	 (vol:write-pgm "/dev/shm/01beads.pgm" 
+			(vol:normalize-2-sf/ub8 (vol:convert-2-ub16/sf-mul in)))
+	 points)))))
+
+
+#+nil
+(sb-thread:make-thread 
+ #'(lambda ()  ;; CAPTUREADAPT
+     
+     (let ((img-array (make-array 2)))
+       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+       
+       (clara::prepare-acquisition)
+       
+       (progn ;; display a disk ontop of in-focus bead
+	 (dotimes (i (1- (length img-array)))
+	   (dotimes (j 2)
+	     (lcos "qdisk 225 225 200")
+	     (lcos "qswap")))
+	 
+	 ;; start LCOS
+	 (lcos "toggle-queue 1"))
+
+       (start-acquisition) ;; start camera
+       ;; the first captured frame doesn't have any lcos image
+       ;; it can be used as a dark frame
+
+       (let ((count 0))
+	 (format t "count: ~a~%" count)
+	 (loop while (and *do-capture*
+			  (< count (length img-array))) do
+	      (capture)
+	      (loop for i below (sb-concurrency:queue-count *line*) do
+		   (setf (aref img-array count)
+			 (sb-concurrency:dequeue *line*))
+		   (incf count)))
+	 (abort-acquisition)
+	 (free-internal-memory))
+
+       (defparameter *bla* img-array)
+       
+       (let* ((points (locate-beads (aref img-array 1)))
+	      (bead-img (make-array (1+ (length points)))))
+	 (dolist (p points)
+	   (destructuring-bind (h (y x)) p
+	     (declare (ignore h))
+	     (dotimes (i 2)
+	       (lcos (format nil "qdisk ~d ~d 80" y x))
+	       (lcos "qswap"))))
+	 
+	 
+	 (let ((count 0))
+	   (clara::prepare-acquisition)
+	   (lcos "toggle-queue 1")
+	   (start-acquisition) 
+	   (format t "count: ~a~%" count)
+	   (loop while (and *do-capture*
+			    (< count (length bead-img))) do
+		(capture)
+		(loop for i below (sb-concurrency:queue-count *line*) do
+		     (setf (aref bead-img count)
+			 (sb-concurrency:dequeue *line*))
+		     (incf count)))
+	   (abort-acquisition)
+	   (free-internal-memory))
+	 (dotimes (i (length bead-img))
+	   (vol::write-pgm-transposed (format nil "/dev/shm/02_beadnr~3,'0d.pgm" i)
+			  (vol:normalize-2-sf/ub8 
+			   (vol:convert-2-ub16/sf-mul (aref bead-img i))))))))
+ :name "capture")
+
+
 
 
 
@@ -904,7 +932,7 @@
 
 #+nil ;; turn lcos white
 (dotimes (j 1)
-  (dotimes (i 30)
+  (dotimes (i 1000)
     (lcos "qdisk 200 225 200")
     (lcos "qswap")
     (lcos "qdisk 200 225 200")
