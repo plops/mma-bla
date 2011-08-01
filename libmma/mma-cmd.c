@@ -55,6 +55,7 @@ status(double*ignore)
     return NAN;
   }
   printf("status 0x%x error 0x%x\n",stat,error);
+  fflush(stdout);
   return 0.0;
 }
 
@@ -337,6 +338,7 @@ help(double*ignore)
   unsigned int i;
   for(i=0;i<len(cmd);i++)
     printf("%s %d\n",cmd[i].name,cmd[i].args);
+  fflush(stdout);
   return 0.0;
 }
 
@@ -372,10 +374,12 @@ parse_name(char*tok)
       // printf("+%s=%d+\n",tok,fun_index);
     }else{
       printf("error, expected function name\n");
+      fflush(stdout)
       return -1;
     }
   }else{
     printf("error, expected some function name but got nothing");
+    fflush(stdout);
     return -1;
   }
   return fun_index;
@@ -521,6 +525,7 @@ main()
 
 
   printf("infront of start\n");
+  fflush(stdout);
   if(0!=SLM_SetStartMMA()){
     e("start");
     goto poweroff;

@@ -895,26 +895,6 @@
     (finish-output s)
     (force-output s)))
 
-(defun draw-grating-disk (center-x center-y radius &key 
-                          (phase 0) (phases 3) (line-width 4))
-  ;; find intersection of vertical line and circle
-  ;; (x-cx)^2+ (y-cy)^2=R^2
-  ;; x=const=q
-  ;; y=sqrt [R^2- (q-cx)^2]+cy
-  
-  (let ((pl (* phases line-width)))
-    (loop for xx from (round (- center-x radius))
-       upto (round (+ center-x radius)) by pl do
-	 (let ((xxx (+ xx (* phase line-width))))
-	   (loop for x from xxx below (+ xxx line-width) do
-		(let* ((q (- (expt radius 2)
-			     (expt (- center-x x) 2))))
-		  (when (< 0 q)
-		    (let ((y (sqrt q)))
-		      (lcos (format nil "qline ~f ~f ~f ~f"
-				    x (round (+ center-y y))
-				    x (round (- center-y y))))))))))))
-
 #+nil
 (progn
   (sb-posix:setenv "DISPLAY" ":0" 1)
@@ -956,15 +936,17 @@
 	      (sb-ext:process-pid *mma-chan*)))
 
 #+nil ;; turn lcos white
-(dotimes (j 1)
-  (dotimes (i 100)
-    (dotimes (k 2)
-      (lcos (format nil "qgrating-disk 425 325 200 ~d 3 5" (mod i 3)))
-      ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
-      ;;(lcos "qdisk 200 225 80")
-      (lcos "qswap")))
-  (sleep .4)
-  (lcos "toggle-queue 1"))
+(let ((phases 3))
+ (dotimes (j 1)
+   (dotimes (i 100)
+     (dotimes (k 2)
+       (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+		     (mod i phases) phases))
+       ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
+       ;;(lcos "qdisk 200 225 80")
+       (lcos "qswap")))
+   (sleep .4)
+   (lcos "toggle-queue 1")))
 
 
 
