@@ -44,15 +44,18 @@
     (focus:set-position (- start range))
     (prog1
 	(loop for i below n collect
-	     (progn (sleep (/ pause-ms 1000))
+	     (progn (unless (= 0 pause-ms)
+		      (sleep (/ pause-ms 1000)))
 		    (list (* .001 
 			     (- (get-internal-real-time) 
 				start-time)) 
 			  (focus-status))))
       (focus:set-position start))))
-
+#+nil
 (format t "~{~{~a ~}~%~}~%"
- (test-focus-speed 1s0 :pause-ms 1))
+ (test-focus-speed .1s0 :pause-ms 0))
+
+;; settle time for small z steps is 30ms (two pictures)
 
 
 #+nil
@@ -414,7 +417,6 @@
        ;; it can be used as a dark frame
 
        (let ((count 0))
-	 (format t "count: ~a~%" count)
 	 (loop while (and *do-capture*
 			  (< count (length *img-array*))) do
 	      (capture)
@@ -545,6 +547,9 @@
 			   (vol:convert-2-ub16/sf-mul (aref bead-img i))))))))
  :name "capture")
 
+(defun make-slice (z-position type)
+  (list z-position type))
+
 #+nil 
 (sb-thread:make-thread 
  #'(lambda ()  ;; CAPTURESECTION
@@ -552,44 +557,60 @@
      (setf *do-display-queue* nil)
 
      (let* ((phases 3)
-	    (slices 12)
+	    (slices 20)
 	    (start-position (focus:get-position))
+	    (sequence nil) ;; this will contain the state of each image
 	    ;; the first image is a dark image
-	    (img-array (make-array (1+ (* slices phases)))))
-       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
-       
-       (clara::prepare-acquisition)
-       
-       (dotimes (j slices)
-	(dotimes (i phases)
-	  (dotimes (k 2)
-	    (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
-			  (mod i phases) phases))
-	    (lcos "qswap"))))
-       (sleep .4)
-       (lcos "toggle-queue 1")
-       (sb-thread:make-thread 
-	#'(lambda ()
-	    (dotimes (i (1- slices))
-	      (sleep (* .97 phases .033298))
-	      (focus:set-position (+ (* 30 (/ i (1- slices))) 
-				     start-position))))
-	:name "focus-mover")       
-       (start-acquisition) ;; start camera
-       ;; the first captured frame doesn't have any lcos image
-       ;; it can be used as a dark frame
+	    (img-array (make-array (+ 1 (* slices (+ 1 phases))))))
+       (flet ((slice-z (i)
+		(+ (* 30 (/ i (1- slices))) 
+		   start-position)))
+	   (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+	 
+	 (clara::prepare-acquisition)
+	 
+	 (push (make-slice start-position :dark) sequence)
+	 
+	 (dotimes (j slices)
+	   (push (make-slice (slice-z j) :dark) sequence)
+	   (dotimes (k 2)  
+	     ;; dark image for each slice (to give stage time to settle)
+	     (lcos "qswap"))
+	   (dotimes (i phases)
+	     (push (make-slice (slice-z j) i) sequence)
+	     (dotimes (k 2)
+	       (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+			     (mod i phases) phases))
+	       (lcos "qswap"))))
+	 (sleep .4)
+	 (lcos "toggle-queue 1")
 
-       (let ((count 0))
-	 (format t "count: ~a~%" count)
-	 (loop while (and *do-capture*
-			  (< count (length img-array))) do
-	      (capture)
-	      (loop for i below (sb-concurrency:queue-count *line*) do
-		   (setf (aref img-array count)
-			 (sb-concurrency:dequeue *line*))
-		   (incf count)))
-	 (abort-acquisition)
-	 (free-internal-memory))
+	 (setf *sequence* (reverse sequence))
+	 
+	 (sb-thread:make-thread 
+	  #'(lambda ()
+	      ;; the stage doesn't need to be moved for the first slice
+	      (sleep (* (1+ phases) .033298))
+	      (dotimes (i (1- slices))
+		(focus:set-position (slice-z i))
+		(sleep (* (1+ phases) .033298))))
+	  :name "focus-mover")       
+
+
+	 (start-acquisition) ;; start camera
+	 ;; the first captured frame doesn't have any lcos image
+	 ;; it can be used as a dark frame
+
+	 (let ((count 0))
+	   (loop while (and *do-capture*
+			    (< count (length img-array))) do
+		(capture)
+		(loop for i below (sb-concurrency:queue-count *line*) do
+		     (setf (aref img-array count)
+			   (sb-concurrency:dequeue *line*))
+		     (incf count)))
+	   (abort-acquisition)
+	   (free-internal-memory)))
 
        (defparameter *bla* img-array)
 
@@ -600,11 +621,73 @@
 				    (vol:normalize-2-sf/ub8 
 				     (vol:convert-2-ub16/sf-mul 
 				      (aref img-array i)))))
-       #+nil (section-array img-array))
+       (section-array img-array))
      (setf *do-display-queue* t))
  :name "capture")
 
-(defun section-array (img-array)
+*sequence*
+
+(defun fill-phase-image-sequence-hash ()
+ (let ((h (make-hash-table)))
+   (let ((i 0))
+     (dolist (e *sequence*)
+       (destructuring-bind (z type) e
+	   (push i (gethash z h)))
+       (incf i)))
+   h))
+
+#+nil
+(defparameter *b* (fill-phase-image-sequence-hash))
+#+nil
+(loop for value being the hash-values of *b*
+   using (hash-key key) do
+     #+nil
+     (format t "~a ~a~%" key 
+	     (mapcar #'(lambda (x) (elt *sequence* x)) value))
+     (vol::write-pgm-transposed
+      (format nil "/dev/shm/o~a.pgm" key)
+      (vol:normalize-2-sf/ub8
+       (calculate-section *bla* value))))
+
+*bla*
+(loop for e in (gethash -23.45 *b*) collect (elt *sequence* e))
+
+(declaim (optimize (debug 3) (speed 0) (safety 3)))
+
+(defun calculate-section (img-array indices)
+  (let ((imgs (mapcar #'(lambda (x) (list x (elt *sequence* x))) indices)))
+    (let* ((dim (array-dimensions (elt img-array 0)))
+	   (bg (make-array dim :element-type 'single-float))
+	   (bg-count 0)
+	   (ma (make-array dim :element-type 'single-float
+			   :initial-element -1e9))
+	   (mi (make-array dim :element-type 'single-float
+			   :initial-element 1e9))
+	   (sec (make-array dim :element-type 'single-float))) 
+      (destructuring-bind (y x) dim
+	(dolist (e imgs)
+	  (format t "~a~%" e)
+	  (destructuring-bind (k (z type)) e
+	    (declare (ignore z))
+	    (case type
+	      ;; accumulate dark images 
+	      (:dark (vol:do-region ((j i) (y x))
+		       (incf (aref bg j i) (aref (elt img-array k) j i)))
+		     (incf bg-count))
+	      
+	      ;; find max and min of all phase images
+	      (t (vol:do-region ((j i) (y x))
+		   (setf (aref ma j i) (max (aref ma j i)
+					    (* 1s0 (aref (elt img-array k) j i)))
+			 (aref mi j i) (min (aref mi j i)
+					    (* 1s0 (aref (elt img-array k) j i)))))))))
+	(vol:do-region ((j i) (y x))
+	  (setf (aref sec j i) (* 1s0 
+				  (- (aref ma j i)
+				     (aref mi j i)
+				     (/ (aref bg j i) bg-count)))))
+	sec)))
+  #+nil
   (destructuring-bind (z) (array-dimensions img-array)
     (destructuring-bind (y x) (array-dimensions (elt img-array 0))
      (let ((phases (- z 1))
@@ -1041,12 +1124,12 @@
 #+nil ;; turn lcos white
 (let ((phases 3))
  (dotimes (j 1)
-   (dotimes (i 100)
+   (dotimes (i 1000)
      (dotimes (k 2)
-       (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+       #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 		     (mod i phases) phases))
        ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
-       #+nil(lcos "qdisk 200 225 280")
+       (lcos "qdisk 200 225 280")
        (lcos "qswap")))
    (sleep .4)
    (lcos "toggle-queue 1")))
