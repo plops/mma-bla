@@ -30,6 +30,34 @@
 #+nil
 (focus:set-position
  (+ (focus:get-position) .4s0))
+
+(defun focus-status ()
+ (let ((moving 2)
+       (settle 4))   
+   (focus::talk-zeiss focus::*fd* 
+		     focus::*stream*
+		     "FPZFs")))
+
+(defun test-focus-speed (range &key (n 20) (pause-ms 10))
+  (let ((start (focus:get-position))
+	(start-time (get-internal-real-time)))
+    (focus:set-position (- start range))
+    (prog1
+	(loop for i below n collect
+	     (progn (sleep (/ pause-ms 1000))
+		    (list (* .001 
+			     (- (get-internal-real-time) 
+				start-time)) 
+			  (focus-status))))
+      (focus:set-position start))))
+
+(format t "~{~{~a ~}~%~}~%"
+ (test-focus-speed 1s0 :pause-ms 1))
+
+
+#+nil
+(focus-status)
+
 #+nil
 (capture)
 (defvar *mma-chan* nil)
@@ -524,21 +552,29 @@
      (setf *do-display-queue* nil)
 
      (let* ((phases 3)
+	    (slices 12)
+	    (start-position (focus:get-position))
 	    ;; the first image is a dark image
-	    (img-array (make-array (1+ phases))))
+	    (img-array (make-array (1+ (* slices phases)))))
        (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
        
        (clara::prepare-acquisition)
        
-       (dotimes (i phases)
-	 (dotimes (k 2)
-	   (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
-			 (mod i phases) phases))
-	   (lcos "qswap")))
+       (dotimes (j slices)
+	(dotimes (i phases)
+	  (dotimes (k 2)
+	    (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+			  (mod i phases) phases))
+	    (lcos "qswap"))))
        (sleep .4)
        (lcos "toggle-queue 1")
-
-
+       (sb-thread:make-thread 
+	#'(lambda ()
+	    (dotimes (i (1- slices))
+	      (sleep (* .97 phases .033298))
+	      (focus:set-position (+ (* 30 (/ i (1- slices))) 
+				     start-position))))
+	:name "focus-mover")       
        (start-acquisition) ;; start camera
        ;; the first captured frame doesn't have any lcos image
        ;; it can be used as a dark frame
@@ -556,13 +592,15 @@
 	 (free-internal-memory))
 
        (defparameter *bla* img-array)
-       
+
+      (focus:set-position start-position)       
+
        (dotimes (i (length img-array))
 	 (vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
 				    (vol:normalize-2-sf/ub8 
 				     (vol:convert-2-ub16/sf-mul 
 				      (aref img-array i)))))
-       (section-array img-array))
+       #+nil (section-array img-array))
      (setf *do-display-queue* t))
  :name "capture")
 
