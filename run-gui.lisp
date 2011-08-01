@@ -9,6 +9,7 @@
     (ql:quickload "cl-opengl")))
 (eval-when (:compile-toplevel)
   (require :gui)
+  (require :vol)
   ;; (require :andor3)
   (require :clara)
   ;; (require :mma)
@@ -437,11 +438,16 @@
 	   (destructuring-bind (h (y x)) p
 	     (declare (ignore h))
 	     (vol:do-region ((j i) ((+ y 2) (+ x 2)) ((- y 2) (- x 2)))
-	       (setf (aref in j i) 500))))
+	       (when (and (<= 0 i (1- x))
+			  (<= 0 j (1- y)))
+		 (setf (aref in j i) 500)))))
 	 (vol:write-pgm "/dev/shm/01beads.pgm" 
 			(vol:normalize-2-sf/ub8 (vol:convert-2-ub16/sf-mul in)))
 	 points)))))
 
+#+nil
+(focus:set-position
+ (+ (focus:get-position) -.4s0))
 
 #+nil
 (sb-thread:make-thread 
@@ -890,6 +896,26 @@
     (force-output s)))
 
 
+(defun draw-grating-disk (center-x center-y radius &key 
+                          (phase 0) (phases 3) (line-width 4))
+  ;; find intersection of vertical line and circle
+  ;; (x-cx)^2+ (y-cy)^2=R^2
+  ;; x=const=q
+  ;; y=sqrt [R^2- (q-cx)^2]+cy
+  
+  (let ((pl (* phases line-width)))
+    (loop for xx from (round (- center-x radius))
+       upto (round (+ center-x radius)) by pl do
+	 (let ((xxx (+ xx (* phase line-width))))
+	   (loop for x from xxx below (+ xxx line-width) do
+		(let* ((q (- (expt radius 2)
+			     (expt (- center-x x) 2))))
+		  (when (< 0 q)
+		    (let ((y (sqrt q)))
+		      (lcos (format nil "qline ~f ~f ~f ~f"
+				    x (round (+ center-y y))
+				    x (round (- center-y y))))))))))))
+
 #+nil
 (progn
   (sb-posix:setenv "DISPLAY" ":0" 1)
@@ -932,11 +958,11 @@
 
 #+nil ;; turn lcos white
 (dotimes (j 1)
-  (dotimes (i 1000)
-    (lcos "qdisk 200 225 200")
-    (lcos "qswap")
-    (lcos "qdisk 200 225 200")
-    (lcos "qswap"))
+  (dotimes (i 100)
+    (dotimes (k 2)
+      (draw-grating-disk 200 225 380 :phase (* 0 (mod i 3)))
+      ;;(lcos "qdisk 200 225 80")
+      (lcos "qswap")))
   (sleep .4)
   (lcos "toggle-queue 1"))
 #+nil
