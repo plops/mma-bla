@@ -16,8 +16,8 @@
 
 #include "digit.h"
 
-enum { CMDLEN=100,
-       CIRCBUFLEN=10000,
+enum { CMDLEN=128,
+       CIRCBUFLEN=1000000,
        CIRCBUFNUMELEMS=CIRCBUFLEN-1,
        MAXARGS=3,
        DOCSTRINGLEN=200,
@@ -246,6 +246,41 @@ toggle_notify_mma(double*v){
     printf("mma won't be notified\n");
   }
   return 1.0*do_mma_notify;
+}
+double
+qgrating_disk(double*v)
+{
+  char*cmd=malloc(CMDLEN);
+  snprintf(cmd,CMDLEN,"grating-disk %g %g %g %g %g %g",
+	   v[0], v[1], v[2]);
+  push(cmd);
+  return 0.0;
+}
+
+double
+grating_disk(double*v)
+{
+  double 
+    center_x=v[0],
+    center_y=v[1],
+    radius=v[2];
+  int 
+    phase=(int)v[3],
+    phases=(int)v[4],
+    line_width=(int)v[5];
+  glPushMatrix();
+  glLoadIdentity(); // we need pixel perfect drawing
+  glBegin(GL_LINES);
+  int xx;
+  for(xx=(int)round(center_x-radius);
+      xx<=(int)round(center_x+radius);
+      xx+=phases*line_width){
+    int x,xxx=xx+phase*line_width;
+    for(x=xxx;x<xxx+line_width
+  }
+
+  glEnd();
+  glPopMatrix();
 }
 
 // array that contains all functions that can be called from text interface
