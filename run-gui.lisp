@@ -323,6 +323,8 @@
 
 (defparameter *do-capture* nil)
 (defparameter *do-capture* t)
+(defparameter *do-display-queue* nil)
+(defparameter *do-display-queue* t)
 #+nil
 (progn
   (sb-thread:make-thread 
@@ -515,11 +517,73 @@
 			   (vol:convert-2-ub16/sf-mul (aref bead-img i))))))))
  :name "capture")
 
+#+nil 
+(sb-thread:make-thread 
+ #'(lambda ()  ;; CAPTURESECTION
+     (clara::abort-acquisition )
+     (setf *do-display-queue* nil)
+
+     (let* ((phases 3)
+	    ;; the first image is a dark image
+	    (img-array (make-array (1+ phases))))
+       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+       
+       (clara::prepare-acquisition)
+       
+       (dotimes (i phases)
+	 (dotimes (k 2)
+	   (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+			 (mod i phases) phases))
+	   (lcos "qswap")))
+       (sleep .4)
+       (lcos "toggle-queue 1")
 
 
+       (start-acquisition) ;; start camera
+       ;; the first captured frame doesn't have any lcos image
+       ;; it can be used as a dark frame
 
+       (let ((count 0))
+	 (format t "count: ~a~%" count)
+	 (loop while (and *do-capture*
+			  (< count (length img-array))) do
+	      (capture)
+	      (loop for i below (sb-concurrency:queue-count *line*) do
+		   (setf (aref img-array count)
+			 (sb-concurrency:dequeue *line*))
+		   (incf count)))
+	 (abort-acquisition)
+	 (free-internal-memory))
 
+       (defparameter *bla* img-array)
+       
+       (dotimes (i (length img-array))
+	 (vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
+				    (vol:normalize-2-sf/ub8 
+				     (vol:convert-2-ub16/sf-mul 
+				      (aref img-array i)))))
+       (section-array img-array))
+     (setf *do-display-queue* t))
+ :name "capture")
 
+(defun section-array (img-array)
+  (destructuring-bind (z) (array-dimensions img-array)
+    (destructuring-bind (y x) (array-dimensions (elt img-array 0))
+     (let ((phases (- z 1))
+	   (sec (make-array (list y x)
+			    :element-type 'single-float)))
+       (vol:do-region ((j i) (y x))
+	 (setf (aref sec j i)
+	       (* 1s0 (- (loop for k below phases maximize 
+			      (aref (elt img-array (1+ k)) j i))
+			 (loop for k below phases minimize 
+			      (aref (elt img-array (1+ k)) j i))
+			 (aref (elt img-array 0) j i)))))
+       (vol::write-pgm-transposed "/dev/shm/02_sec.pgm"
+				  (vol:normalize-2-sf/ub8 sec))))))
+
+#+nil
+(section-array *bla*)
 
 #+nil
 (progn ;; reset mma and lcos and start camera
@@ -626,27 +690,28 @@
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
-    (loop for e below (sb-concurrency:queue-count *line*) do
-	 (let ((e (sb-concurrency:dequeue *line*))
-	       (p (mod count 5)))
-	  (when e
-	     (gl:with-pushed-matrix
-	       (let* ((tex (make-instance 'gui::texture16 :data e
-					  :scale 402s0 :offset 0.0077s0
-					  )))
-		(destructuring-bind (h w) (array-dimensions e)
-		  ;; current image
-		  (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-			    :wt (* h 1s0) :ht (* w 1s0))
-		  
-		  (with-pushed-matrix 
-		    (gl:translate (- 1024 550 (* .25 w (floor p))) 420 0)
-		    (gl:scale .25 .25 .25)
-		    ;; small copies of earlier images
+    (when *do-display-queue*
+     (loop for e below (sb-concurrency:queue-count *line*) do
+	  (let ((e (sb-concurrency:dequeue *line*))
+		(p (mod count 5)))
+	    (when e
+	      (gl:with-pushed-matrix
+		(let* ((tex (make-instance 'gui::texture16 :data e
+					   :scale 402s0 :offset 0.0077s0
+					   )))
+		  (destructuring-bind (h w) (array-dimensions e)
+		    ;; current image
 		    (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
-			      :wt (* h 1s0) :ht (* w 1s0))))
-		(gui:destroy tex)))))
-	 (incf count))
+			      :wt (* h 1s0) :ht (* w 1s0))
+		  
+		    (with-pushed-matrix 
+		      (gl:translate (- 1024 550 (* .25 w (floor p))) 420 0)
+		      (gl:scale .25 .25 .25)
+		      ;; small copies of earlier images
+		      (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
+				:wt (* h 1s0) :ht (* w 1s0))))
+		  (gui:destroy tex)))))
+	  (incf count)))
     (when (and *mma-imgs* (first *mma-imgs*))
       (let ((cnt 0))
        (dolist (e *mma-imgs*)
@@ -943,7 +1008,7 @@
        (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 		     (mod i phases) phases))
        ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
-       ;;(lcos "qdisk 200 225 80")
+       #+nil(lcos "qdisk 200 225 280")
        (lcos "qswap")))
    (sleep .4)
    (lcos "toggle-queue 1")))
