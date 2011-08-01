@@ -1,4 +1,4 @@
-CFLAGS=-Wall -g
+CFLAGS=-Wall -g -Wextra
 LDFLAGS=-lglfw -lm
 all: glfw 
 queue.o: queue.c

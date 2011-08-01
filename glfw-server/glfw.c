@@ -9,7 +9,7 @@
 #include <sys/fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+double round(double x);
 #define NAN __builtin_nan("")
 
 #define len(x) (sizeof(x)/sizeof(x[0]))
@@ -17,9 +17,9 @@
 #include "digit.h"
 
 enum { CMDLEN=128,
-       CIRCBUFLEN=1000000,
+       CIRCBUFLEN=100000,
        CIRCBUFNUMELEMS=CIRCBUFLEN-1,
-       MAXARGS=3,
+       MAXARGS=12,
        DOCSTRINGLEN=200,
 };
 
@@ -252,7 +252,7 @@ qgrating_disk(double*v)
 {
   char*cmd=malloc(CMDLEN);
   snprintf(cmd,CMDLEN,"grating-disk %g %g %g %g %g %g",
-	   v[0], v[1], v[2]);
+	   v[0], v[1], v[2], v[3], v[4], v[5]);
   push(cmd);
   return 0.0;
 }
@@ -276,11 +276,18 @@ grating_disk(double*v)
       xx<=(int)round(center_x+radius);
       xx+=phases*line_width){
     int x,xxx=xx+phase*line_width;
-    for(x=xxx;x<xxx+line_width
+    for(x=xxx;x<xxx+line_width;x++){
+      double q=radius*radius-pow(center_x-x,2);
+      if(0<q){
+	double y=sqrt(q);
+	glVertex2i(x,(int)round(center_y+y));
+	glVertex2i(x,(int)round(center_y-y));
+      }
+    }
   }
-
   glEnd();
   glPopMatrix();
+  return 0.0;
 }
 
 // array that contains all functions that can be called from text interface
@@ -296,6 +303,8 @@ struct{
 	{"line",4,0,line,"immediately draw a line"},
 	{"qdisk",3,1,qdisk,"draw a disk x y r"},
 	{"disk",3,0,disk,"immediately draw a disk"},
+	{"qgrating-disk",6,1,qgrating_disk,"draw a grating disk x y r"},
+	{"grating-disk",6,0,grating_disk,"immediately draw a grating disk cx cy r phase nphases width"},
 	{"swap",0,0,swap,"immediate swap-buffers"},
 	{"qswap",0,1,qswap,"initiate swap-buffers"},
 	{"number",1,0,number,"immediately write number"},
