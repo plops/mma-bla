@@ -693,18 +693,26 @@
 				      i)))))
 	  (n (length bg-ind))
 	  (bg-acc (make-array (list y x) :element-type 'fixnum))
-	  (bg-avg (make-array (list y x) :element-type 'single-float)))
+	  (bg-avg (make-array (list y x) :element-type 'single-float))
+	  (sum-bg nil))
      (dolist (e bg-ind)
        (let ((a (elt *bla* e)))
-	      (vol:do-region ((j i) (y x))
-		(incf (aref bg-acc j i) (aref a j i)))))
+	 (let ((sum 0))
+	   (declare (type (unsigned-byte 64) sum))
+	   (vol:do-region ((j i) (y x))
+	     (incf (aref bg-acc j i) (aref a j i))
+	     (incf sum (aref a j i)))
+	   (push sum sum-bg))))
      (vol:do-region ((j i) (y x))
        (setf (aref bg-avg j i) (* (/ 1s0 n) (aref bg-acc j i))))
-     bg-avg)))
+     (values bg-avg (reverse sum-bg)))))
 
-#+nil
-(vol::write-pgm-transposed "/dev/shm/bg.pgm"
-			   (vol:normalize-2-sf/ub8 (accumulate-all-dark-images)))
+#+nil ;; estimate variation in bg images
+(multiple-value-bind (img nums) (accumulate-all-dark-images)
+ (vol::write-pgm-transposed "/dev/shm/bg.pgm"
+			    (vol:normalize-2-sf/ub8 img))
+ (setf *nums* (mapcar #'(lambda (x) (* 100s0 (/ (- x (first nums))
+				   x))) nums)))
   
 
 (defun calculate-section (img-array indices)
