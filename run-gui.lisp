@@ -558,8 +558,8 @@
      (clara::abort-acquisition )
      (setf *do-display-queue* nil)
 
-     (let* ((phases 3)
-	    (slices 30)
+     (let* ((phases 7)
+	    (slices 100)
 	    (start-position (focus:get-position))
 	    (sequence nil) ;; this will contain the state of each image
 	    ;; the first image is a dark image
@@ -567,7 +567,7 @@
 	    (img-array (make-array img-number))
 	    (img-time (make-array img-number)))
        (flet ((slice-z (i)
-		(+ (* 30 (/ i (1- slices))) 
+		(+ (* 20 (/ i (1- slices))) 
 		   start-position)))
 	   (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
 	 
@@ -583,12 +583,14 @@
 	   (dotimes (i phases)
 	     (push (make-slice (slice-z j) i) sequence)
 	     (dotimes (k 2)
-	       (lcos "qdisk 225 225 200")
 	       #+nil
+	       (lcos "qdisk 225 225 200")
+	      
 	       (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 			     (mod i phases) phases))
 	       (sleep .001)
-	       (lcos "qswap"))))
+	       (lcos "qswap")
+	       (sleep .001))))
 	 (sleep .4)
 	 (lcos "toggle-queue 1")
 
@@ -628,6 +630,7 @@
        (defparameter *bla-time* img-time)
       (focus:set-position start-position)       
 
+      #+nil
       (dotimes (i (length img-array))
 	(vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
 				   (vol:normalize-2-sf/ub8 
@@ -669,10 +672,10 @@
  (loop for value being the hash-values of *b*
     using (hash-key key) do
       #+nil
-      (format t "~a ~a~%" key 
+      (format t "~a ~a~%" key
 	      (mapcar #'(lambda (x) (elt *sequence* x)) value))
       (vol::write-pgm-transposed
-       (format nil "/dev/shm/o~a.pgm" key)
+       (format nil "/dev/shm/o~4,2f.pgm" key)
        (vol:normalize-2-sf/ub8
 	(calculate-section *bla* value)))))
 
@@ -680,6 +683,29 @@
 (loop for e in (gethash -23.45 *b*) collect (elt *sequence* e))
 
 (declaim (optimize (debug 3) (speed 0) (safety 3)))
+
+(defun accumulate-all-dark-images ()
+ (destructuring-bind (y x) (array-dimensions (elt *bla* 0))
+   (let* ((bg-ind (remove-if #'null ;; find all indices to dark images
+			     (loop for i below (length *sequence*) collect
+				  (destructuring-bind (z type) (elt *sequence* i)
+				    (when (eq type :dark)
+				      i)))))
+	  (n (length bg-ind))
+	  (bg-acc (make-array (list y x) :element-type 'fixnum))
+	  (bg-avg (make-array (list y x) :element-type 'single-float)))
+     (dolist (e bg-ind)
+       (let ((a (elt *bla* e)))
+	      (vol:do-region ((j i) (y x))
+		(incf (aref bg-acc j i) (aref a j i)))))
+     (vol:do-region ((j i) (y x))
+       (setf (aref bg-avg j i) (* (/ 1s0 n) (aref bg-acc j i))))
+     bg-avg)))
+
+#+nil
+(vol::write-pgm-transposed "/dev/shm/bg.pgm"
+			   (vol:normalize-2-sf/ub8 (accumulate-all-dark-images)))
+  
 
 (defun calculate-section (img-array indices)
   (let ((imgs (mapcar #'(lambda (x) (list x (elt *sequence* x))) indices)))
@@ -712,7 +738,7 @@
 	  (setf (aref sec j i) (* 1s0 
 				  (- (aref ma j i)
 				     (aref mi j i)
-				     (/ (aref bg j i) bg-count)))))
+				     #+nil (/ (aref bg j i) bg-count)))))
 	sec)))
   #+nil
   (destructuring-bind (z) (array-dimensions img-array)
