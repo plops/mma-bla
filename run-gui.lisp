@@ -559,7 +559,7 @@
      (setf *do-display-queue* nil)
 
      (let* ((phases 3)
-	    (slices 20)
+	    (slices 30)
 	    (start-position (focus:get-position))
 	    (sequence nil) ;; this will contain the state of each image
 	    ;; the first image is a dark image
@@ -583,6 +583,8 @@
 	   (dotimes (i phases)
 	     (push (make-slice (slice-z j) i) sequence)
 	     (dotimes (k 2)
+	       (lcos "qdisk 225 225 200")
+	       #+nil
 	       (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 			     (mod i phases) phases))
 	       (sleep .001)
@@ -597,7 +599,9 @@
 	 (sb-thread:make-thread 
 	  #'(lambda ()
 	      ;; the stage doesn't need to be moved for the first slice
-	      (sleep (+ .016 (* (1+ phases) .033298)))
+	      (sleep (* (+ 2.5 phases) .033298)) 
+	      ;; wait for two dark images and the first phase images to finish
+	      ;; also wait one frame of the dark images
 	      (dotimes (i (1- slices))
 		(focus:set-position (slice-z i))
 		(setf (aref *move-time* i) (get-internal-real-time))
@@ -642,6 +646,7 @@
        (incf i)))
    h))
 
+#+nil
 (let* ((all-times (let ((res nil))
 		   (dotimes (i (length *bla-time*))
 		     (push (list :cap (- (aref *bla-time* i) (aref *bla-time* 0)))
@@ -654,7 +659,7 @@
   (format t "~&---~%")
   (dolist (e s)
     (destructuring-bind (typ time) e
-      (format t "~a " time)
+      (format t "~4d " time)
       (when (eq typ :mov)
 	(terpri)))))
 
