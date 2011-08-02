@@ -558,12 +558,14 @@
      (clara::abort-acquisition )
      (setf *do-display-queue* nil)
 
-     (let* ((phases 7)
+     (let* ((phases 3)
 	    (slices 20)
 	    (start-position (focus:get-position))
 	    (sequence nil) ;; this will contain the state of each image
 	    ;; the first image is a dark image
-	    (img-array (make-array (+ 1 (* slices (+ 1 phases))))))
+	    (img-number (+ 1 (* slices (+ 1 phases))))
+	    (img-array (make-array img-number))
+	    (img-time (make-array img-number)))
        (flet ((slice-z (i)
 		(+ (* 30 (/ i (1- slices))) 
 		   start-position)))
@@ -583,18 +585,22 @@
 	     (dotimes (k 2)
 	       (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 			     (mod i phases) phases))
+	       (sleep .001)
 	       (lcos "qswap"))))
 	 (sleep .4)
 	 (lcos "toggle-queue 1")
 
 	 (setf *sequence* (reverse sequence))
 	 
+	 (defparameter *move-time* (make-array (1- slices)))
+
 	 (sb-thread:make-thread 
 	  #'(lambda ()
 	      ;; the stage doesn't need to be moved for the first slice
 	      (sleep (+ .016 (* (1+ phases) .033298)))
 	      (dotimes (i (1- slices))
 		(focus:set-position (slice-z i))
+		(setf (aref *move-time* i) (get-internal-real-time))
 		(sleep (* (1+ phases) .033298))))
 	  :name "focus-mover")       
 
@@ -608,22 +614,22 @@
 			    (< count (length img-array))) do
 		(capture)
 		(loop for i below (sb-concurrency:queue-count *line*) do
-		     (setf (aref img-array count)
-			   (sb-concurrency:dequeue *line*))
+		     (setf (aref img-array count) (sb-concurrency:dequeue *line*)
+			   (aref img-time count) (get-internal-real-time))
 		     (incf count)))
 	   (abort-acquisition)
 	   (free-internal-memory)))
 
        (defparameter *bla* img-array)
-
+       (defparameter *bla-time* img-time)
       (focus:set-position start-position)       
 
-       (dotimes (i (length img-array))
-	 (vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
-				    (vol:normalize-2-sf/ub8 
-				     (vol:convert-2-ub16/sf-mul 
-				      (aref img-array i)))))
-       (section-array img-array))
+      (dotimes (i (length img-array))
+	(vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
+				   (vol:normalize-2-sf/ub8 
+				    (vol:convert-2-ub16/sf-mul 
+				     (aref img-array i)))))
+      #+nil (section-array img-array))
      (setf *do-display-queue* t))
  :name "capture")
 
@@ -635,6 +641,22 @@
 	   (push i (gethash z h)))
        (incf i)))
    h))
+
+(let* ((all-times (let ((res nil))
+		   (dotimes (i (length *bla-time*))
+		     (push (list :cap (- (aref *bla-time* i) (aref *bla-time* 0)))
+			   res))
+		   (dotimes (i (length *move-time*))
+		     (push (list :mov (- (aref *move-time* i) (aref *bla-time* 0)))
+			   res))
+		   res))
+      (s (sort all-times #'< :key #'second)))
+  (format t "~&---~%")
+  (dolist (e s)
+    (destructuring-bind (typ time) e
+      (format t "~a " time)
+      (when (eq typ :mov)
+	(terpri)))))
 
 #+nil
 (progn
@@ -1069,17 +1091,22 @@
 #+nil
 (let ((x 700)
       (y 100))
+  (progn
+    (setf gui::*kill-window* t)
+    (sleep .1)
+    (setf gui::*kill-window* nil))
   (sb-posix:setenv "DISPLAY" ":0" 1)
   (sb-thread:make-thread
    #'(lambda ()
        (gui:with-gui ((- 1280 x) 700 x y)
 	 (draw-screen)))
    :name "camera-display"))
-#+nil 
+#+nil
 (progn
-  (setf gui::*kill-window* t)
-  (sleep .1)
-  (setf gui::*kill-window* nil))
+    (setf gui::*kill-window* t)
+    (sleep .1)
+    (setf gui::*kill-window* nil))
+
 
 (defparameter *lcos-chan* nil)
 (defun lcos (cmd)
@@ -1137,6 +1164,7 @@
 		     (mod i phases) phases))
        ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
        (lcos "qdisk 200 225 280")
+       (sleep .001)
        (lcos "qswap")))
    (sleep .4)
    (lcos "toggle-queue 1")))
@@ -1170,3 +1198,7 @@
   (dotimes (i n)
     (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))))
  (lcos "toggle-queue 1"))
+
+
+;; echo quit > /proc/`ps aux|grep er/glfw|grep -v grep |awk '{print $2}'`/fd/0
+;; echo quit > /proc/`ps aux|grep mma-cmd|grep -v grep |awk '{print $2}'`/fd/0
