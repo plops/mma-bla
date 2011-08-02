@@ -98,8 +98,8 @@
 	  :if-exists :supersede
 	  :if-does-not-exist :error
 	  :element-type '(unsigned-byte 16)))
-  (send-binary *mma-img*)
-  (mma "set-cycle-time 33.27"))
+  (mma "set-cycle-time 33.27")
+  (send-binary *mma-img*))
 
 (defun send-binary (img)
       (declare (type (simple-array (unsigned-byte 16) (256 256)) img))
@@ -550,13 +550,15 @@
 (defun make-slice (z-position type)
   (list z-position type))
 
+(defparameter *sequence* nil)
+
 #+nil 
 (sb-thread:make-thread 
  #'(lambda ()  ;; CAPTURESECTION
      (clara::abort-acquisition )
      (setf *do-display-queue* nil)
 
-     (let* ((phases 3)
+     (let* ((phases 7)
 	    (slices 20)
 	    (start-position (focus:get-position))
 	    (sequence nil) ;; this will contain the state of each image
@@ -590,7 +592,7 @@
 	 (sb-thread:make-thread 
 	  #'(lambda ()
 	      ;; the stage doesn't need to be moved for the first slice
-	      (sleep (* (1+ phases) .033298))
+	      (sleep (+ .016 (* (1+ phases) .033298)))
 	      (dotimes (i (1- slices))
 		(focus:set-position (slice-z i))
 		(sleep (* (1+ phases) .033298))))
@@ -625,8 +627,6 @@
      (setf *do-display-queue* t))
  :name "capture")
 
-*sequence*
-
 (defun fill-phase-image-sequence-hash ()
  (let ((h (make-hash-table)))
    (let ((i 0))
@@ -637,19 +637,19 @@
    h))
 
 #+nil
-(defparameter *b* (fill-phase-image-sequence-hash))
-#+nil
-(loop for value being the hash-values of *b*
-   using (hash-key key) do
-     #+nil
-     (format t "~a ~a~%" key 
-	     (mapcar #'(lambda (x) (elt *sequence* x)) value))
-     (vol::write-pgm-transposed
-      (format nil "/dev/shm/o~a.pgm" key)
-      (vol:normalize-2-sf/ub8
-       (calculate-section *bla* value))))
+(progn
+  (defparameter *b* (fill-phase-image-sequence-hash))
+ (loop for value being the hash-values of *b*
+    using (hash-key key) do
+      #+nil
+      (format t "~a ~a~%" key 
+	      (mapcar #'(lambda (x) (elt *sequence* x)) value))
+      (vol::write-pgm-transposed
+       (format nil "/dev/shm/o~a.pgm" key)
+       (vol:normalize-2-sf/ub8
+	(calculate-section *bla* value)))))
 
-*bla*
+#+nil
 (loop for e in (gethash -23.45 *b*) collect (elt *sequence* e))
 
 (declaim (optimize (debug 3) (speed 0) (safety 3)))
@@ -795,6 +795,7 @@
 #+nil
 (room)
 
+
 (let* ((count 0)
        (h 412)
        (w 432)
@@ -805,9 +806,10 @@
 			     :element-type '(unsigned-byte 16))))
   ;(gui::reset-frame-count)
   (defun draw-screen ()
-    ;(gl:draw-buffer :back)
+    ;;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    (gl:clear :color-buffer-bit)
+    ;(gl:clear :color-buffer-bit)
+    
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
        (format t "*~a*" c)))
@@ -1073,6 +1075,11 @@
        (gui:with-gui ((- 1280 x) 700 x y)
 	 (draw-screen)))
    :name "camera-display"))
+#+nil 
+(progn
+  (setf gui::*kill-window* t)
+  (sleep .1)
+  (setf gui::*kill-window* nil))
 
 (defparameter *lcos-chan* nil)
 (defun lcos (cmd)

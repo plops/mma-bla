@@ -56,6 +56,7 @@
   (defun reset-frame-count ()
     (setf frame-count 0)))
 
+(defparameter *kill-window* nil)
 
 (defmethod display ((w fenster))
   ;(clear :color-buffer-bit :depth-buffer-bit)
@@ -68,7 +69,9 @@
   ;;http://www.d-silence.com/feature.php?id=255
   ;(flush) ;; practically no effect for double buffered rendering
   ;(finish) ;; sync cpu and gpu
-  (post-redisplay))
+  (post-redisplay)
+  (when *kill-window*
+    (destroy-current-window)))
 
 (defmethod reshape ((w fenster) x y)
   (setf (width w) x
