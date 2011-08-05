@@ -147,7 +147,7 @@
 #+nil
 (mma "quit")
 #+nil
-(clara::uninit )
+(clara::uninit)
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
   (let* ((s 0.828333873909549)
@@ -180,6 +180,21 @@
       (abort-acquisition)
       (free-internal-memory))
   :name "capture"))
+
+#+nil ;; turn lcos white
+(let ((phases 3))
+ (dotimes (j 1)
+   (dotimes (i 1000)
+     (dotimes (k 2)
+       #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+		     (mod i phases) phases))
+       ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
+       (lcos "qdisk 200 225 280")
+       (sleep .001)
+       (lcos "qswap")))
+   (sleep .4)
+   (lcos "toggle-queue 1")))
+
 
 #+nil
 (sb-thread:make-thread 
@@ -507,23 +522,54 @@
        (push e res)))
    (reverse res)))
 
+(defun get-capture-sequence ()
+ (remove-if-not #'(lambda (x) (eq :capture (getf x :type))) (ss :seq)))
+
+(defparameter *img-time* nil)
+
 #+nil
 (progn
+  (setf *do-display-queue* nil)
+  (setf *do-capture* nil)
+  (sleep .1)
+  (setf *do-capture* t)
+  (clara::abort-acquisition )
+  (clara::prepare-acquisition)
+  (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+
   (prepare-stack-acquisition)
   (let ((phases (ss :phases)))
     (dolist (e (get-lcos-sequence))     
-      (if (eq e :dark)
-	  (lcos "qswap")
-	  (lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
-			e phases)))
-      (sleep .001)
-      (lcos "qswap"))
+      (unless (eq e :dark)
+	(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+		      e phases))
+	(sleep .001))
+      (lcos "qswap")
+      (sleep .001))
    (sleep .2))
- 
- (lcos "toggle-queue 1")
- (setf (ss :set-start-at-next-swap-buffer) t)
- 
- (start-move-thread))
+
+  (let ((img-array (make-array (length (get-capture-sequence))))
+	(img-time (make-array (length (get-capture-sequence)))))
+    (lcos "toggle-queue 1")
+    (setf (ss :set-start-at-next-swap-buffer) t)
+    (start-acquisition) ;; start camera
+    
+    (start-move-thread)
+    
+    (let ((count 0))
+      (loop while (and *do-capture*
+		       (< count (length img-array))) do
+	   (capture)
+	   (loop for i below (sb-concurrency:queue-count *line*) do
+		(setf (aref img-array count) (sb-concurrency:dequeue *line*)
+		      (aref img-time count) (get-internal-real-time))
+	       (incf count)))
+      (abort-acquisition)
+      (free-internal-memory))
+    (defparameter *img-array* img-array)
+    (defparameter *img-time* img-time))
+
+  (setf *do-display-queue* t))
 
 (defun draw-moves ()
   (flet ((vline (x)
@@ -531,13 +577,19 @@
 	     (vertex x 0)
 	     (vertex x 80))))
    (with-pushed-matrix 
-     (scale .15 1 1)
+     (scale .19 1 1)
      (color 1 1 1)
      (vline (- (get-internal-real-time) (ss :start)))
      (color .3 1 .3)
      
      (dolist (e (ss :real-moves))
        (vline e))
+     
+     (when *img-time*
+       (color .9 .2 .2)
+       (dotimes (i (length *img-time*))
+	 (vline (- (aref *img-time* i) (ss :start)))))
+
      (translate 0 20 0)
      (dolist (e (ss :seq))
        (case (getf e :type)
@@ -550,7 +602,8 @@
 	  (rect (getf e :start) 0 (getf e :end) 20))
 	 (:stage-move
 	  (color 1 1 1)
-	  (rect (getf e :start) 21 (getf e :end) 41)))))))
+	  (rect (getf e :start) 21 (getf e :end) 41))))
+)))
 
 #+nil 
 (sb-thread:make-thread 
@@ -628,15 +681,15 @@
 
        (defparameter *bla* img-array)
        (defparameter *bla-time* img-time)
-      (focus:set-position start-position)       
-
-      #+nil
-      (dotimes (i (length img-array))
-	(vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
-				   (vol:normalize-2-sf/ub8 
-				    (vol:convert-2-ub16/sf-mul 
-				     (aref img-array i)))))
-      #+nil (section-array img-array))
+       (focus:set-position start-position)       
+       
+       #+nil
+       (dotimes (i (length img-array))
+	 (vol::write-pgm-transposed (format nil "/dev/shm/01_~3,'0d.pgm" i)
+				    (vol:normalize-2-sf/ub8 
+				     (vol:convert-2-ub16/sf-mul 
+				      (aref img-array i)))))
+       #+nil (section-array img-array))
      (setf *do-display-queue* t))
  :name "capture")
 
@@ -861,19 +914,6 @@
 (lcos (format nil "toggle-notify-mma ~d"
 	      (sb-ext:process-pid *mma-chan*)))
 
-#+nil ;; turn lcos white
-(let ((phases 3))
- (dotimes (j 1)
-   (dotimes (i 1000)
-     (dotimes (k 2)
-       #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
-		     (mod i phases) phases))
-       ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
-       (lcos "qdisk 200 225 280")
-       (sleep .001)
-       (lcos "qswap")))
-   (sleep .4)
-   (lcos "toggle-queue 1")))
 
 ;; echo quit > /proc/`ps aux|grep er/glfw|grep -v grep |awk '{print $2}'`/fd/0
 ;; echo quit > /proc/`ps aux|grep mma-cmd|grep -v grep |awk '{print $2}'`/fd/0
