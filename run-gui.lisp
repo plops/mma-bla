@@ -454,7 +454,7 @@
 					     y)) 
 				  (remove-if-not #'(lambda (x) (eq :stage-move (getf x :type)))
 						 (ss :seq)))))
-	:start))
+	:pos))
 #+nil
 (next-position 304)
 
@@ -482,7 +482,7 @@
 	    (when (< 2 diff)
 	      (push time (ss :real-moves))
 	      
-	      (format t "~a~%" (list diff time next ))
+	      (format t "~a~%" (list diff time next (next-position time)))
 	      (sleep (/ diff 1000))))))))
 
 (defun start-move-thread ()
