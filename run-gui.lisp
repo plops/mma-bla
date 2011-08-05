@@ -413,9 +413,10 @@
 (defun prepare-stack-acquisition ()
   (when (ss :wait-move-thread) 
     (close-move-thread))
-  (let* ((seq (plan-stack :slices 21 :lcos-seq '(:dark 0 1 2)
+  (let* ((start-pos (focus:get-position))
+	 (seq (plan-stack :slices 21 :lcos-seq '(:dark 0 1 2)
 			  :frame-period (/ 1000 60)
-			  :start-pos (focus:get-position) :dz 1))
+			  :start-pos start-pos :dz 1))
 	 (moves (extract-moves seq)))
     (setf *stack-state* nil)
      (setf (ss :seq) seq
@@ -424,6 +425,7 @@
 	   (ss :start) 0
 	   (ss :do-wait-move) t
 	   (ss :wait-move-thread) nil
+	   (ss :start-position) start-pos
 	   (ss :set-start-at-next-swap-buffer) nil)))
 
 #+nil
@@ -476,13 +478,15 @@
 			      (progn 
 				(push time (ss :real-moves))
 				(setf (ss :real-moves) (reverse (ss :real-moves)))
+				(focus:set-position (ss :start-position))
 				(return-from move-stage-fun
 				  (+ 1 time)))))
 		    (diff (- next time)))
 	    (when (< 2 diff)
 	      (push time (ss :real-moves))
-	      
-	      (format t "~a~%" (list diff time next (next-position time)))
+	      (let ((npos (next-position time)))
+		(format t "~a~%" (list diff time next npos))
+		(focus:set-position npos))
 	      (sleep (/ diff 1000))))))))
 
 (defun start-move-thread ()
@@ -492,8 +496,20 @@
 				 :name "stage-mover")))
 #+nil
 (progn
+  (progn
+   (dotimes (i (* 21 4))
+     (dotimes (k 2)
+       #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+		     (mod i phases) phases))
+       ;;(draw-grating-disk 200 225 380 :phase (mod i 3)))
+       (lcos "qdisk 200 225 280")
+       (sleep .001)
+       (lcos "qswap")))
+   (sleep .2))
  (prepare-stack-acquisition)
+ (lcos "toggle-queue 1")
  (setf (ss :set-start-at-next-swap-buffer) t)
+ 
  (start-move-thread))
 
 (defun draw-moves ()
