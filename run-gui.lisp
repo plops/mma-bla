@@ -415,7 +415,7 @@
     (close-move-thread))
   (let* ((seq (plan-stack :slices 21 :lcos-seq '(:dark 0 1 2)
 			  :frame-period (/ 1000 60)
-			  :start-pos 0 :dz 1))
+			  :start-pos (focus:get-position) :dz 1))
 	 (moves (extract-moves seq)))
     (setf *stack-state* nil)
      (setf (ss :seq) seq
@@ -444,6 +444,20 @@
 (defun next-move (time ls)
   (first (remove-if #'(lambda (x) (< x time)) ls)))
 
+(next-move 320 (ss :moves))
+
+(defun next-position (time)
+  (getf (first (remove-if #'(lambda (x) (< (getf x :start) time))
+			  (mapcar #'(lambda (x) (let ((y nil)) 
+					     (setf (getf y :start) (getf x :start)
+						   (getf y :pos) (getf x :pos))
+					     y)) 
+				  (remove-if-not #'(lambda (x) (eq :stage-move (getf x :type)))
+						 (ss :seq)))))
+	:start))
+#+nil
+(next-position 304)
+
 (defun clear-real-moves ()
   (prog1
       (ss :real-moves)
@@ -458,15 +472,17 @@
 	 (if (= start 0)
 	     (sleep (/ 2 1000))
 	     (let* ((time (- (get-internal-real-time) start))
-		 (next (or (next-move time (ss :moves))
-			   (progn 
-			     (push time (ss :real-moves))
-			     (return-from move-stage-fun
-			       (+ 1 time)))))
-		 (diff (- next time)))
+		    (next (or (next-move time (ss :moves))
+			      (progn 
+				(push time (ss :real-moves))
+				(setf (ss :real-moves) (reverse (ss :real-moves)))
+				(return-from move-stage-fun
+				  (+ 1 time)))))
+		    (diff (- next time)))
 	    (when (< 2 diff)
 	      (push time (ss :real-moves))
-	      (format t "~a~%" (list diff time next))
+	      
+	      (format t "~a~%" (list diff time next ))
 	      (sleep (/ diff 1000))))))))
 
 (defun start-move-thread ()
