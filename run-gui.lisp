@@ -31,45 +31,9 @@
 (focus:set-position
  (+ (focus:get-position) .4s0))
 
-(defun focus-status ()
- (let ((moving 2)
-       (settle 4))   
-   (focus::talk-zeiss focus::*fd* 
-		     focus::*stream*
-		     "FPZFs")))
-
-(defun test-focus-speed (range &key (n 20) (pause-ms 10))
-  (let ((start (focus:get-position))
-	(start-time (get-internal-real-time)))
-    (focus:set-position (- start range))
-    (prog1
-	(loop for i below n collect
-	     (progn (unless (= 0 pause-ms)
-		      (sleep (/ pause-ms 1000)))
-		    (list (* .001 
-			     (- (get-internal-real-time) 
-				start-time)) 
-			  (focus-status))))
-      (focus:set-position start))))
-#+nil
-(format t "~{~{~a ~}~%~}~%"
- (test-focus-speed .1s0 :pause-ms 0))
-
-;; settle time for small z steps is 30ms (two pictures)
-
-
-#+nil
-(focus-status)
-
-#+nil
-(capture)
 (defvar *mma-chan* nil)
 (defvar *binary-fifo* nil)
 
-
-#+NIL
-(sb-ext:run-program "/home/martin/0505/mma/libmma/reset" '()
-		    :wait nil)
 #+nil
 (progn
   (sb-thread:make-thread 
@@ -141,10 +105,10 @@
 	(let* ((x (- i (floor n 2)))
 	       (y (- j (floor n 2)))
 	       (r2 (+ (* x x) (* y y))))
-	  (setf (aref a j i) (if t #+nil (< r2 (expt 45 2)) 
-				 #+nil(= 0 (mod (+ i j) 2))
-				 (min 4095 (floor (* 4095 (exp (* -.0004 r2)))))
-				 90)))))
+	  (setf (aref a j i) 4059 #+nil (if t #+nil (< r2 (expt 45 2)) 
+					    #+nil(= 0 (mod (+ i j) 2))
+					    (min 4095 (floor (* 4095 (exp (* -.0004 r2)))))
+					    90)))))
     a))
 
 
@@ -160,15 +124,9 @@
 #+nil
 (mma "black")
 #+nil
-(mma "set-cycle-time 33")
-#+nil
 (mma "set-cycle-time 33.27")
 #+nil
-(mma "set-cycle-time 193.5")
-#+nil
 (mma "deflection 118.5")
-#+nil
-(mma "help")
 #+nil ;; ANGLE
 (let ((n (length *mma-imgs*))
       (i 0))
@@ -183,140 +141,13 @@
  (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0))))
 
 #+nil
-(mma "stop")
-#+nil
-(mma "off")
-#+nil
-(mma "on")
-#+nil
 (mma "get-temperature")
 #+nil
-(mma "start")
-#+nil
 (mma "frame-voltage 15.0 15.0") ;; 15V should tilt ca. 120nm
-#+nil
-(mma "splat 128 128 26")
 #+nil
 (mma "quit")
 #+nil
 (clara::uninit )
-(defun mma-polar (r phi d)
-  (mma (format nil "splat ~a ~a ~a" 
-	       (+ 128 (* r (cos phi)))
-	       (+ 128 (* r (sin phi)))
-	       d)))
-
-#+nil
-(mma-polar 20s0 1.2s0 22s0)
-#+nil
-(progn
- (defparameter *mma-size* 20s0)
- (defparameter *mma-radius* 80s0)
- (defparameter *mma-do-run* t))
-#+nil
-(sb-thread:make-thread #'(lambda ()
-			  (loop while *mma-do-run* do
-			       (loop for p from 0 below 360 by 30 do
-				    (sleep .06)
-				    (mma-polar *mma-radius* (* 3.1415 (/ 180) p) *mma-size*))))
-		       :name "mma-update")
-
-
-#+nil
-(mma "set-cycle-time 285")
-#+nil
-(mma "stop")
-#+nil
-(mma "off")
-#+nil
-(mma "start")
-#+nil
-(mma "quit")
-(defun sum (img)
-  (destructuring-bind (h w) (array-dimensions img)
-    (let ((sum 0))
-      (dotimes (j h)
-	(dotimes (i w)
-	  (incf sum (aref img j i))))
-      sum)))
-
-
-
-#+nil
-(start-acquisition)
-#+nil
-(let ((fac 2))
-  (start-acquisition)
-  (defparameter *scan* nil)
-  (loop for j below 256 by fac do
-       (loop for i below 256 by fac do
-	    (mma (format nil "splat ~a ~a 7" i j))
-	    (sleep .07)
-	    (capture)
-	    (let ((s (list i j (sum *line*))))
-	      (format t "~a~%" s)
-	      (push s *scan*))))
-  (abort-acquisition))
-#+nil
-(progn
-  (check (start-acquisition))
-  (capture)
-  (check (abort-acquisition)))
-
-#+nil
-(require :vol)
-#+nil
-(vol:write-pgm "/dev/shm/o.pgm"
- (let* ((d *scan*)
-	(fac 2)
-	(ma (reduce #'max d :key #'third))
-	(mi (reduce #'min d :key #'third))
-	(b (make-array (list (/ 256 fac) (/ 256 fac))
-		       :element-type '(unsigned-byte 8)))
-	(k 0))
-   (format t "~a ~a~%" ma mi)
-   (dolist (e d)
-     (destructuring-bind (i j val) e
-       (let ((ii (mod k (/ 256 fac)))
-	     (jj (floor k (/ 256 fac))))
-	 (incf k)
-	 (setf (aref b ii jj)
-	       (max 0 (min 255 (floor (* 255 (/ (- val mi)
-					       (- ma mi))))))))))
-   b))
-
-(defun mma-spot (i j &key (kernel 3))
-  (let ((b (make-array (list 256 256)
-		       :element-type '(unsigned-byte 16)
-		       :initial-element 120)))
-    (loop for y from (- kernel) upto kernel do
-	 (loop for x from (- kernel) upto kernel do
-	      (let ((yy (+ j y))
-		    (xx (+ i x)))
-		(when (and (<= 0 xx 255)
-			   (<= 0 yy 255))
-		  (setf (aref b yy xx) 2000)))))
-    b))
-
-
-#+nil (defmacro with-lcos-to-cam (&body body)
-  `(let* ((s 1.129781s0)
-	  (sx  s)
-	  (sy  (- s))
-	  (phi 0.0 #+nil 1.3154879)
-	  (cp (cos phi))
-	  (sp (sqrt (- 1s0 (* cp cp))))
-	  (tx 800.0)
-	  (ty 1198.154s0)
-	  (a (make-array (list 4 4) :element-type 'single-float
-			 :initial-contents
-			 (list (list (* sx cp)    (* sy sp)  .0  tx)
-			       (list (* -1 sx sp) (* sy cp)  .0  ty)
-			       (list .0     .0   1.0  .0)
-			       (list .0     .0    .0 1.0)))))
-     (gl:with-pushed-matrix
-       (gl:load-transpose-matrix (sb-ext:array-storage-vector a))
-       ,@body)))
 
 (defun load-cam-to-lcos-matrix (&optional (x 0s0) (y 0s0))
   (let* ((s 0.828333873909549)
@@ -335,23 +166,6 @@
 			       (list .0     .0    .0 1.0)))))
     (gl:load-transpose-matrix (sb-ext:array-storage-vector a))))
 
-#+nil
-(defun draw-circle (x y r)
-  (gl:with-primitive :line-loop
-   (let ((n 37))
-     (loop for i from 0 below n do
-	  (let ((arg (* i (/ n) 2 (coerce pi 'single-float)))) 
-	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
-#+nil
-(defun draw-disk (x y r)
-  (gl:with-primitive :triangle-fan
-   (let ((n 38))
-     (gl:vertex x y)
-     (loop for i from 0 below n do
-	  (let ((arg (* i (/ (1- n)) 2 (coerce pi 'single-float)))) 
-	    (gl:vertex (+ x (* r (cos arg))) (+ y (* r (sin arg)))))))))
-
-
 (defparameter *do-capture* nil)
 (defparameter *do-capture* t)
 (defparameter *do-display-queue* nil)
@@ -362,30 +176,10 @@
   #'(lambda () 
       (start-acquisition)
       (loop while *do-capture* do
-	   ;(sleep .01)
-	   (obtain-section))
-      (abort-acquisition)
-      (free-internal-memory))
-  :name "capture-section"))
-#+nil
-(progn
-  (sb-thread:make-thread 
-  #'(lambda () 
-      (start-acquisition)
-      (loop while *do-capture* do
 	   (capture))
       (abort-acquisition)
       (free-internal-memory))
   :name "capture"))
-#+nil
-(clara::abort-acquisition)
-#+nil
-(setf sb-ext:*after-gc-hooks*
-      (list #'(lambda () 
-                (format t " ~a~%" 
-                        (/ sb-ext:*gc-run-time*
-                           (* 1s0 internal-time-units-per-second)))
-                (setf sb-ext:*gc-run-time* 0))))
 
 #+nil
 (sb-thread:make-thread 
@@ -476,10 +270,6 @@
 	 (vol:write-pgm "/dev/shm/01beads.pgm" 
 			(vol:normalize-2-sf/ub8 (vol:convert-2-ub16/sf-mul in)))
 	 points)))))
-
-#+nil
-(focus:set-position
- (+ (focus:get-position) -.4s0))
 
 #+nil
 (sb-thread:make-thread 
@@ -640,169 +430,6 @@
      (setf *do-display-queue* t))
  :name "capture")
 
-(defun fill-phase-image-sequence-hash ()
- (let ((h (make-hash-table)))
-   (let ((i 0))
-     (dolist (e *sequence*)
-       (destructuring-bind (z type) e
-	   (push i (gethash z h)))
-       (incf i)))
-   h))
-
-#+nil ;; plot the aquisition times and the times when the stage moved
-(let* ((all-times (let ((res nil))
-		   (dotimes (i (length *bla-time*))
-		     (push (list :cap (- (aref *bla-time* i) (aref *bla-time* 0)))
-			   res))
-		   (dotimes (i (length *move-time*))
-		     (push (list :mov (- (aref *move-time* i) (aref *bla-time* 0)))
-			   res))
-		   res))
-      (s (sort all-times #'< :key #'second)))
-  (format t "~&---~%")
-  (dolist (e s)
-    (destructuring-bind (typ time) e
-      (format t "~6d " time)
-      (when (eq typ :mov)
-	(terpri)))))
-
-#+nil
-(progn ;; reconstruct and save sections 
-  (defparameter *b* (fill-phase-image-sequence-hash))
- (loop for value being the hash-values of *b*
-    using (hash-key key) do
-      #+nil
-      (format t "~a ~a~%" key
-	      (mapcar #'(lambda (x) (elt *sequence* x)) value))
-      (vol::write-pgm-transposed
-       (format nil "/dev/shm/o~4,2f.pgm" key)
-       (vol:normalize-2-sf/ub8
-	(calculate-section *bla* value)))))
-
-#+nil
-(loop for e in (gethash -23.45 *b*) collect (elt *sequence* e))
-
-(declaim (optimize (debug 3) (speed 0) (safety 3)))
-
-(defparameter *bla* nil)
-(defun accumulate-all-dark-images ()
- (destructuring-bind (y x) (array-dimensions (elt *bla* 0))
-   (let* ((bg-ind (remove-if #'null ;; find all indices to dark images
-			     (loop for i below (length *sequence*) collect
-				  (destructuring-bind (z type) (elt *sequence* i)
-				    (when (eq type :dark)
-				      i)))))
-	  (n (length bg-ind))
-	  (bg-acc (make-array (list y x) :element-type 'fixnum))
-	  (bg-avg (make-array (list y x) :element-type 'single-float))
-	  (sum-bg nil))
-     (dolist (e bg-ind)
-       (let ((a (elt *bla* e)))
-	 (let ((sum 0))
-	   (declare (type (unsigned-byte 64) sum))
-	   (vol:do-region ((j i) (y x))
-	     (incf (aref bg-acc j i) (aref a j i))
-	     (incf sum (aref a j i)))
-	   (push sum sum-bg))))
-     (vol:do-region ((j i) (y x))
-       (setf (aref bg-avg j i) (* (/ 1s0 n) (aref bg-acc j i))))
-     (values bg-avg (reverse sum-bg)))))
-
-#+nil ;; estimate variation in bg images
-(multiple-value-bind (img nums) (accumulate-all-dark-images)
- (vol::write-pgm-transposed "/dev/shm/bg.pgm"
-			    (vol:normalize-2-sf/ub8 img))
- (setf *nums* (mapcar #'(lambda (x) (* 100s0 (/ (- x (first nums))
-				   x))) nums)))
-  
-
-(defun calculate-section (img-array indices)
-  (let ((imgs (mapcar #'(lambda (x) (list x (elt *sequence* x))) indices)))
-    (let* ((dim (array-dimensions (elt img-array 0)))
-	   (bg (make-array dim :element-type 'single-float))
-	   (bg-count 0)
-	   (ma (make-array dim :element-type 'single-float
-			   :initial-element -1e9))
-	   (mi (make-array dim :element-type 'single-float
-			   :initial-element 1e9))
-	   (sec (make-array dim :element-type 'single-float))) 
-      (destructuring-bind (y x) dim
-	(dolist (e imgs)
-	  (format t "~a~%" e)
-	  (destructuring-bind (k (z type)) e
-	    (declare (ignore z))
-	    (case type
-	      ;; accumulate dark images 
-	      (:dark (vol:do-region ((j i) (y x))
-		       (incf (aref bg j i) (aref (elt img-array k) j i)))
-		     (incf bg-count))
-	      
-	      ;; find max and min of all phase images
-	      (t (vol:do-region ((j i) (y x))
-		   (setf (aref ma j i) (max (aref ma j i)
-					    (* 1s0 (aref (elt img-array k) j i)))
-			 (aref mi j i) (min (aref mi j i)
-					    (* 1s0 (aref (elt img-array k) j i)))))))))
-	(vol:do-region ((j i) (y x))
-	  (setf (aref sec j i) (* 1s0 
-				  (- (aref ma j i)
-				     (aref mi j i)
-				     #+nil (/ (aref bg j i) bg-count)))))
-	sec)))
-  #+nil
-  (destructuring-bind (z) (array-dimensions img-array)
-    (destructuring-bind (y x) (array-dimensions (elt img-array 0))
-     (let ((phases (- z 1))
-	   (sec (make-array (list y x)
-			    :element-type 'single-float)))
-       (vol:do-region ((j i) (y x))
-	 (setf (aref sec j i)
-	       (* 1s0 (- (loop for k below phases maximize 
-			      (aref (elt img-array (1+ k)) j i))
-			 (loop for k below phases minimize 
-			      (aref (elt img-array (1+ k)) j i))
-			 (aref (elt img-array 0) j i)))))
-       (vol::write-pgm-transposed "/dev/shm/02_sec.pgm"
-				  (vol:normalize-2-sf/ub8 sec))))))
-
-#+nil
-(section-array *bla*)
-
-#+nil
-(progn ;; reset mma and lcos and start camera
-  ;; capture n frames and save into /dev/shm
-  (sb-thread:make-thread 
-   #'(lambda () 
-       (let ((n (* 100 (length *mma-imgs*))))
-	 (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
-	 (start-acquisition)
-	 
-	 (dotimes (i n)
-	   (mma (format nil "set-picture-sequence ~a ~a 1" 
-			(1+ i) ;; images start with 1
-			(if (= i (1- n)) 1 0) ;; last image (n-1)th has parameter 1
-			)))
-	 (dotimes (j 1)
-	   (dotimes (i (* 2 n)) 
-	     (lcos (format nil "qnumber ~a" i))
-	     (lcos "qswap")))
-	 (let ((count 0))
-	   (loop while (< count n) do
-		(capture)
-		(dotimes (i (sb-concurrency:queue-count *line*))
-		  (setf (aref *img-array* count)
-			(sb-concurrency:dequeue *line*))
-		  (incf count))))
-	 (abort-acquisition)
-	 (free-internal-memory)
-	 (format t "capture finished!~%")
-	 (dotimes (i n) 
-	   (vol::write-pgm-transposed 
-	    (format nil "/dev/shm/~4,'0d.pgm" i)
-	    (vol:normalize-2-sf/ub8
-	     (vol:convert-2-ub16/sf-mul
-	      (aref *img-array* i)))))))
-   :name "capture"))
 #+nil
 (require :vol)
 
@@ -816,20 +443,6 @@
   (defparameter *white* nil)
   (defparameter *line* (sb-concurrency:make-queue :name 'picture-fifo)))
 
-#+nil
-(change-capture-size (+ 380 513) (+ 64 513) 980 650)
-#+nil
-(change-capture-size 1 1 1392 1040 nil)
-#+nil
-(change-capture-size 1 1 432 412 t)
-#+nil
-(change-capture-size 1 1 512 512 t)
-#+nil
-(change-capture-size 1 1 256 256 t)
-#+nil
-(change-target 840 470 200 :ril 210s0)
-#+nil
-(change-phase 1)
 (defparameter *img-array* (make-array (* 100)))
 #+nil
 (require :vol)
@@ -854,8 +467,6 @@
 		    :name (format nil "~a" p)))))
      (mapcar #'sb-thread:join-thread thr))))
 
-#+nil
-(room)
 
 
 (let* ((count 0)
@@ -911,76 +522,6 @@
 	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			 :wt (* h 1s0) :ht (* w 1s0)))
 	     (gui:destroy tex)))))))
-  #+nil
-  (defun capture ()
-    #-clara (when new-size
-	      (unless (eq 'clara::DRV_IDLE
-			  (lookup-error (val2 (get-status))))
-		(abort-acquisition))
-	      (if crop-mode
-		  (check (clara::set-isolated-crop-mode 1 h w 1 1))
-		  (check (set-image 1 1 x w y h)))
-	      (start-acquisition)
-	      (setf new-size nil))
-    #+andor3 (defparameter *line*
-      (multiple-value-bind (ptr img) (andor3::wait-buffer)
-	(let* ((cpy (make-array (array-dimensions img)
-				:element-type '(unsigned-byte 16)))
-	       (img1 (sb-ext:array-storage-vector img))
-	       (cpy1 (sb-ext:array-storage-vector cpy)))
-	  (dotimes (i (length cpy1))
-	    (setf (aref cpy1 i) (aref img1 i)))
-	  (andor3::requeue-buffer ptr)
-	  cpy)))
-    #-clara (defparameter *line*
-     (let* ((img (make-array (list (- h (1- y)) (- w (1- x)))
-			     :element-type '(unsigned-byte 16)))
-	    (img1 (sb-ext:array-storage-vector img))
-	    (sap (sb-sys:vector-sap img1)))
-       (progn
-	#+nil (start-acquisition)
-	#+nil (loop while (eq 'clara::DRV_IDLE
-			(lookup-error (val2 (get-status))))
-	   do
-	     (sleep .003))
-	(check (wait-for-acquisition)) 
-	(format t "imgs ~a~%" (list (mod count 4) (floor count 2) (val2 (get-total-number-images-acquired))))
-	 (sb-sys:with-pinned-objects (img)
-	    (check (get-most-recent-image16 sap (length img1)))
-	   #+nil (check (get-acquired-data16 sap (length img1))))
-	#+nil (abort-acquisition)
-        #+nil(check
-	   (free-internal-memory))
-	 )
-       img))
-   #+nil8 (defparameter *t8*
-     (when (and *line*			;*dark* *white* *line*
-		)
-       (let* ((b (make-array (array-dimensions *line*)
-			     :element-type '(unsigned-byte 8)))
-	      (b1 (sb-ext:array-storage-vector b))
-					;(d1 (sb-ext:array-storage-vector *dark*))
-					;(w1 (sb-ext:array-storage-vector *white*))
-	      (l1 (sb-ext:array-storage-vector *line*))
-	      )
-	 (destructuring-bind (h w) (array-dimensions *line*)
-	   (declare (ignorable h))
-
-	   (dotimes (i (length b1))
-	     (let ((v (if (< 1 (aref l1 i))
-			  (min 255 (max 0 (floor (- (aref l1 i) 0) 
-						 11)))
-			  (let ((yy (floor i w))
-				(xx (mod i w)))
-			    (cond ((or (= 0 (mod (+ y yy) 500))
-				       (= 0 (mod (+ x xx) 500)))
-				   255)
-				  ((or (= 0 (mod (+ y yy) 100))
-				       (= 0 (mod (+ x xx) 100)))
-				   80)
-				  (t 0))))))
-	       (setf (aref b1 i) v))))
-	 b))))
 
   (defun capture ()
     (let* ((img1 (sb-ext:array-storage-vector img-circ))
@@ -1010,78 +551,7 @@
 		  (dotimes (i x)
 		    (setf (aref a j i)
 			  (aref img-circ k j i))))
-		(sb-concurrency:enqueue a *line*))))))))
-  #+nil
-  (defun obtain-section ()
-    (let ((phase-im (make-array (list phases-y phases-x h w)
-				:element-type '(unsigned-byte 16)))
-	  (sec (make-array (list h w)
-			   :element-type '(unsigned-byte 16))))
-      (dotimes (py phases-y)
-	(dotimes (px phases-x)
-	  (change-phase (+ px (* phases-x py)))
-	  ;(sleep .05)
-	  (capture)
-	  (setf (elt phase-ims px) *line*)
-	  (dotimes (j h)
-	    (dotimes (i w)
-	      (setf (aref phase-im py px j i) (aref *line* j i))))))
-      #+nil8 (defparameter *phase-im* phase-im)
-      #+nil8 (dotimes (j h)
-	(dotimes (i w)
-	  (let* ((v (aref phase-im 0 0 j i))
-		 (mi v)
-		 (ma v))
-	    (dotimes (py phases-y)
-	      (dotimes (px phases-x)
-		(setf mi (min mi (aref phase-im py px j i))
-		      ma (max ma (aref phase-im py px j i)))))
-	    (setf (aref sec j i) (- ma mi)))))
-      #+nil8 (setf *sec* sec)
-      #+nil8 (defparameter *t9*
-	(let* ((b (make-array (list h w)
-			      :element-type '(unsigned-byte 8)))
-	       (b1 (sb-ext:array-storage-vector b))
-	       (s1 (sb-ext:array-storage-vector sec)))
-	  (dotimes (i (length b1))
-	    (setf (aref b1 i) (min 255 (max 0
-					    (floor (aref s1 i)
-						   11)))))
-	  b))
-      (change-phase nil)))
-  #+nil
-  (defun obtain-sectioned-stack (&key (n (* 2 23)) (depth 23s0))
-  (when *line*
-    (destructuring-bind (h w) (array-dimensions *line*)
-      (let* ((v (make-array (list n h w)
-			    :element-type '(unsigned-byte 16)))
-	     (vp (make-array (list (* n phases-x) h w)
-			    :element-type '(unsigned-byte 16)))
-	     (z0 (focus:get-position)))
-	(setf *do-capture* nil)
-	(start-acquisition)
-	(dotimes (k n)
-	  (focus:set-position (+ z0 (* k (/ depth n))))
-	  ;(sleep .02)
-	  (obtain-section)
-	  (dotimes (j h)
-	    (dotimes (i w)
-	      (setf (aref v k j i) (aref *sec* j i))
-	      (dotimes (p phases-x)
-		(setf (aref vp (+ (* phases-x k) p) j i) (aref *phase-im* 0 p j i))))))
-	(defparameter *vol* v)
-	(defparameter *volp* vp)
-	(focus:set-position z0)
-	(setf *do-capture* t)
-	(abort-acquisition))))))
-
-
-#+nil
-(time (obtain-sectioned-stack))
-#+nil
-(focus:get-position)
-#+nil
-(change-phase nil)
+		(sb-concurrency:enqueue a *line*)))))))))
 
 #+nil
 (progn
@@ -1109,24 +579,6 @@
     (run-ics::print-histogram hist n (* 1s10 mi) (* 1s10 ma))
     (terpri)
     (setf *num-points* (reduce #'+ (subseq hist 5)))))
-
-#+nil
-(capture)
-#+nil
-(progn (start-acquisition)
-       (obtain-section)
-       (abort-acquisition))
-#+nil
-(let ((a (sb-ext:array-storage-vector *sec*)))
-  (reduce #'max a))
-#+NIL
-(status)
-#+nil
-(clara::prepare-acquisition)
-#+nil
-(abort-acquisition)
-#+nil
-(lookup-error (val2 (get-status)))
 
 #+nil
 (let ((x 700)
@@ -1208,37 +660,6 @@
        (lcos "qswap")))
    (sleep .4)
    (lcos "toggle-queue 1")))
-
-
-
-#+nil
-(let ((a (random 100)))
-  (dotimes (i 300)
-    (let* ((arg (* 2 pi (/ (mod i 10) 10)))
-	   (r 140)
-	   (c (+ 225 (* r (cos arg))))
-	   (s (+ 225 (* r (sin arg)))))
-      (lcos (format nil "qline 225 225 ~f ~f" c s)))
-    (let ((x 100) (xx 350)
-	  (y 90) (yy 350))
-      (lcos (format nil "qline ~f ~f ~f ~f" x y xx y))
-      (lcos (format nil "qline ~f ~f ~f ~f" x y x yy))
-      (lcos (format nil "qline ~f ~f ~f ~f" x yy xx yy))
-      (lcos (format nil "qline ~f ~f ~f ~f" xx y xx yy)))
-    (lcos (format nil "qnumber ~f" i))
-    (lcos "qswap")))
-
-#+nil
-(dotimes (i 300)
-    (lcos (format nil "qnumber ~a" i))
-    (lcos "qswap"))
-#+nil
-(progn
-  (let ((n (length *mma-imgs*)))
-  (dotimes (i n)
-    (mma (format nil "set-picture-sequence ~a ~a 1" (1+ i) (if (= i (1- n)) 1 0)))))
- (lcos "toggle-queue 1"))
-
 
 ;; echo quit > /proc/`ps aux|grep er/glfw|grep -v grep |awk '{print $2}'`/fd/0
 ;; echo quit > /proc/`ps aux|grep mma-cmd|grep -v grep |awk '{print $2}'`/fd/0
