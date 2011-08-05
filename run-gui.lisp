@@ -558,7 +558,7 @@
      (clara::abort-acquisition )
      (setf *do-display-queue* nil)
 
-     (let* ((phases 7)
+     (let* ((phases 3)
 	    (slices 100)
 	    (start-position (focus:get-position))
 	    (sequence nil) ;; this will contain the state of each image
@@ -607,7 +607,7 @@
 	      (dotimes (i (1- slices))
 		(focus:set-position (slice-z i))
 		(setf (aref *move-time* i) (get-internal-real-time))
-		(sleep (* (1+ phases) .033298))))
+		(sleep (* (1+ phases) (* .98 .033298)))))
 	  :name "focus-mover")       
 
 
@@ -649,7 +649,7 @@
        (incf i)))
    h))
 
-#+nil
+#+nil ;; plot the aquisition times and the times when the stage moved
 (let* ((all-times (let ((res nil))
 		   (dotimes (i (length *bla-time*))
 		     (push (list :cap (- (aref *bla-time* i) (aref *bla-time* 0)))
@@ -662,12 +662,12 @@
   (format t "~&---~%")
   (dolist (e s)
     (destructuring-bind (typ time) e
-      (format t "~4d " time)
+      (format t "~6d " time)
       (when (eq typ :mov)
 	(terpri)))))
 
 #+nil
-(progn
+(progn ;; reconstruct and save sections 
   (defparameter *b* (fill-phase-image-sequence-hash))
  (loop for value being the hash-values of *b*
     using (hash-key key) do
@@ -684,6 +684,7 @@
 
 (declaim (optimize (debug 3) (speed 0) (safety 3)))
 
+(defparameter *bla* nil)
 (defun accumulate-all-dark-images ()
  (destructuring-bind (y x) (array-dimensions (elt *bla* 0))
    (let* ((bg-ind (remove-if #'null ;; find all indices to dark images
@@ -1197,7 +1198,7 @@
 #+nil ;; turn lcos white
 (let ((phases 3))
  (dotimes (j 1)
-   (dotimes (i 1000)
+   (dotimes (i 100)
      (dotimes (k 2)
        #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 		     (mod i phases) phases))
