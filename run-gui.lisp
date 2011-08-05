@@ -342,6 +342,166 @@
 
 (defparameter *sequence* nil)
 
+
+(defun plan-stack (&key (slices 1) lcos-seq (start-pos 0) (dz 1)
+		   (frame-period (/ 60)) (start-time 0d0)
+		   (stage-settle-duration 20) (lcos-lag 0))
+  (let ((res nil)
+        (pos start-pos)
+        (time (+ start-time frame-period)))
+    (push (list :type :capture
+                :start 0
+                :end 15
+                :content :dark)
+          res)
+    (loop for k below slices do
+         (let ((cam nil))
+          (push (list :type :lcos-display
+                      :pos pos
+                      :lcos-seq
+                      (let ((lcos nil))
+                        (loop for e in lcos-seq do
+                           ;; lcos displays each frame twice
+                             (push (list :start time 
+                                         :end (+ time 15)
+                                         :content e) 
+                                   lcos)
+                             (incf time frame-period)
+                             (push (list :start time
+                                         :end (+ time 15)
+                                         :content e)
+                                   lcos)
+                           ;; one of the frames is captured by the camera
+                             (push (list :type :capture
+                                         :start time
+                                         :end (+ time 15)
+                                         :content e)
+                                   cam)
+			   ;; for this frame the MMA was white
+			     (push (list :type :mma
+                                         :start time
+                                         :end (+ time 15)
+                                         :content e)
+                                   cam)
+                             (incf time frame-period))
+                        (reverse lcos)))
+                res)
+          (loop for e in (reverse cam) do
+               (push e res))
+          (incf pos dz)
+          (unless (= k (- slices 1))
+           (push (list :type :stage-move
+                       :start (+ time frame-period) ;; move stage in one of the dark images
+                       :end (+ time frame-period stage-settle-duration (- lcos-lag))
+                       :pos pos)
+                 res))))
+    (reverse res)))
+
+
+(defun extract-moves (ls)
+  (mapcar #'(lambda (x) (getf x :start)) 
+          (remove-if-not #'(lambda (x) (eq :stage-move (getf x :type)))
+                         ls)))
+
+(defparameter *stack-state* nil)
+
+
+(defmacro ss (sym)
+  "Access an entry in the stack state"
+  `(getf *stack-state* ,sym))
+
+(defun prepare-stack-acquisition ()
+  (when (ss :wait-move-thread) 
+    (close-move-thread))
+  (let* ((seq (plan-stack :slices 21 :lcos-seq '(:dark 0 1 2)
+			  :frame-period (/ 1000 60)
+			  :start-pos 0 :dz 1))
+	 (moves (extract-moves seq)))
+    (setf *stack-state* nil)
+     (setf (ss :seq) seq
+	   (ss :moves) moves ;; planned moves
+	   (ss :real-moves) nil ;; times when actual stage movements occured
+	   (ss :start) (get-internal-real-time)
+	   (ss :do-wait-move) t
+	   (ss :wait-move-thread) nil)))
+
+#+nil
+(prepare-stack-acquisition)
+
+
+(defun close-move-thread ()
+  (let ((thread (ss :wait-move-thread)))
+    (when thread
+      (setf (ss :do-wait-move) nil)
+      (handler-case (sb-thread:join-thread thread)
+	(sb-thread:join-thread-error () (format t "Note: no thread woke up")))
+      (setf (ss :do-wait-move) t))))
+
+(defun previous-move (time ls)
+  (first (last (remove-if #'(lambda (x) (< time x)) ls))))
+
+(defun next-move (time ls)
+  (first (remove-if #'(lambda (x) (< x time)) ls)))
+
+(defun clear-real-moves ()
+  (prog1
+      (ss :real-moves)
+    (setf (ss :real-moves) nil)))
+
+#+nil
+(clear-real-moves)
+
+(defun move-stage-fun ()
+  (loop while (ss :do-wait-move) do
+       (let* ((time (- (get-internal-real-time) (ss :start)))
+	      (next (or (next-move time (ss :moves))
+			(progn 
+			  (push time (ss :real-moves))
+			  (return-from move-stage-fun
+			   (+ 1 time)))))
+	      (diff (- next time)))
+	 (when (< 2 diff)
+	   (push time (ss :real-moves))
+	   (format t "~a~%" (list diff time next))
+	   (sleep (/ diff 1000))))))
+
+(defun start-move-thread ()
+    (close-move-thread)
+    (setf (ss :wait-move-thread)
+	  (sb-thread:make-thread #'(lambda () (move-stage-fun))
+				 :name "stage-mover")))
+#+nil
+(progn
+ (prepare-stack-acquisition)
+ (start-move-thread))
+
+(defun draw-moves ()
+  (flet ((vline (x)
+	   (with-primitive :lines
+	     (vertex x 0)
+	     (vertex x 80))))
+   (with-pushed-matrix 
+     (scale .15 1 1)
+     (color 1 1 1)
+     (vline (- (ss :start) (get-internal-real-time)))
+     (color .3 1 .3)
+     
+     (dolist (e (ss :real-moves))
+       (vline e))
+     (translate 0 20 0)
+     (dolist (e (ss :seq))
+       (case (getf e :type)
+	 (:capture
+	  (apply #'color (case (getf e :content)
+			   (:dark (list .4 .4 .4))
+			   (0 (list .9 .1 .1))
+			   (1 (list 0 .7 0))
+			   (2 (list .2 .2 1))))
+	  (rect (getf e :start) 0 (getf e :end) 20))
+	 (:stage-move
+	  (color 1 1 1)
+	  (rect (getf e :start) 21 (getf e :end) 41)))))))
+
 #+nil 
 (sb-thread:make-thread 
  #'(lambda ()  ;; CAPTURESECTION
@@ -481,7 +641,7 @@
   (defun draw-screen ()
     ;;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    ;(gl:clear :color-buffer-bit)
+    (gl:clear :color-buffer-bit)
     
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
@@ -493,7 +653,7 @@
 	    (when e
 	      (gl:with-pushed-matrix
 		(let* ((tex (make-instance 'gui::texture16 :data e
-					   :scale 402s0 :offset 0.0077s0
+					   :scale 102s0 :offset 0.0077s0
 					   )))
 		  (destructuring-bind (h w) (array-dimensions e)
 		    ;; current image
@@ -521,7 +681,8 @@
 	     (destructuring-bind (h w) (array-dimensions e)
 	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			 :wt (* h 1s0) :ht (* w 1s0)))
-	     (gui:destroy tex)))))))
+	     (gui:destroy tex))))))
+    (draw-moves))
 
   (defun capture ()
     (let* ((img1 (sb-ext:array-storage-vector img-circ))
@@ -650,7 +811,7 @@
 #+nil ;; turn lcos white
 (let ((phases 3))
  (dotimes (j 1)
-   (dotimes (i 100)
+   (dotimes (i 1000)
      (dotimes (k 2)
        #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 		     (mod i phases) phases))
