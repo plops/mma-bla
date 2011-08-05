@@ -23,8 +23,8 @@
 
 
 
-#+nil
-(focus:connect "/dev/ttyUSB0")
+(unless focus::*fd*
+ (focus:connect "/dev/ttyUSB0"))
 #+nil
 (focus:get-position)
 #+nil
@@ -184,7 +184,7 @@
 #+nil ;; turn lcos white
 (let ((phases 3))
  (dotimes (j 1)
-   (dotimes (i 1000)
+   (dotimes (i 300)
      (dotimes (k 2)
        #+nil(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
 		     (mod i phases) phases))
@@ -444,7 +444,7 @@
 	   (ss :start-position) start-pos
 	   (ss :set-start-at-next-swap-buffer) nil)))
 
-#+nil
+
 (prepare-stack-acquisition)
 
 
@@ -528,13 +528,15 @@
 (defparameter *img-time* nil)
 
 #+nil
-(progn
-  (setf *do-display-queue* nil)
-  (setf *do-capture* nil)
-  (sleep .1)
-  (setf *do-capture* t)
-  (clara::abort-acquisition )
-  (clara::prepare-acquisition)
+(let ((show-on-screen t))
+  (unless show-on-screen 
+    (setf *do-capture* nil)
+    (setf *do-display-queue* nil)
+    (sleep .1)
+    (setf *do-capture* t)
+    (clara::abort-acquisition )
+    (clara::prepare-acquisition))
+  
   (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
 
   (prepare-stack-acquisition)
@@ -552,24 +554,31 @@
 	(img-time (make-array (length (get-capture-sequence)))))
     (lcos "toggle-queue 1")
     (setf (ss :set-start-at-next-swap-buffer) t)
-    (start-acquisition) ;; start camera
+    (unless show-on-screen (start-acquisition)) ;; start camera
     
     (start-move-thread)
     
-    (let ((count 0))
-      (loop while (and *do-capture*
-		       (< count (length img-array))) do
-	   (capture)
-	   (loop for i below (sb-concurrency:queue-count *line*) do
-		(setf (aref img-array count) (sb-concurrency:dequeue *line*)
-		      (aref img-time count) (get-internal-real-time))
-	       (incf count)))
-      (abort-acquisition)
-      (free-internal-memory))
-    (defparameter *img-array* img-array)
-    (defparameter *img-time* img-time))
+    (unless show-on-screen (let ((count 0))
+			     (loop while (and *do-capture*
+					      (< count (length img-array))) do
+				  (capture)
+				  (loop for i below (sb-concurrency:queue-count *line*) do
+				       (setf (aref img-array count) (sb-concurrency:dequeue *line*)
+					     (aref img-time count) (get-internal-real-time))
+				       (incf count)))
+			     (abort-acquisition)
+			     (free-internal-memory))
+	    (defparameter *img-array* img-array)
+	    (defparameter *img-time* img-time)))
 
   (setf *do-display-queue* t))
+
+#+nil ;; store images
+(dotimes (i (length *img-array*))
+  (vol::write-pgm-transposed 
+   (format nil "/dev/shm/o~4,'0d.pgm" i)
+   (vol:normalize-2-sf/ub8
+    (vol:convert-2-ub16/sf-mul (aref *img-array* i)))))
 
 (defun draw-moves ()
   (flet ((vline (x)

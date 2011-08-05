@@ -40,7 +40,6 @@
 (get-temperature-f)
 #+nil
 (status)
-
 #+nil
 (check (set-temperature 5))
 #+nil
@@ -64,7 +63,18 @@
 ;; (check (set-temperature (val2 (get-temperature-range))))
 
 #+nil
-(uninit)
+(loop while (< -40 (second (multiple-value-list (get-temperature-f)))) do
+     (format t "~a~%" (multiple-value-list (get-temperature-f)))
+     (sleep 1))
+#+nil
+(progn ;; use controlled temperature equalisation befor shutdown
+  (set-temperature-f 5)
+  (loop while (< (second (multiple-value-list (get-temperature-f)))
+		 5)
+     do
+       (format t "~a~%" (multiple-value-list (get-temperature-f)))
+       (sleep 1))
+  (uninit))
 ;; (check
 ;;   (set-exposure-time  (* 2.2 .0107)))
 
