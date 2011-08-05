@@ -421,9 +421,10 @@
      (setf (ss :seq) seq
 	   (ss :moves) moves ;; planned moves
 	   (ss :real-moves) nil ;; times when actual stage movements occured
-	   (ss :start) (get-internal-real-time)
+	   (ss :start) 0
 	   (ss :do-wait-move) t
-	   (ss :wait-move-thread) nil)))
+	   (ss :wait-move-thread) nil
+	   (ss :set-start-at-next-swap-buffer) nil)))
 
 #+nil
 (prepare-stack-acquisition)
@@ -453,17 +454,20 @@
 
 (defun move-stage-fun ()
   (loop while (ss :do-wait-move) do
-       (let* ((time (- (get-internal-real-time) (ss :start)))
-	      (next (or (next-move time (ss :moves))
-			(progn 
-			  (push time (ss :real-moves))
-			  (return-from move-stage-fun
-			   (+ 1 time)))))
-	      (diff (- next time)))
-	 (when (< 2 diff)
-	   (push time (ss :real-moves))
-	   (format t "~a~%" (list diff time next))
-	   (sleep (/ diff 1000))))))
+       (let ((start (ss :start)))
+	 (if (= start 0)
+	     (sleep (/ 2 1000))
+	     (let* ((time (- (get-internal-real-time) start))
+		 (next (or (next-move time (ss :moves))
+			   (progn 
+			     (push time (ss :real-moves))
+			     (return-from move-stage-fun
+			       (+ 1 time)))))
+		 (diff (- next time)))
+	    (when (< 2 diff)
+	      (push time (ss :real-moves))
+	      (format t "~a~%" (list diff time next))
+	      (sleep (/ diff 1000))))))))
 
 (defun start-move-thread ()
     (close-move-thread)
@@ -473,6 +477,7 @@
 #+nil
 (progn
  (prepare-stack-acquisition)
+ (setf (ss :set-start-at-next-swap-buffer) t)
  (start-move-thread))
 
 (defun draw-moves ()
@@ -682,7 +687,10 @@
 	       (gui:draw tex :w (* 1s0 w) :h (* 1s0 h)
 			 :wt (* h 1s0) :ht (* w 1s0)))
 	     (gui:destroy tex))))))
-    (draw-moves))
+    (draw-moves)
+    (when (ss :set-start-at-next-swap-buffer)
+      (setf (ss :set-start-at-next-swap-buffer) nil
+	    (ss :start) (get-internal-real-time))))
 
   (defun capture ()
     (let* ((img1 (sb-ext:array-storage-vector img-circ))
