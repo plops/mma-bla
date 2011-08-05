@@ -535,9 +535,8 @@
     (sleep .1)
     (setf *do-capture* t)
     (clara::abort-acquisition )
-    (clara::prepare-acquisition))
-  
-  (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
+    (clara::prepare-acquisition)
+    (setf *line* (sb-concurrency:make-queue :name 'picture-fifo)))
 
   (prepare-stack-acquisition)
   (let ((phases (ss :phases)))
@@ -556,7 +555,7 @@
     (setf (ss :set-start-at-next-swap-buffer) t)
     (unless show-on-screen (start-acquisition)) ;; start camera
     
-    (start-move-thread)
+    (start-move-thread) ;; I could start this in the opengl drawing loop
     
     (unless show-on-screen (let ((count 0))
 			     (loop while (and *do-capture*
@@ -753,7 +752,7 @@
   (defun draw-screen ()
     ;;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
-    (gl:clear :color-buffer-bit)
+    ;(gl:clear :color-buffer-bit)
     
     (let ((c (sb-concurrency:queue-count *line*)))
      (unless (or (= 0 c) (= 1 c))
@@ -765,7 +764,7 @@
 	    (when e
 	      (gl:with-pushed-matrix
 		(let* ((tex (make-instance 'gui::texture16 :data e
-					   :scale 102s0 :offset 0.0077s0
+					   :scale 202s0 :offset 0.0077s0
 					   )))
 		  (destructuring-bind (h w) (array-dimensions e)
 		    ;; current image
