@@ -63,9 +63,9 @@
 ;; (check (set-temperature (val2 (get-temperature-range))))
 
 #+nil
-(loop while (< -40 (second (multiple-value-list (get-temperature-f)))) do
-     (format t "~a~%" (multiple-value-list (get-temperature-f)))
-     (sleep 1))
+(loop while (< -55 (second (multiple-value-list (get-temperature-f)))) do
+     (format t "~a~%" (list (get-internal-real-time) (multiple-value-list (get-temperature-f))))
+     (sleep 5))
 #+nil
 (progn ;; use controlled temperature equalisation befor shutdown
   (set-temperature 5)

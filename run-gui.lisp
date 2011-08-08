@@ -286,75 +286,6 @@
 			(vol:normalize-2-sf/ub8 (vol:convert-2-ub16/sf-mul in)))
 	 points)))))
 
-#+nil
-(sb-thread:make-thread 
- #'(lambda ()  ;; CAPTUREADAPT
-     
-     (let ((img-array (make-array 2)))
-       (setf *line* (sb-concurrency:make-queue :name 'picture-fifo))
-       
-       (clara::prepare-acquisition)
-       
-       (progn ;; display a disk ontop of in-focus bead
-	 (dotimes (i (1- (length img-array)))
-	   (dotimes (j 2)
-	     (lcos "qdisk 225 225 200")
-	     (lcos "qswap")))
-	 
-	 ;; start LCOS
-	 (lcos "toggle-queue 1"))
-
-       (start-acquisition) ;; start camera
-       ;; the first captured frame doesn't have any lcos image
-       ;; it can be used as a dark frame
-
-       (let ((count 0))
-	 (format t "count: ~a~%" count)
-	 (loop while (and *do-capture*
-			  (< count (length img-array))) do
-	      (capture)
-	      (loop for i below (sb-concurrency:queue-count *line*) do
-		   (setf (aref img-array count)
-			 (sb-concurrency:dequeue *line*))
-		   (incf count)))
-	 (abort-acquisition)
-	 (free-internal-memory))
-
-       (defparameter *bla* img-array)
-       
-       (let* ((points (locate-beads (aref img-array 1)))
-	      (bead-img (make-array (1+ (length points)))))
-	 (dolist (p points)
-	   (destructuring-bind (h (y x)) p
-	     (declare (ignore h))
-	     (dotimes (i 2)
-	       (lcos (format nil "qdisk ~d ~d 30" x y))
-	       (lcos "qswap"))))
-	 
-	 
-	 (let ((count 0))
-	   (clara::prepare-acquisition)
-	   (lcos "toggle-queue 1")
-	   (start-acquisition) 
-	   (format t "count: ~a~%" count)
-	   (loop while (and *do-capture*
-			    (< count (length bead-img))) do
-		(capture)
-		(loop for i below (sb-concurrency:queue-count *line*) do
-		     (setf (aref bead-img count)
-			 (sb-concurrency:dequeue *line*))
-		     (incf count)))
-	   (abort-acquisition)
-	   (free-internal-memory))
-	 (dotimes (i (length bead-img))
-	   (vol::write-pgm-transposed (format nil "/dev/shm/02_beadnr~3,'0d.pgm" i)
-			  (vol:normalize-2-sf/ub8 
-			   (vol:convert-2-ub16/sf-mul (aref bead-img i))))))))
- :name "capture")
-
-(defun make-slice (z-position type)
-  (list z-position type))
-
 (defparameter *sequence* nil)
 
 (defun plan-stack (&key (slices 1) lcos-seq (start-pos 0) (dz 1)
@@ -547,7 +478,7 @@
   (let ((phases (ss :phases)))
     (dolist (e (get-lcos-sequence))     
       (unless (eq e :dark)
-	(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 2" 
+	(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 3" 
 		      e phases))
 	(sleep .001))
       (lcos "qswap")
@@ -659,7 +590,7 @@
 #+nil
 (loop for e in (reconstruct-from-phase-images)
      for i = 0 then (1+ i) do
-     (vol::write-pgm-transposed (format nil "/dev/shm/t~4,'0d.pgm" i)
+     (vol::write-pgm-transposed (format nil "/dev/shm/o~4,'0d.pgm" i)
 				(vol:normalize-2-sf/ub8 e)))
 
 #+nil ;; store images
@@ -675,6 +606,8 @@
 	     (vertex x 0)
 	     (vertex x 80))))
    (with-pushed-matrix 
+     (color 0 0 0 1)
+     (rect 0 0 1000 80)
      (scale .19 1 1)
      (color 1 1 1)
      (vline (- (get-internal-real-time) (ss :start)))
@@ -700,8 +633,7 @@
 	  (rect (getf e :start) 0 (getf e :end) 20))
 	 (:stage-move
 	  (color 1 1 1)
-	  (rect (getf e :start) 21 (getf e :end) 41))))
-)))
+	  (rect (getf e :start) 21 (getf e :end) 41)))))))
 
 #+nil 
 (sb-thread:make-thread 
