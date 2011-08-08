@@ -432,7 +432,8 @@
   (when (ss :wait-move-thread) 
     (close-move-thread))
   (let* ((start-pos (focus:get-position))
-	 (seq (plan-stack :slices 21 :lcos-seq '(:dark 0 1 2)
+	 (slices 21)
+	 (seq (plan-stack :slices slices :lcos-seq '(:dark 0 1 2)
 			  :frame-period (/ 1000 60)
 			  :start-pos start-pos :dz 1))
 	 (moves (extract-moves seq)))
@@ -442,6 +443,7 @@
 	   (ss :real-moves) nil ;; times when actual stage movements occured
 	   (ss :start) 0
 	   (ss :phases) 3
+	   (ss :slices) slices
 	   (ss :do-wait-move) t
 	   (ss :wait-move-thread) nil
 	   (ss :start-position) start-pos
@@ -581,7 +583,25 @@
 	  (remove-if-not #'(lambda (x) (eq :dark (getf x :content)))
 			 (get-capture-sequence))))
 
-(defun encode-phase-hash (phase slice)
+#+nil
+(get-dark-indices)
+
+(defun accumulate-dark-images ()
+  (destructuring-bind (y x) (array-dimensions (elt *img-array* 0))
+   (let* ((darki (get-dark-indices))
+	  (1/n (/ 1s0 (length darki)))
+	  (dark (make-array (list y x) :element-type '(single-float))))
+     (dolist (e darki)
+       (let ((a (elt *img-array* e)))
+	(vol:do-region ((j i) (y x))
+	  (incf (aref dark j i) (* 1/n (aref a j i))))))
+     dark)))
+
+#+nil
+(vol::write-pgm-transposed "/dev/shm/o.pgm"
+			   (vol:normalize-2-sf/ub8 (accumulate-dark-images)))
+
+(defun encode-phase-hash (slice phase)
   "Encode phase and slice into a hash key."
   (assert (< (ss :phases) 100))
   (+ (* 100 slice)
@@ -599,21 +619,43 @@
 (defun put-phases-into-hash ()
   (let ((tbl (make-hash-table)))
    (mapcar #'(lambda (x)
-	       (setf (gethash (encode-phase-hash (getf x :content)
-						 (getf x :slice))
+	       (setf (gethash (encode-phase-hash (getf x :slice) 
+						 (getf x :content))
 			      tbl)
 		     (getf x :image-index)))
 	   (remove-if #'(lambda (x) (eq :dark (getf x :content)))
 		      (get-capture-sequence)))
    tbl))
-*stack-state*
+#+nil
 (defparameter *qee*
  (get-dark-indices))
 
-(defparameter *eb*
-  (get-phases))
-
 (defparameter *hsh* (put-phases-into-hash))
+
+(defun reconstruct-from-phase-images ()
+  (let ((hsh (put-phases-into-hash))
+	(phases (ss :phases))
+	(slices (ss :slices))
+	(res nil))
+    (destructuring-bind (y x) (array-dimensions (elt *img-array* 0))
+      (dotimes (i slices)
+	(let ((r (make-array (list y x) :element-type 'single-float))
+	      (a0 (elt *img-array* (gethash (encode-phase-hash i 0) hsh)))
+	      (a1 (elt *img-array* (gethash (encode-phase-hash i 1) hsh)))
+	      (a2 (elt *img-array* (gethash (encode-phase-hash i 2) hsh))))
+	  (vol:do-region ((j i) (y x))
+	    (setf (aref r j i)
+		  (sqrt (+ (expt (- (aref a0 j i) (aref a1 j i)) 2)
+			   (expt (- (aref a1 j i) (aref a2 j i)) 2)
+			   (expt (- (aref a0 j i) (aref a2 j i)) 2)))))
+	  (push r res))))
+    (reverse res)))
+
+#+nil
+(loop for e in (reconstruct-from-phase-images)
+     for i = 0 then (1+ i) do
+     (vol::write-pgm-transposed (format nil "/dev/shm/p~4,'0d.pgm" i)
+				(vol:normalize-2-sf/ub8 e)))
 
 #+nil ;; store images
 (dotimes (i (length *img-array*))
