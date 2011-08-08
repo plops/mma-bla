@@ -357,17 +357,18 @@
 
 (defparameter *sequence* nil)
 
-
 (defun plan-stack (&key (slices 1) lcos-seq (start-pos 0) (dz 1)
 		   (frame-period (/ 60)) (start-time 0d0)
 		   (stage-settle-duration 20) (lcos-lag 0))
   (let ((res nil)
         (pos start-pos)
-        (time (+ start-time frame-period)))
+        (time (+ start-time frame-period))
+	(image-index 0))
     (push (list :type :capture
                 :start 0
                 :end 15
-                :content :dark)
+                :content :dark
+		:image-index image-index)
           res)
     (loop for k below slices do
          (let ((cam nil))
@@ -390,7 +391,9 @@
                              (push (list :type :capture
                                          :start time
                                          :end (+ time 15)
-                                         :content e)
+                                         :content e
+					 :slice k
+					 :image-index (incf image-index))
                                    cam)
 			   ;; for this frame the MMA was white
 			     (push (list :type :mma
@@ -528,7 +531,7 @@
 (defparameter *img-time* nil)
 
 #+nil
-(let ((show-on-screen t))
+(let ((show-on-screen nil))
   (unless show-on-screen 
     (setf *do-capture* nil)
     (setf *do-display-queue* nil)
@@ -571,6 +574,46 @@
 	    (defparameter *img-time* img-time)))
 
   (setf *do-display-queue* t))
+
+
+(defun get-dark-indices ()
+  (mapcar #'(lambda (x) (getf x :image-index))
+	  (remove-if-not #'(lambda (x) (eq :dark (getf x :content)))
+			 (get-capture-sequence))))
+
+(defun encode-phase-hash (phase slice)
+  "Encode phase and slice into a hash key."
+  (assert (< (ss :phases) 100))
+  (+ (* 100 slice)
+     phase))
+#+nil
+(encode-phase-hash 12 3)
+
+(defun decode-phase-hash (key)
+  "Retrun slice and phase of a hash key."
+  (values (floor key 100)
+	  (mod key 100)))
+#+nil
+(decode-phase-hash 312)
+
+(defun put-phases-into-hash ()
+  (let ((tbl (make-hash-table)))
+   (mapcar #'(lambda (x)
+	       (setf (gethash (encode-phase-hash (getf x :content)
+						 (getf x :slice))
+			      tbl)
+		     (getf x :image-index)))
+	   (remove-if #'(lambda (x) (eq :dark (getf x :content)))
+		      (get-capture-sequence)))
+   tbl))
+*stack-state*
+(defparameter *qee*
+ (get-dark-indices))
+
+(defparameter *eb*
+  (get-phases))
+
+(defparameter *hsh* (put-phases-into-hash))
 
 #+nil ;; store images
 (dotimes (i (length *img-array*))
