@@ -22,8 +22,6 @@
   (:use :cl :gl #-clara :clara))
 (in-package :run-gui)
 
-
-
 (unless focus::*fd*
  (focus:connect "/dev/ttyUSB0"))
 #+nil
@@ -466,6 +464,12 @@
 #+nil
 (with-open-file (s "/dev/shm/o-sf.dat" :direction :output :if-does-not-exist :create)
   (write *volp* :stream s))
+
+#+nil
+(defparameter *volp* 
+  (with-open-file (s "/dev/shm/o-sf.dat" :direction :input )
+    (read s)))
+
 
 #+nil
 (defparameter *g3* (let ((r 4s0)) (bead-eval:make-gauss3 *volp* :sigma-x-pixel r
