@@ -462,6 +462,11 @@
 #+nil
 (vol:save-stack-ub8 "/dev/shm/op/" 
 		    (vol:normalize-3-sf/ub8 *volp*))
+
+#+nil
+(with-open-file (s "/dev/shm/o-sf.dat" :direction :output :if-does-not-exist :create)
+  (write *volp* :stream s))
+
 #+nil
 (defparameter *g3* (let ((r 4s0)) (bead-eval:make-gauss3 *volp* :sigma-x-pixel r
 							 :sigma-z-pixel (/ r 10))))
@@ -492,6 +497,13 @@
     (run-ics::print-histogram hist n (* 1s10 mi) (* 1s10 ma))
     (terpri)
     (setf *num-points* (reduce #'+ (subseq hist 5)))))
+
+#+nil
+(vol:save-stack-ub8 "/dev/shm/seeds/"
+		    (vol:normalize-3-sf/ub8
+		     (run-ics::mark-nuclear-seeds *bvol* :threshold .2)))
+
+
 
 #+nil
 (let ((x 700)
