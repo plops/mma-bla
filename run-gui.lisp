@@ -335,7 +335,6 @@
        (pr-ill 230s0)
        (img-circ (make-array (list 141 #+nil run-clara::*circ-buf-size* h w)
 			     :element-type '(unsigned-byte 16))))
-  ;(gui::reset-frame-count)
   (defun draw-screen ()
     ;;(gl:draw-buffer :back)
     ;(clear-color .1 0 0 1)
@@ -351,7 +350,7 @@
 	    (when e
 	      (gl:with-pushed-matrix
 		(let* ((tex (make-instance 'gui::texture16 :data e
-					   :scale 202s0 :offset 0.0077s0
+					   :scale 102s0 :offset 0.0077s0
 					   )))
 		  (destructuring-bind (h w) (array-dimensions e)
 		    ;; current image
@@ -413,10 +412,10 @@
 		(sb-concurrency:enqueue a *line*)))))))))
 
 #+nil
-(acquisitor:acquire-stack)
+(acquisitor:acquire-stack :show-on-screen nil :slices 43)
 
 #+nil
-(loop for e in (acquisitor:reconstruct-from-phase-images :algorithm :max-min)
+(loop for e in (acquisitor:reconstruct-from-phase-images :algorithm :sqrt)
      for i = 0 then (1+ i) do
      (vol::write-pgm-transposed (format nil "/dev/shm/r~4,'0d.pgm" i)
 				(vol:normalize-2-sf/ub8 e)))

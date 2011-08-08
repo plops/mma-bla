@@ -71,14 +71,13 @@
   "Access an entry in the stack state"
   `(getf acquisitor::*stack-state* ,sym))
 
-(defun prepare-stack-acquisition ()
+(defun prepare-stack-acquisition (&key (slices 10) (dz 1))
   (when (ss :wait-move-thread) 
     (close-move-thread))
   (let* ((start-pos (focus:get-position))
-	 (slices 21)
 	 (seq (plan-stack :slices slices :lcos-seq '(:dark 0 1 2)
 			  :frame-period (/ 1000 60)
-			  :start-pos start-pos :dz 1))
+			  :start-pos start-pos :dz dz))
 	 (moves (extract-moves seq)))
     (setf *stack-state* nil)
      (setf (ss :seq) seq
@@ -176,7 +175,7 @@
 (defun get-capture-sequence ()
  (remove-if-not #'(lambda (x) (eq :capture (getf x :type))) (ss :seq)))
 
-(defun acquire-stack (&key (show-on-screen nil))
+(defun acquire-stack (&key (show-on-screen nil) (slices 10) (dz 1))
   (unless show-on-screen 
     (setf run-gui::*do-capture* nil
 	  run-gui::*do-display-queue* nil)
@@ -186,7 +185,7 @@
     (clara::prepare-acquisition)
     (setf run-gui::*line* (sb-concurrency:make-queue :name 'picture-fifo)))
 
-  (prepare-stack-acquisition)
+  (prepare-stack-acquisition :slices slices :dz dz)
   (let ((phases (ss :phases)))
     (dolist (e (get-lcos-sequence))     
       (unless (eq e :dark)
