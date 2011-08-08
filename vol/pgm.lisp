@@ -92,7 +92,7 @@
 		      (aref a j i))))))
 	result))))
 
-(defun save-stack-ub8 (fn vol)
+(defun save-stack-ub8 (fn vol &key (transpose nil))
   (declare (string fn)
 	   ((simple-array (unsigned-byte 8) 3) vol)
 	   (values null &optional))
@@ -108,5 +108,7 @@
 	(do-region ((j i) (y x))
 	  (setf (aref b j i)
 		(aref vol k j i)))
-	(write-pgm (format nil "~a/~3,'0d.pgm" fn k) b))))
+	(if transpose
+	    (write-pgm-transposed (format nil "~a/~3,'0d.pgm" fn k) b)
+	    (write-pgm (format nil "~a/~3,'0d.pgm" fn k) b)))))
   nil)

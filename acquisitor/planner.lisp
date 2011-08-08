@@ -317,16 +317,16 @@
     (vol:convert-2-ub16/sf-mul (aref (ss :image-array) i)))))
 
 (defun draw-moves ()
-  (flet ((vline (x)
+  (flet ((vline (x &optional (y0 0) (y1 80))
 	   (with-primitive :lines
-	     (vertex x 0)
-	     (vertex x 80))))
+	     (vertex x y0)
+	     (vertex x y1))))
    (with-pushed-matrix 
      (color 0 0 0 1)
      (rect 0 0 1000 80)
      (scale .19 1 1)
      (color 1 1 1)
-     (vline (- (get-internal-real-time) (ss :start)))
+     (vline (- (get-internal-real-time) (ss :start)) 60 80)
      (color .3 1 .3)
      
      (dolist (e (ss :real-moves))
@@ -334,9 +334,15 @@
      
      (let ((it (ss :image-time)))
        (when it
-	(color .9 .2 .2)
-	(dotimes (i (length it))
-	  (vline (- (aref it i) (ss :start))))))
+	 (dotimes (i (length it))
+	   (case (getf (elt (get-capture-sequence) i)
+		       :content)
+	     (:dark (color .4 .4 .4))
+	     (0 (color .8 .0 .2))
+	     (1 (color .1 .9 .2))
+	     (2 (color .1 .2 1)))
+	   (vline (- (aref it i) (ss :start))
+		  0 20))))
      
      (translate 0 20 0)
      (dolist (e (ss :seq))

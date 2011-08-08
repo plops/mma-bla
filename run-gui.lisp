@@ -412,7 +412,7 @@
 		(sb-concurrency:enqueue a *line*)))))))))
 
 #+nil
-(acquisitor:acquire-stack :show-on-screen nil :slices 43)
+(acquisitor:acquire-stack :show-on-screen nil :slices 200 :dz .25)
 
 #+nil
 (loop for e in (acquisitor:reconstruct-from-phase-images :algorithm :sqrt)
@@ -429,6 +429,14 @@
     (vol:convert-2-ub16/sf-mul (aref (acquisitor:ss :image-array) i)))))
 
 
+(defparameter *volp*
+  (let ((sec (acquisitor:reconstruct-from-phase-images :algorithm :sqrt)))
+    (destructuring-bind (y x) (array-dimensions (elt sec 0))
+      (let* ((z (length sec))
+	     (a (make-array (list z y x) :element-type 'single-float)))
+	(vol:do-region ((k j i) (z y x))
+	  (setf (aref a k j i) (aref (elt sec k) j i)))
+	a))))
 
 #+nil
 (progn
@@ -436,15 +444,21 @@
   (push "/home/martin/0215/0102/woropt-cyb-0628/" asdf:*central-registry*)
   (require :bead-eval)
   (require :vol))
+
 #+nil
 (vol:save-stack-ub8 "/dev/shm/op/" 
-		    (vol:normalize-3-sf/ub8 (vol:convert-3-ub16/sf-mul *volp*)))
+		    (vol:normalize-3-sf/ub8 *volp*)
+		    :transpose t)
 #+nil
-(defparameter *g3* (bead-eval:make-gauss3 (vol:convert-3-ub16/sf-mul *vol*) :sigma-x-pixel 3.1s0))
+(defparameter *g3* (bead-eval:make-gauss3 *volp* :sigma-x-pixel 3.1s0))
+#+nil
+
+
+
 #+nil
 (defparameter *bvol* (vol:convert-3-csf/sf-realpart
-		    (vol:convolve-circ-3-csf *g3*
-					     (vol:convert-3-ub16/csf-mul *vol*))))
+		      (vol:convolve-circ-3-csf *g3*
+					       (vol:convert-3-sf/csf-mul *volp*))))
 #+nil
 (vol:write-pgm "/dev/shm/c.pgm" 
 	       (vol:normalize-2-sf/ub8
