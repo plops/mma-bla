@@ -637,6 +637,7 @@
 	(phases (ss :phases))
 	(slices (ss :slices))
 	(res nil))
+    (assert (= phases 3))
     (destructuring-bind (y x) (array-dimensions (elt *img-array* 0))
       (dotimes (i slices)
 	(let ((r (make-array (list y x) :element-type 'single-float))
@@ -644,17 +645,20 @@
 	      (a1 (elt *img-array* (gethash (encode-phase-hash i 1) hsh)))
 	      (a2 (elt *img-array* (gethash (encode-phase-hash i 2) hsh))))
 	  (vol:do-region ((j i) (y x))
-	    (setf (aref r j i)
-		  (sqrt (+ (expt (- (aref a0 j i) (aref a1 j i)) 2)
-			   (expt (- (aref a1 j i) (aref a2 j i)) 2)
-			   (expt (- (aref a0 j i) (aref a2 j i)) 2)))))
+	    (macrolet ((a (ar) `(aref ,ar j i)))
+	      (setf (a r)
+		    #+nil (sqrt (+ (expt (- (a a0) (a a1)) 2)
+				   (expt (- (a a1) (a a2)) 2)
+				   (expt (- (a a0) (a a2)) 2)))
+		    (* 1s0 (- (max (a a0) (a a1) (a a2))
+			      (min (a a0) (a a1) (a a2)))))))
 	  (push r res))))
     (reverse res)))
 
 #+nil
 (loop for e in (reconstruct-from-phase-images)
      for i = 0 then (1+ i) do
-     (vol::write-pgm-transposed (format nil "/dev/shm/p~4,'0d.pgm" i)
+     (vol::write-pgm-transposed (format nil "/dev/shm/r~4,'0d.pgm" i)
 				(vol:normalize-2-sf/ub8 e)))
 
 #+nil ;; store images
