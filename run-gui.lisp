@@ -252,6 +252,18 @@
 	 (setf (aref r i j) (aref img1 (+ (* y i) j))))
        r))))
 
+(defun transpose-sf (img)
+  "Transpose the image that comes from the Andor camera."
+  (declare (type (simple-array single-float 2) img)
+	   (values (simple-array single-float 2) &optional))
+  (let ((dim (array-dimensions img)))
+   (destructuring-bind (y x) dim
+     (let ((img1 (sb-ext:array-storage-vector img))
+	   (r (make-array (list x y) :element-type 'single-float)))
+       (vol:do-region ((j i) (y x))
+	 (setf (aref r i j) (aref img1 (+ (* y i) j))))
+       r))))
+
 (defun maxima (img)
   (destructuring-bind (y x) (array-dimensions img)
     (let ((points ()))
@@ -412,7 +424,7 @@
 		(sb-concurrency:enqueue a *line*)))))))))
 
 #+nil
-(acquisitor:acquire-stack :show-on-screen nil :slices 200 :dz .25)
+(acquisitor:acquire-stack :show-on-screen nil :slices 48 :dz 1)
 
 #+nil
 (loop for e in (acquisitor:reconstruct-from-phase-images :algorithm :sqrt)
@@ -428,14 +440,16 @@
    (vol:normalize-2-sf/ub8
     (vol:convert-2-ub16/sf-mul (aref (acquisitor:ss :image-array) i)))))
 
-
+#+nil
 (defparameter *volp*
   (let ((sec (acquisitor:reconstruct-from-phase-images :algorithm :sqrt)))
-    (destructuring-bind (y x) (array-dimensions (elt sec 0))
+    (destructuring-bind (y x) (array-dimensions (transpose-sf (elt sec 0)))
       (let* ((z (length sec))
 	     (a (make-array (list z y x) :element-type 'single-float)))
-	(vol:do-region ((k j i) (z y x))
-	  (setf (aref a k j i) (aref (elt sec k) j i)))
+	(dotimes (k z)
+	  (let ((b (transpose-sf (elt sec k))))
+	   (vol:do-region ((j i) (y x))
+	     (setf (aref a k j i) (aref b j i)))))
 	a))))
 
 #+nil
@@ -447,11 +461,13 @@
 
 #+nil
 (vol:save-stack-ub8 "/dev/shm/op/" 
-		    (vol:normalize-3-sf/ub8 *volp*)
-		    :transpose t)
+		    (vol:normalize-3-sf/ub8 *volp*))
 #+nil
-(defparameter *g3* (bead-eval:make-gauss3 *volp* :sigma-x-pixel 3.1s0))
+(defparameter *g3* (let ((r 4s0)) (bead-eval:make-gauss3 *volp* :sigma-x-pixel r
+							 :sigma-z-pixel (/ r 10))))
 #+nil
+(vol:save-stack-ub8 "/dev/shm/g3/" 
+		    (vol:normalize-3-csf/ub8-realpart *g3*))
 
 
 
@@ -463,6 +479,12 @@
 (vol:write-pgm "/dev/shm/c.pgm" 
 	       (vol:normalize-2-sf/ub8
 		(vol:cross-section-xz *bvol*)))
+
+#+nil
+(vol:save-stack-ub8 "/dev/shm/op-g/" 
+		    (vol:normalize-3-sf/ub8 *bvol*))
+
+
 #+nil
 (let ((l (run-ics::nuclear-seeds *bvol*)))
   (multiple-value-bind (hist n mi ma)
@@ -484,6 +506,10 @@
        (gui:with-gui ((- 1280 x) 700 x y)
 	 (draw-screen)))
    :name "camera-display"))
+
+#+nil
+(gui:get-frame-rate)
+
 #+nil
 (progn ;; destroy lisp opengl window
     (setf gui::*kill-window* t)
