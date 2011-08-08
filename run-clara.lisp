@@ -73,7 +73,7 @@
 		 5)
      do
        (format t "~a~%" (multiple-value-list (get-temperature-f)))
-       (sleep 1))
+       (sleep 5))
   (clara:uninit))
 ;; (check
 ;;   (set-exposure-time  (* 2.2 .0107)))

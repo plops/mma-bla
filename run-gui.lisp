@@ -547,7 +547,7 @@
   (let ((phases (ss :phases)))
     (dolist (e (get-lcos-sequence))     
       (unless (eq e :dark)
-	(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 4" 
+	(lcos (format nil "qgrating-disk 425 325 200 ~d ~d 2" 
 		      e phases))
 	(sleep .001))
       (lcos "qswap")
@@ -630,6 +630,7 @@
 (defparameter *qee*
  (get-dark-indices))
 
+#+nil
 (defparameter *hsh* (put-phases-into-hash))
 
 (defun reconstruct-from-phase-images ()
@@ -647,10 +648,10 @@
 	  (vol:do-region ((j i) (y x))
 	    (macrolet ((a (ar) `(aref ,ar j i)))
 	      (setf (a r)
-		    #+nil (sqrt (+ (expt (- (a a0) (a a1)) 2)
+		    (sqrt (+ (expt (- (a a0) (a a1)) 2)
 				   (expt (- (a a1) (a a2)) 2)
 				   (expt (- (a a0) (a a2)) 2)))
-		    (* 1s0 (- (max (a a0) (a a1) (a a2))
+		    #+nil(* 1s0 (- (max (a a0) (a a1) (a a2))
 			      (min (a a0) (a a1) (a a2)))))))
 	  (push r res))))
     (reverse res)))
@@ -658,7 +659,7 @@
 #+nil
 (loop for e in (reconstruct-from-phase-images)
      for i = 0 then (1+ i) do
-     (vol::write-pgm-transposed (format nil "/dev/shm/r~4,'0d.pgm" i)
+     (vol::write-pgm-transposed (format nil "/dev/shm/t~4,'0d.pgm" i)
 				(vol:normalize-2-sf/ub8 e)))
 
 #+nil ;; store images
