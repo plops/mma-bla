@@ -423,7 +423,7 @@
 		(sb-concurrency:enqueue a *line*)))))))))
 
 #+nil
-(acquisitor:acquire-stack :show-on-screen nil :slices 48 :dz 1)
+(acquisitor:acquire-stack :show-on-screen nil :slices 48 :dz 1 :width 5 :lcos-seq '(:dark 0 1 2))
 
 #+nil
 (loop for e in (acquisitor:reconstruct-from-phase-images :algorithm :sqrt)
@@ -459,8 +459,12 @@
   (require :vol))
 
 #+nil
-(vol:save-stack-ub8 "/dev/shm/op/" 
-		    (vol:normalize-3-sf/ub8 *volp*))
+(progn
+  (vol:write-pgm "/dev/shm/op.pgm" 
+		 (vol:normalize-2-sf/ub8
+		  (vol:cross-section-xz *volp*)))
+ (vol:save-stack-ub8 "/dev/shm/op/" 
+		     (vol:normalize-3-sf/ub8 *volp*)))
 
 #+nil
 (with-open-file (s "/dev/shm/o-sf.dat" :direction :output :if-does-not-exist :create)
@@ -473,11 +477,15 @@
 
 
 #+nil
-(defparameter *g3* (let ((r 4s0)) (bead-eval:make-gauss3 *volp* :sigma-x-pixel r
+(defparameter *g3* (let ((r 4.2s0)) (bead-eval:make-gauss3 *volp* :sigma-x-pixel r
 							 :sigma-z-pixel (/ r 10))))
 #+nil
-(vol:save-stack-ub8 "/dev/shm/g3/" 
-		    (vol:normalize-3-csf/ub8-realpart *g3*))
+(progn
+  (vol:write-pgm "/dev/shm/g3.pgm" 
+	       (vol:normalize-2-csf/ub8-realpart
+		(vol:cross-section-xz *g3*)))
+ (vol:save-stack-ub8 "/dev/shm/g3/" 
+		     (vol:normalize-3-csf/ub8-realpart *g3*)))
 
 
 
@@ -486,27 +494,41 @@
 		      (vol:convolve-circ-3-csf *g3*
 					       (vol:convert-3-sf/csf-mul *volp*))))
 #+nil
-(vol:write-pgm "/dev/shm/c.pgm" 
-	       (vol:normalize-2-sf/ub8
-		(vol:cross-section-xz *bvol*)))
+(progn
+  (vol:write-pgm "/dev/shm/op-g.pgm" 
+		 (vol:normalize-2-sf/ub8
+		  (vol:cross-section-xz *bvol*)))
+  (vol:save-stack-ub8 "/dev/shm/op-g/" 
+		      (vol:normalize-3-sf/ub8 *bvol*)))
 
 #+nil
-(vol:save-stack-ub8 "/dev/shm/op-g/" 
-		    (vol:normalize-3-sf/ub8 *bvol*))
-
+(progn
+  (defparameter *bvol-thresh* (let* ((a (make-array (array-dimensions *bvol*)
+						    :element-type 'single-float))
+				     (b1 (sb-ext:array-storage-vector *bvol*))
+				     (ma (reduce #'max b1))
+				     (mi (reduce #'min b1)))
+				(format t "~a~%" (list mi ma))
+				(destructuring-bind (z y x) (array-dimensions *bvol*)
+				  (vol:do-region ((k j i) (z y x))
+				    (setf (aref a k j i)
+					  (max (+ mi (* .1 ma))
+					       (aref *bvol* k j i)))))
+				a))
+  (vol:save-stack-ub8 "/dev/shm/op-gt/" (vol:normalize-3-sf/ub8 *bvol-thresh*)))
 
 #+nil
-(let ((l (run-ics::nuclear-seeds *bvol*)))
+(let ((l (run-ics::nuclear-seeds *bvol-thresh*)))
   (multiple-value-bind (hist n mi ma)
       (run-ics::point-list-histogram l)
-    (run-ics::print-histogram hist n (* 1s10 mi) (* 1s10 ma))
+    (run-ics::print-histogram hist n (* 10 mi) (* 10 ma))
     (terpri)
     (setf *num-points* (reduce #'+ (subseq hist 5)))))
 
 #+nil
 (vol:save-stack-ub8 "/dev/shm/seeds/"
 		    (vol:normalize-3-sf/ub8
-		     (run-ics::mark-nuclear-seeds *bvol* :threshold .2)))
+		     (run-ics::mark-nuclear-seeds *bvol-thresh* :threshold .2)))
 
 
 
