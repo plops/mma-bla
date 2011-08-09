@@ -71,11 +71,12 @@
   "Access an entry in the stack state"
   `(getf acquisitor::*stack-state* ,sym))
 
-(defun prepare-stack-acquisition (&key (slices 10) (dz 1))
+(defun prepare-stack-acquisition (&key (slices 10) (dz 1) (lcos-seq '(:dark 0 1 2)))
   (when (ss :wait-move-thread) 
     (close-move-thread))
   (let* ((start-pos (focus:get-position))
-	 (seq (plan-stack :slices slices :lcos-seq '(:dark 0 1 2)
+	 (seq (plan-stack :slices slices 
+			  :lcos-seq lcos-seq
 			  :frame-period (/ 1000 60)
 			  :start-pos start-pos :dz dz))
 	 (moves (extract-moves seq)))
@@ -84,7 +85,7 @@
 	   (ss :moves) moves ;; planned moves
 	   (ss :real-moves) nil ;; times when actual stage movements occured
 	   (ss :start) 0
-	   (ss :phases) 3
+	   (ss :phases) (1- (length lcos-seq))
 	   (ss :slices) slices
 	   (ss :do-wait-move) t
 	   (ss :wait-move-thread) nil
@@ -175,7 +176,7 @@
 (defun get-capture-sequence ()
  (remove-if-not #'(lambda (x) (eq :capture (getf x :type))) (ss :seq)))
 
-(defun acquire-stack (&key (show-on-screen nil) (slices 10) (dz 1))
+(defun acquire-stack (&key (show-on-screen nil) (slices 10) (dz 1) (width 4) (lcos-seq '(:dark 0 1 2)))
   (unless show-on-screen 
     (setf run-gui::*do-capture* nil
 	  run-gui::*do-display-queue* nil)
@@ -185,12 +186,12 @@
     (clara::prepare-acquisition)
     (setf run-gui::*line* (sb-concurrency:make-queue :name 'picture-fifo)))
 
-  (prepare-stack-acquisition :slices slices :dz dz)
+  (prepare-stack-acquisition :slices slices :dz dz :lcos-seq lcos-seq)
   (let ((phases (ss :phases)))
     (dolist (e (get-lcos-sequence))     
       (unless (eq e :dark)
-	(run-gui::lcos (format nil "qgrating-disk 425 325 200 ~d ~d 3" 
-		      e phases)))
+	(run-gui::lcos (format nil "qgrating-disk 425 325 200 ~d ~d ~d" 
+		      e phases width)))
       (run-gui::lcos "qswap")))
 
   (let ((img-array (make-array (length (get-capture-sequence))))
