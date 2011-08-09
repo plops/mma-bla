@@ -99,7 +99,7 @@
 (defun get-position ()
   (declare (values single-float &optional))
   (unless (and *fd* *stream*)
-    (break "focus device not initialized."))
+    (focus:connect "/dev/ttyUSB0"))
   (response->pos-um (talk-zeiss *fd* *stream* "FPZp")))
  
 (defun set-position (position-um)

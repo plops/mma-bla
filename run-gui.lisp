@@ -22,8 +22,9 @@
   (:use :cl :gl #-clara :clara))
 (in-package :run-gui)
 
+#+nil
 (unless focus::*fd*
- (focus:connect "/dev/ttyUSB0"))
+  (focus:connect "/dev/ttyUSB0"))
 #+nil
 (focus:get-position)
 #+nil
