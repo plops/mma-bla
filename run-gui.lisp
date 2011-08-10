@@ -533,6 +533,44 @@
 
 
 #+nil
+(defparameter *points*
+  (mapcar #'(lambda (v) (destructuring-bind (z y x) (second v)
+		     (vol::make-vec (* 1d0 x) (* 1d0 y) (* 10d0 z))))
+   (run-ics::biggest-part
+    (run-ics::point-list-sort (run-ics::nuclear-seeds *bvol-thresh*))
+    .2)))
+
+(defun export-3d-model ()
+  (with-open-file (s "/dev/shm/model.asy" :direction :output
+		     :if-exists :supersede
+		     :if-does-not-exist :create)
+    (macrolet ((asy (str &rest rest)
+		 `(progn
+		    (format s ,str ,@rest)
+		    (terpri s))))
+      (flet ((coord (v)
+	       (format nil "(~f,~f,~f)" (vol::vec-x v) (vol::vec-y v) (vol::vec-z v))))
+	(asy "import three;~%import grid3;")
+	(asy "size(300,300);")
+	(let ((i 0))
+	 (dolist (e *points*)
+	   (incf i)
+	   (asy "draw(shift(~a)*scale3(~f)*unitsphere,~a);"
+		(coord e) 10
+		"lightgreen+opacity(0.2)")
+	   (asy "draw(~a--~a);"
+		(coord e)
+		(coord
+		 (vol::make-vec (vol::vec-x e)
+				(vol::vec-y e))))
+	   #+nil  (asy "label(~s,~a);" (format nil "~d" i) (coord e))))
+	(asy "grid3(XYZgrid);")))))
+
+#+nil
+(export-3d-model)
+
+
+#+nil
 (let ((x 700)
       (y 100))
   (progn
