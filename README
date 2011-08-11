@@ -1,0 +1,84 @@
+These are the two main files for now:
+
+run-gui.lisp:
+	open connection to mma control software
+	(hard realtime) lcos display
+	zeiss focus stage
+  	(non-realtime) display
+	logic for synchronizing all devices
+	readout code for the clara (the history also contains code for scmos)
+	        
+run-clara.lisp:	
+	initialization code for clara cameera
+	after running the camera will be externally triggered
+	cooled to -20 degree (I always set manually to -55 degree, takes 15 min to cool from +30)
+	exposure time is set to exactly capture 23 lcos pulses
+	set region of interest to the area selected by the optomask
+	fast readout register
+
+This is important if the camera or MEMI system was moved:
+run-camera-lcos-calibration.lisp:
+	display spots on lcos
+	capture images on camera
+	find maxima
+	print equation system for solution with maxima
+	the result are a rotation angle, a scaling factor and a translation vector between lcos and camera
+	see run-gui.lisp load-cam-to-lcos-matrix of how this can be stored in a 4x4 opengl matrix
+
+
+aquisitor/
+	This code plans the acquisition of one stack so that we know beforehand when to move the stage
+
+
+focus/
+	serial communication to axiovert 200 M for moving the stage
+	I looked used the micromanager device adapter as a reference
+
+
+vol/
+	vector math
+	functions to simplify image and volume processing (convert, normalize)
+	fft (either fftw or cuda)
+	convolution
+	pgm output
+	drawing of spheres, disks and ellipses
+
+
+gui/
+	exposes very simple interface to open an opengl window (with-gui and a draw function)
+	the main advantage is that the draw function can be updated
+	(if one is careful) while the system is running
+
+
+libmma/
+	c program to talk to mma device using libIPMS
+	has a command line interface for uploading images, setting timings and trigger control
+	use help to see available commands
+
+glfw-server/
+	c program to draw to an opengl window
+	has a command line interface for drawing disks, gratings
+	use help to see available commands
+
+clara/
+	foreign function interface to the andor library
+	developed for clara but should work with ixon as well
+
+
+andor3/
+	foreign function interface to the andor scmos library
+	this is much easier than the older clara library
+
+
+mma/
+	foreign function code to libIPMS
+	this kind of works but isn't stable (I think there are linking issues)
+	use libmma instead
+
+
+bresenham/
+	I wanted to draw 3D lines
+	meanwhile the guy with the dipimage blog published a much nicer algorithm
+
+	
+

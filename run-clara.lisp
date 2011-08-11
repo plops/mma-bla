@@ -63,7 +63,7 @@
 ;; (check (set-temperature (val2 (get-temperature-range))))
 
 #+nil
-(loop while (< -55 (second (multiple-value-list (get-temperature-f)))) do
+(loop while (< -58 (second (multiple-value-list (get-temperature-f)))) do
      (format t "~a~%" (list (get-internal-real-time) (multiple-value-list (get-temperature-f))))
      (sleep 5))
 #+nil
@@ -90,7 +90,8 @@
 ;; (trigger-mode :internal)
 ;; (trigger-mode :external)
 
-;; (clara:uninit)
+#+nil
+(clara:uninit)
 
 ;; (format t "~a~%" (clara::capabilities))
 

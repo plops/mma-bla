@@ -539,6 +539,7 @@
    (run-ics::biggest-part
     (run-ics::point-list-sort (run-ics::nuclear-seeds *bvol-thresh*))
     .2)))
+(defvar *points* nil)
 
 (defun export-3d-model ()
   (with-open-file (s "/dev/shm/model.asy" :direction :output
@@ -557,7 +558,7 @@
 	   (incf i)
 	   (asy "draw(shift(~a)*scale3(~f)*unitsphere,~a);"
 		(coord e) 10
-		"lightgreen+opacity(0.2)")
+		"lightgreen+opacity(1)")
 	   (asy "draw(~a--~a);"
 		(coord e)
 		(coord
@@ -568,6 +569,8 @@
 
 #+nil
 (export-3d-model)
+;scp -r martin@cyberpower:/dev/shm/model.asy .;asy -V model.asy
+
 
 
 #+nil

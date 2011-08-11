@@ -10,7 +10,7 @@
     (push (list :type :capture
                 :start 0
                 :end 15
-                :content :dark
+                :content '(10 :dark)
 		:image-index image-index)
           res)
     (loop for k below slices do
@@ -18,33 +18,35 @@
           (push (list :type :lcos-display
                       :pos pos
                       :lcos-seq
-                      (let ((lcos nil))
+                      (let ((lcos nil)
+			    (phase 0))
                         (loop for e in lcos-seq do
-                           ;; lcos displays each frame twice
-                             (push (list :start time 
-                                         :end (+ time 15)
-                                         :content e) 
-                                   lcos)
-                             (incf time frame-period)
-                             (push (list :start time
-                                         :end (+ time 15)
-                                         :content e)
-                                   lcos)
-                           ;; one of the frames is captured by the camera
-                             (push (list :type :capture
-                                         :start time
-                                         :end (+ time 15)
-                                         :content e
-					 :slice k
-					 :image-index (incf image-index))
-                                   cam)
-			   ;; for this frame the MMA was white
-			     (push (list :type :mma
-                                         :start time
-                                         :end (+ time 15)
-                                         :content e)
-                                   cam)
-                             (incf time frame-period))
+			     (let ((ee (list (+ (* 1000 k) ) e)))
+			      ;; lcos displays each frame twice
+			      (push (list :start time 
+					  :end (+ time 15)
+					  :content (list (+ (* 1000 k) ) e)) 
+				    lcos)
+			      (incf time frame-period)
+			      (push (list :start time
+					  :end (+ time 15)
+					  :content ee)
+				    lcos)
+			      ;; one of the frames is captured by the camera
+			      (push (list :type :capture
+					  :start time
+					  :end (+ time 15)
+					  :content e
+					  :slice k
+					  :image-index (incf image-index))
+				    cam)
+			      ;; for this frame the MMA was white
+			      (push (list :type :mma
+					  :start time
+					  :end (+ time 15)
+					  :content e)
+				    cam)
+			      (incf time frame-period)))
                         (reverse lcos)))
                 res)
           (loop for e in (reverse cam) do
@@ -58,6 +60,102 @@
                  res))))
     (reverse res)))
 
+;; lcos is always a list of things to be displayed, it can be
+;; '(:dark), '(:bright) or a list of primitives: '((:grating-disk 120
+;; 132 10 2 0) (:grating-disk 230 232 40 2 0)). The primitives are
+;; (:grating-disk x y r phases phase) and (:disk x y r))
+
+;; mma has additionally the primitive (:triangles )
+
+(defun make-exposure (&key (lcos '((:dark))) (mma '((:dark))) (accum-group 0))
+  (let ((r nil))
+    (setf (getf r :lcos) lcos
+	  (getf r :mma) mma
+	  (getf r :accum-group) accum-group)
+    (list :exposure r)))
+
+(defun check-exposure (c)
+  (unless (eq :exposure (first c))
+    (break "Object not of type :exposure ~a." (first c))))
+
+(defun get-exposure (place indicator)
+  (declare (type (member :lcos :mma :accum-group) indicator))
+  (check-exposure place)
+  (getf (second place) indicator))
+
+#+nil
+(get-exposure (make-exposure) :mma)
+#+nil
+(get-exposure
+ (make-exposure :lcos '((grating-disk 12 12 30 3 0)
+			(grating-disk 23 34 30 3 0))
+		:mma '((:bright))
+		:accum-group 3)
+ :lcos)
+
+(defun plan-full-grating-stack (&key (slices 10) (phases 3) (repetition 2) (start-pos 0) (dz 1)
+				(frame-period (/ 60))
+				(start-time 0d0) (stage-settle-duration 20)
+				(lcos-lag 0))
+  (let ((res nil)
+        (pos start-pos)
+        (time (+ start-time frame-period))
+	(image-index 0))
+    (push (list :type :capture
+                :start 0
+                :end 15
+                :content (make-exposure :accum-group 1)
+		:image-index image-index)
+          res)
+    (loop for k below slices do
+         (let ((cam nil))
+          (push (list :type :display
+                      :pos pos
+                      :lcos-seq
+                      (let ((lcos nil)
+			    (phase 0))
+                        (loop for e in (list :dark ) do
+			     (let ((ee (list (+ (* 1000 k) ) e)))
+			      ;; lcos displays each frame twice
+			      (push (list :start time 
+					  :end (+ time 15)
+					  :content (list (+ (* 1000 k) ) e)) 
+				    lcos)
+			      (incf time frame-period)
+			      (push (list :start time
+					  :end (+ time 15)
+					  :content ee)
+				    lcos)
+			      ;; one of the frames is captured by the camera
+			      (push (list :type :capture
+					  :start time
+					  :end (+ time 15)
+					  :content e
+					  :slice k
+					  :image-index (incf image-index))
+				    cam)
+			      ;; for this frame the MMA was white
+			      (push (list :type :mma
+					  :start time
+					  :end (+ time 15)
+					  :content e)
+				    cam)
+			      (incf time frame-period)))
+                        (reverse lcos)))
+                res)
+          (loop for e in (reverse cam) do
+               (push e res))
+          (incf pos dz)
+          (unless (= k (- slices 1))
+           (push (list :type :stage-move
+                       :start (+ time frame-period) ;; move stage in one of the dark images
+                       :end (+ time frame-period stage-settle-duration (- lcos-lag))
+                       :pos pos)
+                 res))))
+    (reverse res)))
+
+#+nil
+(plan-stack :slices 2 :lcos-seq '((10 :dark) ()))
 
 (defun extract-moves (ls)
   (mapcar #'(lambda (x) (getf x :start)) 
