@@ -26,6 +26,11 @@ run-camera-lcos-calibration.lisp:
 	see run-gui.lisp load-cam-to-lcos-matrix of how this can be stored in a 4x4 opengl matrix
 
 
+
+Here is a short summary of what the directories and files do,
+in order to learn more about a particular file, call git log 'file'
+
+
 aquisitor/
 	This code plans the acquisition of one stack so that we know beforehand when to move the stage
 
@@ -80,5 +85,106 @@ bresenham/
 	I wanted to draw 3D lines
 	meanwhile the guy with the dipimage blog published a much nicer algorithm
 
+frontend/
+	trace rays through a model of spheres into the bfp
+	this was my first attempt
+	quite slow for many nuclei and doesn't consider refractive index of embedding medium
+	I also tried to compare it with wave theory 
+	modify psf by cutting out a shifted circle in bfp (note that this isn't the correct model for memi)
+	(don't use)
 	
 
+import/
+	import data from an ics file
+
+
+lens/
+	raytracer using the hwang paper for high na lenses
+	eventually modified to take into accound index of embedding medium
+	drawings are done with asymptote
+
+
+psf/
+	calculate widefield psf using the formulas from 1952 emil wolf
+	I tried to reimplement ksimpsf but didn't understand their integration rule
+	therefor here I'm using a sum to calculate the integral
+	(don't use)
+
+qng/
+	port of gauss-kronrod adaptive integrator fortran code
+	
+
+otf/
+	use adaptive integrator to calculate widefield psf
+	also see incoh.lisp
+	(I like that)
+
+
+raytrace/
+	intersection length of a ray with spheres
+	(don't use)
+
+	
+simplex-anneal/
+	one of my first optimization attempts
+	ported from numerical recipes
+	(don't use)
+
+test/
+	cubic interpolation that I wrote when I didn't have access to lisp
+	and a cuda example to do and benchmark single-float fft
+
+vector/
+	vec and vec2 and matrix multiplication
+	representation of vecrtors as arrays (with struct accessors)
+	(don't use, use :vol)
+
+
+new-run.lisp
+	single stepping for debugging MMA problems with Joerg
+	(problems never solved, don't use)
+
+
+run-woropt.lisp and angular-illumination.lisp
+	one of my first optimization attemps
+	(don't use)
+
+
+run.lisp
+	code that I showed at the EU meeting
+
+apotome.lisp
+	attempt to simulate daniels project
+	(never finished)
+
+deconvolve.lisp
+	attempt of a deconvolution
+	(it never worked)
+
+incoh.lisp
+	calculate incoherent widefield psf with adaptive integrator
+
+
+run-compare.lisp
+	feb 2011 optimization with raytracing
+
+run-ics.lisp
+	import jy's confocal data
+	blob detection
+	and mp4 video creation for some talk in jan 2011
+
+gauss.lisp
+	my attempt to gaussian spot fitting
+	this is just the initial estimate
+	I didn't manage the iteration
+
+compare-illum-modes.lisp and run-widefield.lisp
+	for winter seminar feb 2011
+	I think I compared clem and angular control
+
+
+
+rayt/
+	raytrace through high NA objective, taking into account non-matching embedding medium
+	draw model and objective with asymptote
+	also contains poisson disk sampling (but that isn't useful for the current problem)
